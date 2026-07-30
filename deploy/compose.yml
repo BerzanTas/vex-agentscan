@@ -1,0 +1,67 @@
+name: agentscan
+
+services:
+  caddy:
+    image: caddy:2
+    ports: ["80:80", "443:443"]
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy-data:/data
+      - caddy-logs:/var/log/caddy
+    depends_on:
+      web:
+        condition: service_started
+      api:
+        condition: service_started
+
+  web:
+    build: { context: .., dockerfile: deploy/Dockerfile.web }
+    image: ghcr.io/berzantas/vex-agentscan-web:${IMAGE_TAG:-latest}
+    environment:
+      API_BASE_URL: http://api:3000
+    depends_on:
+      api:
+        condition: service_started
+
+  api:
+    build: { context: .., dockerfile: deploy/Dockerfile.server }
+    image: ghcr.io/berzantas/vex-agentscan-server:${IMAGE_TAG:-latest}
+    env_file: ["${ENV_FILE:-.env}"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    image: ghcr.io/berzantas/vex-agentscan-server:${IMAGE_TAG:-latest}
+    command: ["node", "dist/entry-worker.js"]
+    env_file: ["${ENV_FILE:-.env}"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  migrate:
+    image: amacneil/dbmate:2
+    command: ["--no-dump-schema", "up"]
+    env_file: ["${ENV_FILE:-.env}"]
+    volumes:
+      - ../db:/db:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17
+    env_file: ["${ENV_FILE:-.env}"]
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  caddy-data: {}
+  caddy-logs: {}
+  pg-data: {}

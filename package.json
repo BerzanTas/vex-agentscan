@@ -3,16 +3,20 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.17.0",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "lint": "pnpm -r exec tsc --noEmit && eslint .",
     "test": "vitest run --project unit",
     "test:int": "vitest run --project integration",
+    "test:e2e": "playwright test",
     "build": "pnpm -r build"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
+    "@playwright/test": "^1.62.0",
     "eslint": "^9.0.0",
+    "typescript": "^5.6.0",
     "typescript-eslint": "^8.0.0",
     "vitest": "^3.0.0"
   }
