@@ -12,24 +12,32 @@ describe("formatRawAmount", () => {
 });
 
 describe("formatRawAmountDisplay", () => {
-  it("truncates a periodic fraction to six significant digits without rounding up", () => {
-    expect(formatRawAmountDisplay("2410490909090909090", 18)).toBe("2.410490");
+  it("shows two fraction digits for amounts of a thousand and above", () => {
+    expect(formatRawAmountDisplay("5353317647000000000000", 18)).toBe("5353.31");
   });
 
-  it("keeps six significant fraction digits after leading zeros for a small value", () => {
-    expect(formatRawAmountDisplay("12345678910000", 18)).toBe("0.0000123456");
+  it("shows four fraction digits for amounts between one and a thousand", () => {
+    expect(formatRawAmountDisplay("680444444000000000000", 18)).toBe("680.4444");
+    expect(formatRawAmountDisplay("2410490909090909090", 18)).toBe("2.4104");
+  });
+
+  it("keeps four significant fraction digits after leading zeros below one", () => {
+    expect(formatRawAmountDisplay("677833000000000000", 18)).toBe("0.6778");
+    expect(formatRawAmountDisplay("39815100000000000", 18)).toBe("0.03981");
+    expect(formatRawAmountDisplay("12345678910000", 18)).toBe("0.00001234");
+  });
+
+  it("truncates without rounding up", () => {
+    expect(formatRawAmountDisplay("1999999000000000000", 18)).toBe("1.9999");
   });
 
   it("leaves a whole amount unchanged", () => {
     expect(formatRawAmountDisplay("2410000000000000000000", 18)).toBe("2410");
   });
 
-  it("leaves a short fraction unchanged without adding trailing zeros", () => {
+  it("trims trailing zeros left after the cut", () => {
+    expect(formatRawAmountDisplay("1500000700000000000", 18)).toBe("1.5");
     expect(formatRawAmountDisplay("1500000", 6)).toBe("1.5");
-  });
-
-  it("keeps a fraction of exactly six significant digits intact", () => {
-    expect(formatRawAmountDisplay("1123456", 6)).toBe("1.123456");
   });
 });
 

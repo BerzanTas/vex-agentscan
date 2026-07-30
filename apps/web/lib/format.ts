@@ -8,16 +8,19 @@ export function formatRawAmount(raw: string, decimals: number): string {
   return `${whole.toString()}.${fraction}`;
 }
 
-const DISPLAY_SIGNIFICANT_FRACTION_DIGITS = 6;
-
 export function formatRawAmountDisplay(raw: string, decimals: number): string {
   const full = formatRawAmount(raw, decimals);
-  const [whole, fraction] = full.split(".");
+  const [whole = "0", fraction] = full.split(".");
   if (fraction === undefined) return full;
+  const visible = fraction.slice(0, fractionDigitsFor(whole, fraction)).replace(/0+$/, "");
+  return visible === "" ? whole : `${whole}.${visible}`;
+}
+
+function fractionDigitsFor(whole: string, fraction: string): number {
+  if (BigInt(whole) >= 1000n) return 2;
+  if (BigInt(whole) >= 1n) return 4;
   const leadingZeroCount = fraction.length - fraction.replace(/^0+/, "").length;
-  const visibleDigits = leadingZeroCount + DISPLAY_SIGNIFICANT_FRACTION_DIGITS;
-  if (fraction.length <= visibleDigits) return full;
-  return `${whole}.${fraction.slice(0, visibleDigits)}`;
+  return leadingZeroCount + 4;
 }
 
 export function formatUsdEstimate(usd: string): string {
