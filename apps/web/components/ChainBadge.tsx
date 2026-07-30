@@ -1,6 +1,10 @@
 const CHAIN_ICON_SRC: Record<string, string> = {
   base: "/chains/base.svg",
   arbitrum: "/chains/arbitrum.svg",
+  ethereum: "/chains/ethereum.svg",
+  optimism: "/chains/optimism.svg",
+  polygon: "/chains/polygon.svg",
+  solana: "/chains/solana.svg",
 };
 
 export function ChainBadge({ slug }: { slug: string }) {
