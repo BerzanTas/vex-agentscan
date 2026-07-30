@@ -108,6 +108,17 @@ function rawAmountFor(usdCents: bigint, token: SimToken): string {
   return ((usdCents * 10n ** BigInt(token.decimals)) / token.priceCents).toString();
 }
 
+const MAX_EXECUTED_SLIPPAGE_BPS = 50;
+
+function executedBelowRequested(rng: SimRng, requestedRaw: string): string {
+  const slippageBps = BigInt(randomInt(rng, 0, MAX_EXECUTED_SLIPPAGE_BPS));
+  return ((BigInt(requestedRaw) * (10000n - slippageBps)) / 10000n).toString();
+}
+
+function usdCentsOfRaw(raw: string, token: SimToken): bigint {
+  return (BigInt(raw) * token.priceCents) / 10n ** BigInt(token.decimals);
+}
+
 function tokenView(token: SimToken): { address: string; symbol: string; decimals: number } {
   return { address: token.address, symbol: token.symbol, decimals: token.decimals };
 }
@@ -194,6 +205,8 @@ function txHashFor(rng: SimRng, chainFamily: "eip155" | "solana"): string {
 
 function confirmedSwapEvent(rng: SimRng, ids: SimIds, confirmedAt: Date): IngestEvent {
   const quote = swapQuote(rng);
+  const executedInRaw = executedBelowRequested(rng, quote.amountInRaw);
+  const executedOutRaw = executedBelowRequested(rng, quote.amountOutRaw);
   const createdAt = new Date(confirmedAt.getTime() - randomInt(rng, 5, 120) * 1000);
   return ingestEvent({
     ...ids,
@@ -208,8 +221,10 @@ function confirmedSwapEvent(rng: SimRng, ids: SimIds, confirmedAt: Date): Ingest
     tokenOut: tokenView(quote.tokenOut),
     amountInRaw: quote.amountInRaw,
     amountOutRaw: quote.amountOutRaw,
-    usdInEst: quote.usdInEst,
-    usdOutEst: quote.usdOutEst,
+    executedInRaw,
+    executedOutRaw,
+    usdInEst: usdStringFrom(usdCentsOfRaw(executedInRaw, quote.tokenIn)),
+    usdOutEst: usdStringFrom(usdCentsOfRaw(executedOutRaw, quote.tokenOut)),
     usdFeeEst: quote.usdFeeEst,
     usdSource: "sim_quote",
     txHash: evmTxHash(rng),
@@ -225,6 +240,8 @@ function failedSwapEvent(rng: SimRng, ids: SimIds, failedAt: Date): IngestEvent 
     status: "definitively_failed",
     failureCode: pick(rng, SWAP_FAILURE_CODES),
     txHash: null,
+    executedInRaw: null,
+    executedOutRaw: null,
     confirmedAt: null,
     observedAt: failedAt.toISOString(),
   };
@@ -374,7 +391,14 @@ function pendingSwapPair(rng: SimRng, state: SimLiveState): { pending: IngestEve
     ...confirmedSwapEvent(rng, liveIds(state, 0), new Date(state.now.getTime() + afterMs)),
     createdAt: state.now.toISOString(),
   };
-  const pending: IngestEvent = { ...confirmed, status: "pending", txHash: null, confirmedAt: null };
+  const pending: IngestEvent = {
+    ...confirmed,
+    status: "pending",
+    txHash: null,
+    executedInRaw: null,
+    executedOutRaw: null,
+    confirmedAt: null,
+  };
   return { pending, confirmed, afterMs };
 }
 
