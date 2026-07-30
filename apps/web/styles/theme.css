@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg-primary: #0a0d18;
+  --color-bg-elevated: #11162a;
+  --color-bg-overlay: #171e38;
+  --color-accent: #1f44ff;
+  --color-text-primary: #f3f4f7;
+  --color-text-secondary: #c9cdd8;
+  --color-text-muted: #939aad;
+  --color-success: #1fb954;
+  --color-warning: #febc2e;
+  --color-danger: #ef4444;
+  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+@font-face {
+  font-family: "Instrument Sans";
+  src: url("/fonts/InstrumentSans-Variable.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("/fonts/InstrumentSerif-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}

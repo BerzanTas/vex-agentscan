@@ -1,0 +1,45 @@
+"use client";
+
+import { ColorType, createChart, HistogramSeries } from "lightweight-charts";
+import { useEffect, useRef } from "react";
+import type { ChartPointDto } from "../lib/api";
+
+export function VolumeChart({ points }: { points: ChartPointDto[] }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container === null || points.length === 0) return;
+    const chart = createChart(container, {
+      autoSize: true,
+      layout: {
+        background: { type: ColorType.Solid, color: "transparent" },
+        textColor: "#939aad",
+        attributionLogo: false,
+      },
+      grid: {
+        vertLines: { color: "#171e38" },
+        horzLines: { color: "#171e38" },
+      },
+      rightPriceScale: { borderColor: "#171e38" },
+      timeScale: { borderColor: "#171e38" },
+    });
+    const series = chart.addSeries(HistogramSeries, {
+      color: "#1f44ff",
+      priceFormat: { type: "volume" },
+    });
+    series.setData(points.map((point) => ({ time: point.day, value: Number(point.volumeUsd) })));
+    chart.timeScale().fitContent();
+    return () => chart.remove();
+  }, [points]);
+
+  if (points.length === 0) {
+    return (
+      <div className="flex h-70 items-center justify-center text-sm text-text-muted">
+        No volume data yet
+      </div>
+    );
+  }
+
+  return <div ref={containerRef} className="h-70 w-full" />;
+}
