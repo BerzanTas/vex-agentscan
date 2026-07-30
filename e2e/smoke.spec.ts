@@ -63,8 +63,13 @@ async function fetchGoldenSwapPublicId(request: APIRequestContext): Promise<stri
   await expect(async () => {
     const feed = await request.get("/api/activity");
     expect(feed.status()).toBe(200);
-    const body = (await feed.json()) as { items: { publicId: string; protocol: string }[] };
-    const row = body.items.find((item) => item.protocol === "kyberswap");
+    const body = (await feed.json()) as {
+      items: { publicId: string; protocol: string; tokenInSymbol: string | null; tokenOutSymbol: string | null }[];
+    };
+    const row = body.items.find(
+      (item) =>
+        item.protocol === "kyberswap" && item.tokenInSymbol === "ETH" && item.tokenOutSymbol === "VEX",
+    );
     expect(row).toBeDefined();
     publicId = row?.publicId ?? "";
   }).toPass({ timeout: 120_000, intervals: [5_000] });
@@ -75,9 +80,14 @@ test("dashboard feed shows the verified golden swap", async ({ page, request }) 
   await seedGoldenSwap(request);
   await expect(async () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("link", { name: "ETH → VEX" })).toBeVisible({ timeout: 2_000 });
+    await expect(page.getByRole("link", { name: "ETH → VEX", exact: true })).toBeVisible({
+      timeout: 2_000,
+    });
   }).toPass({ timeout: 120_000, intervals: [5_000] });
-  const feedRow = page.locator("tbody tr").filter({ hasText: "kyberswap" });
+  const feedRow = page
+    .locator("tbody tr")
+    .filter({ has: page.getByRole("link", { name: "ETH → VEX", exact: true }) })
+    .filter({ has: page.getByRole("img", { name: "kyberswap" }) });
   await expect(feedRow).toContainText("ETH → VEX");
   await expect(feedRow).toContainText(/1\s*ETH/);
   await expect(feedRow).toContainText("$3,312.44");

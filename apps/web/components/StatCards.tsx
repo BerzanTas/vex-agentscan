@@ -1,26 +1,53 @@
 import type { StatsDto } from "../lib/api";
 import { formatUsdEstimate } from "../lib/format";
+import { CountUpValue, type CountUpKind } from "./CountUpValue";
 
-type StatCard = { label: string; value: string; estimate: boolean };
+type StatCard = {
+  label: string;
+  target: number;
+  finalText: string;
+  kind: CountUpKind;
+  estimate: boolean;
+};
+
+function usdCard(label: string, usdEstimate: string): StatCard {
+  return {
+    label,
+    target: Number(usdEstimate),
+    finalText: `$${formatUsdEstimate(usdEstimate)}`,
+    kind: "usd",
+    estimate: true,
+  };
+}
+
+function countCard(label: string, count: number): StatCard {
+  return {
+    label,
+    target: count,
+    finalText: count.toLocaleString("en-US"),
+    kind: "count",
+    estimate: false,
+  };
+}
 
 function cardsFrom(stats: StatsDto): StatCard[] {
   return [
-    { label: "Volume (24h)", value: `$${formatUsdEstimate(stats.dailyVolumeUsd)}`, estimate: true },
-    { label: "Total volume", value: `$${formatUsdEstimate(stats.totalVolumeUsd)}`, estimate: true },
-    { label: "Transactions (24h)", value: stats.dailyTx.toLocaleString("en-US"), estimate: false },
-    { label: "Total transactions", value: stats.totalTx.toLocaleString("en-US"), estimate: false },
-    { label: "Active agents (7d)", value: stats.activeAgents7d.toLocaleString("en-US"), estimate: false },
+    usdCard("Daily volume", stats.dailyVolumeUsd),
+    usdCard("Total volume", stats.totalVolumeUsd),
+    countCard("Daily txns", stats.dailyTx),
+    countCard("Total txns", stats.totalTx),
+    countCard("Active agents (7d)", stats.activeAgents7d),
   ];
 }
 
 export function StatCards({ stats }: { stats: StatsDto }) {
   return (
-    <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+    <section className="section-enter grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
       {cardsFrom(stats).map((card) => (
-        <div key={card.label} className="rounded-lg border border-bg-overlay bg-bg-elevated p-4">
+        <div key={card.label} className="card card-hover p-4">
           <p className="text-xs text-text-muted">{card.label}</p>
           <p className="mt-2 font-mono text-xl text-text-primary">
-            {card.value}
+            <CountUpValue target={card.target} finalText={card.finalText} kind={card.kind} />
             {card.estimate && <span className="ml-1 text-xs text-text-muted">est.</span>}
           </p>
         </div>

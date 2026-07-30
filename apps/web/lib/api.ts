@@ -98,6 +98,19 @@ export async function fetchActivity(cursor?: string): Promise<ActivityFeedDto> {
   return jsonOrThrow(response, path);
 }
 
+export async function fetchLookup(q: string): Promise<{ publicId: string } | null> {
+  const base = typeof window === "undefined" ? apiBaseUrl() : "";
+  try {
+    const response = await fetch(`${base}/api/lookup?q=${encodeURIComponent(q)}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    return (await response.json()) as { publicId: string };
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchTxDetail(publicId: string): Promise<TxDetailDto | null> {
   const path = `/api/tx/${encodeURIComponent(publicId)}`;
   const response = await readApi(path);

@@ -1,6 +1,6 @@
 "use client";
 
-import { ColorType, createChart, HistogramSeries } from "lightweight-charts";
+import { AreaSeries, ColorType, createChart } from "lightweight-charts";
 import { useEffect, useRef } from "react";
 import type { ChartPointDto } from "../lib/api";
 
@@ -15,6 +15,7 @@ export function VolumeChart({ points }: { points: ChartPointDto[] }) {
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
         textColor: "#939aad",
+        fontFamily: "JetBrains Mono, ui-monospace, monospace",
         attributionLogo: false,
       },
       grid: {
@@ -23,9 +24,13 @@ export function VolumeChart({ points }: { points: ChartPointDto[] }) {
       },
       rightPriceScale: { borderColor: "#171e38" },
       timeScale: { borderColor: "#171e38" },
+      localization: { locale: "en-US" },
     });
-    const series = chart.addSeries(HistogramSeries, {
-      color: "#1f44ff",
+    const series = chart.addSeries(AreaSeries, {
+      lineColor: "#1f44ff",
+      lineWidth: 2,
+      topColor: "rgba(31, 68, 255, 0.35)",
+      bottomColor: "rgba(31, 68, 255, 0.02)",
       priceFormat: { type: "volume" },
     });
     series.setData(points.map((point) => ({ time: point.day, value: Number(point.volumeUsd) })));

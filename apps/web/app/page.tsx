@@ -1,5 +1,6 @@
 import { ActivityTable } from "../components/ActivityTable";
 import { AutoRefresh } from "../components/AutoRefresh";
+import { Hero } from "../components/Hero";
 import { ProtocolRanking } from "../components/ProtocolRanking";
 import { StatCards } from "../components/StatCards";
 import { VolumeChart } from "../components/VolumeChart";
@@ -20,18 +21,19 @@ export default async function DashboardPage() {
   return (
     <div className="flex flex-col gap-8">
       <AutoRefresh />
+      <Hero />
       <StatCards stats={stats} />
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-        <section className="rounded-lg border border-bg-overlay bg-bg-elevated p-4 lg:col-span-2">
+      <div className="section-enter grid grid-cols-1 gap-8 lg:grid-cols-3">
+        <section className="card card-hover p-4 lg:col-span-2">
           <h2 className="mb-4 text-sm text-text-secondary">Volume ({CHART_DAYS}d, USD est.)</h2>
           <VolumeChart points={chart} />
         </section>
-        <section>
+        <section className="card card-hover p-4">
           <h2 className="mb-4 text-sm text-text-secondary">Protocols</h2>
           <ProtocolRanking protocols={protocols} />
         </section>
       </div>
-      <section>
+      <section className="section-enter">
         <h2 className="mb-4 text-sm text-text-secondary">Latest activity</h2>
         <ActivityTable rows={activity.items} />
       </section>

@@ -1,19 +1,18 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ChainBadge } from "../../../components/ChainBadge";
 import { LegsTable } from "../../../components/LegsTable";
+import { StatusPill } from "../../../components/StatusPill";
 import { StatusTimeline } from "../../../components/StatusTimeline";
+import { TxHashChip } from "../../../components/TxHashChip";
+import { VerificationBadge } from "../../../components/VerificationBadge";
 import { fetchTxDetail, type TxDetailDto } from "../../../lib/api";
-import { formatRawAmount, formatUsdEstimate } from "../../../lib/format";
+import { formatAge, formatRawAmount, formatUsdEstimate } from "../../../lib/format";
 
 export const revalidate = 30;
 
 type TxPageProps = { params: Promise<{ publicId: string }> };
-
-const statusToneClass: Record<string, string> = {
-  confirmed: "text-success",
-  pending: "text-warning",
-  definitively_failed: "text-danger",
-};
 
 function statusLabel(status: string): string {
   return status.replace(/_/g, " ");
@@ -55,23 +54,6 @@ export async function generateMetadata({ params }: TxPageProps): Promise<Metadat
   };
 }
 
-function TxHashCell({ detail }: { detail: TxDetailDto }) {
-  if (detail.txHash === null) return <span className="text-text-muted">—</span>;
-  if (detail.explorerUrl === null) {
-    return <span className="font-mono break-all">{detail.txHash}</span>;
-  }
-  return (
-    <a
-      href={detail.explorerUrl}
-      target="_blank"
-      rel="noopener"
-      className="font-mono break-all text-accent hover:underline"
-    >
-      {detail.txHash}
-    </a>
-  );
-}
-
 export default async function TxDetailPage({ params }: TxPageProps) {
   const { publicId } = await params;
   const detail = await fetchTxDetail(publicId);
@@ -79,21 +61,30 @@ export default async function TxDetailPage({ params }: TxPageProps) {
 
   return (
     <div className="flex flex-col gap-8">
-      <header className="flex flex-wrap items-baseline gap-3">
-        <h1 className="text-2xl text-text-primary">{pairLabel(detail)}</h1>
-        <span className="rounded bg-bg-overlay px-2 py-0.5 text-xs text-text-secondary">
-          {detail.kind}
-        </span>
-        <span className="rounded bg-bg-overlay px-2 py-0.5 text-xs text-accent">
-          {detail.protocol}
-        </span>
-        <span className={`text-sm ${statusToneClass[detail.status] ?? "text-text-secondary"}`}>
-          {statusLabel(detail.status)}
-        </span>
-      </header>
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+      <div className="section-enter flex flex-col gap-4">
+        <Link href="/" className="text-sm text-text-secondary hover:text-text-primary">
+          ← Activity
+        </Link>
+        <header className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl text-text-primary">{pairLabel(detail)}</h1>
+          <span className="rounded bg-bg-overlay px-2 py-0.5 text-xs text-text-secondary">
+            {detail.kind}
+          </span>
+          <span className="rounded bg-bg-overlay px-2 py-0.5 text-xs text-accent">
+            {detail.protocol}
+          </span>
+          {detail.chainSlug !== null && (
+            <span className="rounded bg-bg-overlay px-2 py-0.5 font-mono text-xs text-text-secondary">
+              {detail.chainSlug}
+            </span>
+          )}
+          <StatusPill status={detail.status} />
+          <VerificationBadge state={detail.verificationState} />
+        </header>
+      </div>
+      <div className="section-enter grid grid-cols-1 gap-8 lg:grid-cols-3">
         <section className="lg:col-span-2">
-          <h2 className="mb-4 text-sm text-text-secondary">Legs</h2>
+          <h2 className="mb-4 text-sm text-text-secondary">Amounts</h2>
           <LegsTable detail={detail} />
         </section>
         <section>
@@ -101,14 +92,20 @@ export default async function TxDetailPage({ params }: TxPageProps) {
           <StatusTimeline source={detail} />
         </section>
       </div>
-      <section className="rounded-lg border border-bg-overlay bg-bg-elevated p-4">
+      <section className="section-enter card card-hover p-4">
         <h2 className="mb-4 text-sm text-text-secondary">Details</h2>
         <dl className="grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-[auto_1fr]">
           <dt className="text-text-muted">Network</dt>
-          <dd className="text-text-secondary">{detail.chainSlug ?? "—"}</dd>
+          <dd className="font-mono text-text-secondary">
+            {detail.chainSlug === null ? "—" : <ChainBadge slug={detail.chainSlug} />}
+          </dd>
           <dt className="text-text-muted">Transaction</dt>
           <dd>
-            <TxHashCell detail={detail} />
+            {detail.txHash !== null ? (
+              <TxHashChip txHash={detail.txHash} explorerUrl={detail.explorerUrl} />
+            ) : (
+              <span className="text-text-muted">—</span>
+            )}
           </dd>
           <dt className="text-text-muted">Fee</dt>
           <dd className="font-mono text-text-secondary">
@@ -116,6 +113,8 @@ export default async function TxDetailPage({ params }: TxPageProps) {
           </dd>
           <dt className="text-text-muted">USD source</dt>
           <dd className="text-text-secondary">{detail.usdSource ?? "—"}</dd>
+          <dt className="text-text-muted">Age</dt>
+          <dd className="font-mono text-text-secondary">{formatAge(detail.ageSeconds)}</dd>
           {detail.failureCode !== null && (
             <>
               <dt className="text-text-muted">Failure code</dt>
