@@ -5,6 +5,7 @@ import { createPool } from "./db.js";
 import { makeChainReader } from "./verification/viem-chain-reader.js";
 import { startHeartbeat } from "./worker/heartbeat.js";
 import { startVerificationLoop } from "./worker/loop.js";
+import { startPurgeInterval } from "./worker/purge.js";
 
 const config = loadConfig(process.env);
 const pool = createPool(config.DATABASE_URL);
@@ -19,4 +20,5 @@ startVerificationLoop({
   chainReaderFor: (entry) => makeChainReader(entry, config),
   logger,
 });
+startPurgeInterval({ pool, config, logger });
 logger.info("worker ready");
