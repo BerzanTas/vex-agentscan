@@ -11,7 +11,8 @@
     "test": "vitest run --project unit",
     "test:int": "vitest run --project integration",
     "test:e2e": "playwright test",
-    "build": "pnpm -r build"
+    "build": "pnpm -r build",
+    "sim": "pnpm --filter @agentscan/server build && node apps/server/dist/entry-sim.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",

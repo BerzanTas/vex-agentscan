@@ -17,7 +17,7 @@ startVerificationLoop({
   pool,
   config,
   resolveChain,
-  chainReaderFor: (entry) => makeChainReader(entry, config),
+  chainReaderFor: (entry, context) => makeChainReader(entry, config, context),
   logger,
 });
 startPurgeInterval({ pool, config, logger });

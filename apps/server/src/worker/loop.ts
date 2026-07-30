@@ -3,13 +3,13 @@ import type { Logger } from "pino";
 import type { ChainEntry, ChainReader, ResolveChain } from "@agentscan/core";
 import type { Config } from "../config.js";
 import { claimDueJobs } from "../repos/activities-verify-repo.js";
-import { runVerifyJob } from "./verify-job.js";
+import { runVerifyJob, type ChainReaderContext } from "./verify-job.js";
 
 export type VerificationLoopDeps = {
   pool: pg.Pool;
   config: Config;
   resolveChain: ResolveChain;
-  chainReaderFor: (entry: ChainEntry) => ChainReader;
+  chainReaderFor: (entry: ChainEntry, context: ChainReaderContext) => ChainReader;
   logger: Logger;
 };
 

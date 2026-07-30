@@ -4,6 +4,7 @@ import { resolveChain, type ChainReader, type ReceiptView } from "@agentscan/cor
 import { loadConfig } from "../../config.js";
 import { claimDueJobs, finalizeVerification } from "../../repos/activities-verify-repo.js";
 import { startTestDb } from "../../testing/pg-harness.js";
+import { makeChainReader } from "../../verification/viem-chain-reader.js";
 import { runVerificationPass, type VerificationLoopDeps } from "../../worker/loop.js";
 
 const config = loadConfig({
@@ -380,6 +381,41 @@ describe("verification worker", () => {
       secondClient.release();
     }
     await db.pool.query("DELETE FROM verification_jobs");
+  });
+
+  it("verifies a ten-day-old backfill event in confirm_all mode and books the aggregate under the historical day", async () => {
+    const agent = "b".repeat(64);
+    await seedAgent(agent);
+    const confirmedAt = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+    const expectedDay = confirmedAt.toISOString().slice(0, 10);
+    const activityId = await seedQueuedActivity({
+      agentHash: agent,
+      protocol: "p-historical",
+      usdInEst: "42.5",
+      clientConfirmedAt: confirmedAt,
+    });
+    const fakeModeConfig = loadConfig({
+      DATABASE_URL: "postgres://unused-in-tests",
+      VERIFY_BACKOFF_SCHEDULE: "1m,5m",
+      VERIFY_FAKE_MODE: "confirm_all",
+    });
+
+    await runVerificationPass({
+      pool: db.pool,
+      config: fakeModeConfig,
+      resolveChain,
+      chainReaderFor: (entry, context) => makeChainReader(entry, fakeModeConfig, context),
+      logger,
+    });
+
+    expect((await activityStateOf(activityId)).verification_state).toBe("verified_full");
+    expect(await strikesOf(agent)).toEqual([]);
+    expect(await aggregateOf("p-historical")).toEqual({
+      day: expectedDay,
+      kind: "swap",
+      volume_usd: "42.5",
+      tx_count: 1,
+    });
   });
 
   it("books the aggregate under the verdict blockTimestamp day when client_confirmed_at is null", async () => {
