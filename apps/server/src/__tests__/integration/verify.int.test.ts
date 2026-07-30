@@ -393,6 +393,10 @@ describe("verification worker", () => {
       protocol: "p-historical",
       usdInEst: "42.5",
       clientConfirmedAt: confirmedAt,
+      executedInRaw: "999500000000000000",
+      executedOutRaw: "2404191818181818181",
+      tokenInAddress: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      tokenOutAddress: "0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2",
     });
     const fakeModeConfig = loadConfig({
       DATABASE_URL: "postgres://unused-in-tests",

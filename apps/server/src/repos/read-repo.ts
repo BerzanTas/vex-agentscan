@@ -151,6 +151,24 @@ export async function visibleActivityByPublicId(
   return raw === undefined ? null : activityDbRowFrom(raw);
 }
 
+function txHashCandidatesOf(query: string): string[] {
+  const lowered = query.toLowerCase();
+  return lowered.startsWith("0x") ? [lowered, lowered.slice(2)] : [lowered, `0x${lowered}`];
+}
+
+export async function lookupPublicId(pool: pg.Pool, query: string): Promise<string | null> {
+  const result = await pool.query<{ public_id: string }>(
+    `SELECT a.public_id
+     FROM activities a
+     JOIN agents ag ON ag.agent_hash = a.agent_hash
+     WHERE ${VISIBILITY_PREDICATE}
+       AND (a.public_id = $1 OR lower(a.tx_hash) = ANY($2::text[]))
+     LIMIT 1`,
+    [query, txHashCandidatesOf(query)],
+  );
+  return result.rows[0]?.public_id ?? null;
+}
+
 export type AggregateTotals = {
   dailyVolumeUsd: string;
   totalVolumeUsd: string;

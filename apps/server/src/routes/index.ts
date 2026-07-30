@@ -7,6 +7,7 @@ import { statsRoutes } from "./public/stats.js";
 import { chartRoutes } from "./public/chart.js";
 import { protocolsRoutes } from "./public/protocols.js";
 import { activityRoutes } from "./public/activity.js";
+import { lookupRoutes } from "./public/lookup.js";
 import { txRoutes } from "./public/tx.js";
 
 export const routePlugins: FastifyPluginAsync<Deps>[] = [
@@ -17,5 +18,6 @@ export const routePlugins: FastifyPluginAsync<Deps>[] = [
   chartRoutes,
   protocolsRoutes,
   activityRoutes,
+  lookupRoutes,
   txRoutes,
 ];

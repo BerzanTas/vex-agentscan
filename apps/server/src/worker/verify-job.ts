@@ -17,7 +17,13 @@ import {
   type SqlExecutor,
 } from "../repos/activities-verify-repo.js";
 
-export type ChainReaderContext = { clientConfirmedAt: Date | null };
+export type ChainReaderContext = {
+  clientConfirmedAt: Date | null;
+  executedInRaw: string | null;
+  executedOutRaw: string | null;
+  tokenInAddress: string | null;
+  tokenOutAddress: string | null;
+};
 
 export type VerifyJobDeps = {
   config: Config;
@@ -40,7 +46,13 @@ export async function runVerifyJob(client: SqlExecutor, job: ClaimedJob, deps: V
     await closeUnverifiable(client, job.activityId);
     return;
   }
-  const reader = deps.chainReaderFor(entry, { clientConfirmedAt: job.clientConfirmedAt });
+  const reader = deps.chainReaderFor(entry, {
+    clientConfirmedAt: job.clientConfirmedAt,
+    executedInRaw: job.executedInRaw,
+    executedOutRaw: job.executedOutRaw,
+    tokenInAddress: job.tokenInAddress,
+    tokenOutAddress: job.tokenOutAddress,
+  });
   const read = await readReceipt(reader, job.txHash);
   const verdict = verdictFrom(read, job, entry, deps.config, job.txHash);
   if (verdict.result !== "retry") {

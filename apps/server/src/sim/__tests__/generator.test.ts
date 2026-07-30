@@ -25,6 +25,49 @@ function collectScenarios(seed: number, count: number): SimScenario[] {
   return scenarios;
 }
 
+const PRICE_CENTS_BY_SYMBOL: Record<string, bigint> = {
+  WETH: 330000n,
+  USDC: 100n,
+  VEX: 85n,
+  ARB: 45n,
+  SOL: 15000n,
+};
+
+function usdEstimateOfRaw(raw: string, symbol: string, decimals: number): string {
+  const priceCents = PRICE_CENTS_BY_SYMBOL[symbol];
+  if (priceCents === undefined) throw new Error(`unknown sim token ${symbol}`);
+  const cents = (BigInt(raw) * priceCents) / 10n ** BigInt(decimals);
+  return `${cents / 100n}.${(cents % 100n).toString().padStart(2, "0")}`;
+}
+
+function expectExecutedSwapAmounts(event: IngestEvent): void {
+  if (
+    event.amountInRaw === null ||
+    event.amountOutRaw === null ||
+    event.tokenIn === null ||
+    event.tokenOut === null
+  ) {
+    throw new Error("confirmed swap is missing requested amounts or tokens");
+  }
+  expect(event.executedInRaw).not.toBeNull();
+  expect(event.executedOutRaw).not.toBeNull();
+  if (event.executedInRaw === null || event.executedOutRaw === null) return;
+  const legs = [
+    { requested: BigInt(event.amountInRaw), executed: BigInt(event.executedInRaw) },
+    { requested: BigInt(event.amountOutRaw), executed: BigInt(event.executedOutRaw) },
+  ];
+  for (const leg of legs) {
+    expect(leg.executed <= leg.requested).toBe(true);
+    expect(leg.executed >= (leg.requested * 9950n) / 10000n).toBe(true);
+  }
+  expect(event.usdInEst).toBe(
+    usdEstimateOfRaw(event.executedInRaw, event.tokenIn.symbol, event.tokenIn.decimals),
+  );
+  expect(event.usdOutEst).toBe(
+    usdEstimateOfRaw(event.executedOutRaw, event.tokenOut.symbol, event.tokenOut.decimals),
+  );
+}
+
 function groupBySourceRowId(events: IngestEvent[]): Map<string, IngestEvent[]> {
   const groups = new Map<string, IngestEvent[]>();
   for (const event of events) {
@@ -60,6 +103,29 @@ describe("generateBackfill", () => {
     for (const event of events) {
       if (event.confirmedAt === null) continue;
       expect(new Date(event.confirmedAt).getTime()).toBeLessThan(fixedNow.getTime());
+    }
+  });
+
+  it("gives every confirmed swap executed amounts at most 0.5% below requested with usd estimates matching the executed amounts", () => {
+    const events = generateBackfill(mulberry32(42), largeBackfill).flat();
+    const confirmedSwaps = events.filter(
+      (event) => event.kind === "swap" && event.status === "confirmed",
+    );
+
+    expect(confirmedSwaps.length).toBeGreaterThan(0);
+    for (const swap of confirmedSwaps) {
+      expectExecutedSwapAmounts(swap);
+    }
+  });
+
+  it("leaves failed swaps without executed amounts", () => {
+    const events = generateBackfill(mulberry32(42), largeBackfill).flat();
+    const failedSwaps = events.filter((event) => event.status === "definitively_failed");
+
+    expect(failedSwaps.length).toBeGreaterThan(0);
+    for (const swap of failedSwaps) {
+      expect(swap.executedInRaw).toBeNull();
+      expect(swap.executedOutRaw).toBeNull();
     }
   });
 
@@ -117,6 +183,26 @@ describe("nextLiveScenario", () => {
           expect(steps[index]?.status).not.toBe("pending");
         }
       }
+    }
+  });
+
+  it("keeps pending events free of executed amounts and carries them on every confirmed swap step", () => {
+    const scenarios = collectScenarios(7, 200);
+    const confirmedSwapSteps = scenarios
+      .flatMap((scenario) => scenario.steps)
+      .filter((step) => step.event.kind === "swap" && step.event.status === "confirmed");
+    const pendingSteps = scenarios
+      .flatMap((scenario) => scenario.steps)
+      .filter((step) => step.event.status === "pending");
+
+    expect(confirmedSwapSteps.length).toBeGreaterThan(0);
+    expect(pendingSteps.length).toBeGreaterThan(0);
+    for (const step of confirmedSwapSteps) {
+      expectExecutedSwapAmounts(step.event);
+    }
+    for (const step of pendingSteps) {
+      expect(step.event.executedInRaw).toBeNull();
+      expect(step.event.executedOutRaw).toBeNull();
     }
   });
 

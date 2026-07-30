@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAge, formatRawAmount, formatUsdEstimate } from "../format";
+import { formatAge, formatRawAmount, formatRawAmountDisplay, formatUsdEstimate } from "../format";
 
 describe("formatRawAmount", () => {
   it("formats a whole token amount without a fractional part", () => {
@@ -8,6 +8,28 @@ describe("formatRawAmount", () => {
 
   it("trims trailing zeros from the fractional part", () => {
     expect(formatRawAmount("1500000", 6)).toBe("1.5");
+  });
+});
+
+describe("formatRawAmountDisplay", () => {
+  it("truncates a periodic fraction to six significant digits without rounding up", () => {
+    expect(formatRawAmountDisplay("2410490909090909090", 18)).toBe("2.410490");
+  });
+
+  it("keeps six significant fraction digits after leading zeros for a small value", () => {
+    expect(formatRawAmountDisplay("12345678910000", 18)).toBe("0.0000123456");
+  });
+
+  it("leaves a whole amount unchanged", () => {
+    expect(formatRawAmountDisplay("2410000000000000000000", 18)).toBe("2410");
+  });
+
+  it("leaves a short fraction unchanged without adding trailing zeros", () => {
+    expect(formatRawAmountDisplay("1500000", 6)).toBe("1.5");
+  });
+
+  it("keeps a fraction of exactly six significant digits intact", () => {
+    expect(formatRawAmountDisplay("1123456", 6)).toBe("1.123456");
   });
 });
 

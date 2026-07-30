@@ -7,7 +7,7 @@ type TimelineSource = Pick<
 
 type Tone = "success" | "warning" | "danger" | "muted";
 
-type TimelineStep = { label: string; at: string | null; tone: Tone };
+type TimelineStep = { label: string; at: string | null; tone: Tone; reached: boolean };
 
 const toneTextClass: Record<Tone, string> = {
   success: "text-success",
@@ -29,45 +29,54 @@ function formatUtc(iso: string): string {
 
 function statusStep(source: TimelineSource): TimelineStep {
   if (source.status === "confirmed") {
-    return { label: "Confirmed by agent", at: source.clientConfirmedAt, tone: "success" };
+    return { label: "Confirmed by agent", at: source.clientConfirmedAt, tone: "success", reached: true };
   }
   if (source.status === "definitively_failed") {
-    return { label: "Definitively failed", at: null, tone: "danger" };
+    return { label: "Definitively failed", at: null, tone: "danger", reached: true };
   }
-  return { label: "Pending", at: null, tone: "warning" };
+  return { label: "Pending", at: null, tone: "warning", reached: false };
 }
 
 function verificationStep(source: TimelineSource): TimelineStep {
   if (source.verificationState === "verified_full") {
-    return { label: "Verified on-chain (full)", at: null, tone: "success" };
+    return { label: "Verified on-chain (full)", at: null, tone: "success", reached: true };
   }
   if (source.verificationState === "verified_basic") {
-    return { label: "Verified on-chain (basic)", at: null, tone: "success" };
+    return { label: "Verified on-chain (basic)", at: null, tone: "success", reached: true };
   }
   if (source.verificationState === "queued") {
-    return { label: "Verification queued", at: null, tone: "warning" };
+    return { label: "Verification queued", at: null, tone: "warning", reached: false };
   }
-  return { label: "Not verified", at: null, tone: "muted" };
+  return { label: "Not verified", at: null, tone: "muted", reached: false };
 }
 
 function stepsFrom(source: TimelineSource): TimelineStep[] {
   return [
-    { label: "Created by agent", at: source.clientCreatedAt, tone: "success" },
+    { label: "Created by agent", at: source.clientCreatedAt, tone: "success", reached: true },
     statusStep(source),
     verificationStep(source),
   ];
 }
 
 export function StatusTimeline({ source }: { source: TimelineSource }) {
+  const steps = stepsFrom(source);
   return (
-    <ol className="flex flex-col gap-4 rounded-lg border border-bg-overlay bg-bg-elevated p-4">
-      {stepsFrom(source).map((step) => (
-        <li key={step.label} className="flex items-baseline gap-3">
-          <span className={`h-2 w-2 shrink-0 self-center rounded-full ${toneDotClass[step.tone]}`} />
-          <span className={`text-sm ${toneTextClass[step.tone]}`}>{step.label}</span>
-          {step.at !== null && (
-            <span className="font-mono text-xs text-text-muted">{formatUtc(step.at)}</span>
-          )}
+    <ol className="card card-hover flex flex-col p-4">
+      {steps.map((step, index) => (
+        <li key={step.label} className="relative flex gap-3 pb-5 last:pb-0">
+          {index < steps.length - 1 && <span className="timeline-line" aria-hidden="true" />}
+          <span
+            className={`timeline-dot ${toneDotClass[step.tone]} ${
+              step.reached ? "timeline-dot-reached" : ""
+            }`}
+            aria-hidden="true"
+          />
+          <div className="flex flex-col gap-0.5">
+            <span className={`text-sm ${toneTextClass[step.tone]}`}>{step.label}</span>
+            {step.at !== null && (
+              <span className="font-mono text-xs text-text-muted">{formatUtc(step.at)}</span>
+            )}
+          </div>
         </li>
       ))}
     </ol>

@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { toActivityRowDto, toTxDetailDto } from "../public-dto.js";
+import { toActivityRowDto, toTxDetailDto, type LookupDto } from "../public-dto.js";
 
 const stubResolve = () => null;
 const fixtureActivityRow = () => ({
@@ -23,4 +23,10 @@ it("public DTOs never expose banned identifiers", () => {
   for (const dto of [toActivityRowDto(fixtureActivityRow(), stubResolve), toTxDetailDto(fixtureActivityRow(), stubResolve)]) {
     for (const key of BANNED) expect(key in (dto as object)).toBe(false);
   }
+});
+
+it("lookup DTO contains only the publicId", () => {
+  const dto: LookupDto = { publicId: "f".repeat(32) };
+  expect(Object.keys(dto)).toEqual(["publicId"]);
+  for (const key of BANNED) expect(key in dto).toBe(false);
 });

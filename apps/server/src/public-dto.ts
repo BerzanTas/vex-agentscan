@@ -11,6 +11,8 @@ export type StatsDto = {
 
 export type ChartPointDto = { day: string; volumeUsd: string; txCount: number };
 
+export type LookupDto = { publicId: string };
+
 export type ProtocolStatDto = { protocol: string; volumeUsd: string; txCount: number };
 
 export type ActivityRowDto = {

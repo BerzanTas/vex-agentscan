@@ -1,15 +1,24 @@
 import Link from "next/link";
 import type { ActivityRowDto } from "../lib/api";
-import { formatAge, formatRawAmount, formatUsdEstimate } from "../lib/format";
+import { formatAge, formatRawAmount, formatRawAmountDisplay, formatUsdEstimate } from "../lib/format";
+import { ChainBadge } from "./ChainBadge";
+import { ProtocolBadge } from "./ProtocolBadge";
+import { StatusPill } from "./StatusPill";
+import { VerificationBadge } from "./VerificationBadge";
 
-const statusToneClass: Record<string, string> = {
-  confirmed: "text-success",
-  pending: "text-warning",
-  definitively_failed: "text-danger",
-};
-
-function statusLabel(status: string): string {
-  return status.replace(/_/g, " ");
+function ExplorerIcon() {
+  return (
+    <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" aria-hidden="true">
+      <path
+        d="M6 3H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V8M8.5 3H11v2.5M11 3 6.5 7.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 function AmountCell({ row }: { row: ActivityRowDto }) {
@@ -18,7 +27,9 @@ function AmountCell({ row }: { row: ActivityRowDto }) {
   }
   return (
     <span className="font-mono">
-      {formatRawAmount(row.amountInRaw, row.tokenInDecimals)}
+      <span title={formatRawAmount(row.amountInRaw, row.tokenInDecimals)}>
+        {formatRawAmountDisplay(row.amountInRaw, row.tokenInDecimals)}
+      </span>
       {row.tokenInSymbol !== null && <span className="ml-1 text-text-muted">{row.tokenInSymbol}</span>}
       {row.usdInEst !== null && (
         <span className="ml-2 text-xs text-text-muted">
@@ -46,7 +57,7 @@ export function ActivityTable({ rows }: { rows: ActivityRowDto[] }) {
     return <p className="text-sm text-text-muted">No activity yet</p>;
   }
   return (
-    <div className="overflow-x-auto rounded-lg border border-bg-overlay bg-bg-elevated">
+    <div className="card card-hover overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-bg-overlay text-xs text-text-muted">
@@ -55,6 +66,7 @@ export function ActivityTable({ rows }: { rows: ActivityRowDto[] }) {
             <th className="px-4 py-3 font-normal">Pair</th>
             <th className="px-4 py-3 font-normal">Amount</th>
             <th className="px-4 py-3 font-normal">Status</th>
+            <th className="px-4 py-3 font-normal">Verified</th>
             <th className="px-4 py-3 font-normal">Chain</th>
             <th className="px-4 py-3 font-normal">Age</th>
             <th className="px-4 py-3 font-normal">Tx</th>
@@ -62,16 +74,14 @@ export function ActivityTable({ rows }: { rows: ActivityRowDto[] }) {
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.publicId} className="border-b border-bg-overlay/60 last:border-b-0">
+            <tr key={row.publicId} className="feed-row border-b border-bg-overlay/60 last:border-b-0">
               <td className="px-4 py-3">
                 <span className="rounded bg-bg-overlay px-2 py-0.5 text-xs text-text-secondary">
                   {row.kind}
                 </span>
               </td>
               <td className="px-4 py-3">
-                <span className="rounded bg-bg-overlay px-2 py-0.5 text-xs text-accent">
-                  {row.protocol}
-                </span>
+                <ProtocolBadge protocol={row.protocol} />
               </td>
               <td className="px-4 py-3">
                 <PairCell row={row} />
@@ -79,10 +89,20 @@ export function ActivityTable({ rows }: { rows: ActivityRowDto[] }) {
               <td className="px-4 py-3">
                 <AmountCell row={row} />
               </td>
-              <td className={`px-4 py-3 ${statusToneClass[row.status] ?? "text-text-secondary"}`}>
-                {statusLabel(row.status)}
+              <td className="px-4 py-3">
+                <StatusPill status={row.status} />
               </td>
-              <td className="px-4 py-3 text-text-secondary">{row.chainSlug ?? "—"}</td>
+              <td className="px-4 py-3">
+                {row.verificationState === "verified_full" ||
+                row.verificationState === "verified_basic" ? (
+                  <VerificationBadge state={row.verificationState} />
+                ) : (
+                  <span className="text-text-muted">—</span>
+                )}
+              </td>
+              <td className="px-4 py-3 font-mono text-xs text-text-secondary">
+                {row.chainSlug === null ? "—" : <ChainBadge slug={row.chainSlug} />}
+              </td>
               <td className="px-4 py-3 font-mono text-xs text-text-muted">
                 {formatAge(row.ageSeconds)}
               </td>
@@ -92,9 +112,10 @@ export function ActivityTable({ rows }: { rows: ActivityRowDto[] }) {
                     href={row.explorerUrl}
                     target="_blank"
                     rel="noopener"
-                    className="text-accent hover:underline"
+                    aria-label="Open in explorer"
+                    className="inline-flex text-accent hover:text-text-primary"
                   >
-                    view
+                    <ExplorerIcon />
                   </a>
                 ) : (
                   <span className="text-text-muted">—</span>
