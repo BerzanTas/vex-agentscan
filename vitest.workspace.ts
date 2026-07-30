@@ -17,4 +17,11 @@ export default defineWorkspace([
       hookTimeout: 120_000,
     },
   },
+  {
+    test: {
+      name: "web",
+      include: ["apps/web/**/*.test.ts"],
+      exclude: ["**/node_modules/**", "**/.next/**"],
+    },
+  },
 ]);
