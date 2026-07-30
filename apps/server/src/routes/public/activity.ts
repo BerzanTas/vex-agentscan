@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { Deps } from "../../app.js";
-import type { ActivityFeedDto } from "../../public-dto.js";
-import type { ActivityDbRow, FeedCursor } from "../../repos/read-repo.js";
+import { toActivityRowDto, type ActivityFeedDto } from "../../public-dto.js";
+import { visibleActivityPage, type ActivityDbRow, type FeedCursor } from "../../repos/read-repo.js";
 
 function decodeCursor(value: string): FeedCursor | null {
   try {
@@ -22,7 +22,7 @@ function encodeCursor(row: ActivityDbRow): string {
   return Buffer.from(payload, "utf8").toString("base64url");
 }
 
-const activityRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
+export const activityRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
   app.get<{ Querystring: { cursor?: string } }>("/api/activity", async (request, reply) => {
     let cursor: FeedCursor | null = null;
     if (request.query.cursor !== undefined) {
@@ -31,10 +31,6 @@ const activityRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
         return reply.status(400).send({ error: { code: "invalid_cursor", message: "malformed cursor" } });
       }
     }
-    const [{ toActivityRowDto }, { visibleActivityPage }] = await Promise.all([
-      import("../../public-dto.js"),
-      import("../../repos/read-repo.js"),
-    ]);
     const pageSize = deps.config.PUBLIC_FEED_PAGE_SIZE;
     const rows = await visibleActivityPage(deps.pool, cursor, pageSize + 1);
     const pageRows = rows.slice(0, pageSize);
@@ -46,5 +42,3 @@ const activityRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
     return feed;
   });
 };
-
-export default activityRoutes;

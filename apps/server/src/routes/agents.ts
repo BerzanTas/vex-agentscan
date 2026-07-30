@@ -1,29 +1,14 @@
+import { registerRequestSchema } from "@agentscan/contract";
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import type { Deps } from "../app.js";
-
-type AuthModule = typeof import("../plugins/auth.js");
-type RateLimitModule = typeof import("../plugins/rate-limit.js");
-type AgentsRepoModule = typeof import("../repos/agents-repo.js");
-type RegisterSchemaModule = typeof import("@agentscan/contract/src/register.js");
-
-function importTypeStrippableSource<Module>(specifier: string): Promise<Module> {
-  return import(specifier) as Promise<Module>;
-}
+import { authenticateAgent, bearerTokenFrom, sha256Hex } from "../plugins/auth.js";
+import { SlidingWindowLimiter } from "../plugins/rate-limit.js";
+import { revokeAgent, upsertAgentRegistration } from "../repos/agents-repo.js";
 
 const sendError = (reply: FastifyReply, status: number, code: string, message: string) =>
   reply.status(status).send({ error: { code, message } });
 
-const agentsRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
-  const { authenticateAgent, bearerTokenFrom, sha256Hex } =
-    await importTypeStrippableSource<AuthModule>("../plugins/auth.ts");
-  const { SlidingWindowLimiter } =
-    await importTypeStrippableSource<RateLimitModule>("../plugins/rate-limit.ts");
-  const { revokeAgent, upsertAgentRegistration } =
-    await importTypeStrippableSource<AgentsRepoModule>("../repos/agents-repo.ts");
-  const { registerRequestSchema } = await importTypeStrippableSource<RegisterSchemaModule>(
-    "@agentscan/contract/src/register.ts",
-  );
-
+export const agentsRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
   const registerLimiter = new SlidingWindowLimiter(
     deps.config.REGISTER_RATE_LIMIT_PER_IP,
     deps.config.REGISTER_RATE_WINDOW_SEC,
@@ -67,5 +52,3 @@ const agentsRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
     return { status: "revoked" };
   });
 };
-
-export default agentsRoutes;

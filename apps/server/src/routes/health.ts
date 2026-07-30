@@ -11,7 +11,7 @@ async function latestWorkerAgeSec(pool: pg.Pool): Promise<number | null> {
   return result.rows[0]?.age_sec ?? null;
 }
 
-const healthRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
+export const healthRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
   app.get<{ Querystring: { strict?: string } }>("/healthz", async (request, reply) => {
     let workerAgeSec: number | null;
     try {
@@ -28,5 +28,3 @@ const healthRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
     return { db: "ok", workerAgeSec };
   });
 };
-
-export default healthRoutes;
