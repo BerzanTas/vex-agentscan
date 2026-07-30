@@ -18,17 +18,17 @@ describe("ProtocolBadge", () => {
     expect(markup).toContain('title="kyberswap"');
   });
 
-  it("renders the uniswap png icon", () => {
+  it("renders the uniswap svg icon", () => {
     const markup = render(ProtocolBadge, { protocol: "uniswap" });
 
-    expect(markup).toContain('src="/protocols/uniswap.png"');
+    expect(markup).toContain('src="/protocols/uniswap.svg"');
   });
 
-  it("falls back to the text badge for relay which has no icon", () => {
+  it("renders the relay jpg icon", () => {
     const markup = render(ProtocolBadge, { protocol: "relay" });
 
-    expect(markup).not.toContain("<img");
-    expect(markup).toContain(">relay<");
+    expect(markup).toContain('src="/protocols/relay.jpg"');
+    expect(markup).toContain('title="relay"');
   });
 
   it("falls back to the text badge for an unknown protocol", () => {
@@ -53,12 +53,19 @@ describe("ChainBadge", () => {
     expect(markup).toContain('src="/chains/arbitrum.svg"');
   });
 
-  it("renders slug-only for a chain without an icon", () => {
-    for (const slug of ["ethereum", "optimism", "polygon", "solana", "robinhood"]) {
+  it("renders icons for all newly added chains", () => {
+    for (const slug of ["ethereum", "optimism", "polygon", "solana"]) {
       const markup = render(ChainBadge, { slug });
 
-      expect(markup).not.toContain("<img");
+      expect(markup).toContain(`src="/chains/${slug}.svg"`);
       expect(markup).toContain(slug);
     }
+  });
+
+  it("renders slug-only for a chain without an icon", () => {
+    const markup = render(ChainBadge, { slug: "robinhood" });
+
+    expect(markup).not.toContain("<img");
+    expect(markup).toContain("robinhood");
   });
 });
