@@ -1,0 +1,13 @@
+FROM node:22-slim AS build
+RUN corepack enable
+WORKDIR /repo
+COPY . .
+RUN pnpm install --frozen-lockfile \
+ && pnpm --filter @agentscan/server build \
+ && pnpm --filter @agentscan/server deploy --legacy --prod /out \
+ && cp -r apps/server/dist /out/dist
+
+FROM node:22-slim
+WORKDIR /app
+COPY --from=build /out /app
+CMD ["node", "dist/entry-api.js"]
