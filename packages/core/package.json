@@ -1,0 +1,5 @@
+{
+  "name": "@agentscan/core",
+  "type": "module",
+  "main": "./src/index.ts"
+}
