@@ -1,4 +1,3 @@
-import { registerHooks } from "node:module";
 import type { FastifyInstance } from "fastify";
 import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -6,19 +5,6 @@ import { buildApp, type ResolveChain } from "../../app.js";
 import { loadConfig } from "../../config.js";
 import type { ActivityFeedDto, ChartPointDto, ProtocolStatDto, StatsDto, TxDetailDto } from "../../public-dto.js";
 import { startTestDb } from "../../testing/pg-harness.js";
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    try {
-      return nextResolve(specifier, context);
-    } catch (error) {
-      if (typeof specifier === "string" && specifier.startsWith(".") && specifier.endsWith(".js")) {
-        return nextResolve(`${specifier.slice(0, -3)}.ts`, context);
-      }
-      throw error;
-    }
-  },
-});
 
 const agentA = "a".repeat(64);
 const agentB = "b".repeat(64);

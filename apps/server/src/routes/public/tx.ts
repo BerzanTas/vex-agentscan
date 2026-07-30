@@ -1,12 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { Deps } from "../../app.js";
+import { toTxDetailDto } from "../../public-dto.js";
+import { visibleActivityByPublicId } from "../../repos/read-repo.js";
 
-const txRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
+export const txRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
   app.get<{ Params: { publicId: string } }>("/api/tx/:publicId", async (request, reply) => {
-    const [{ toTxDetailDto }, { visibleActivityByPublicId }] = await Promise.all([
-      import("../../public-dto.js"),
-      import("../../repos/read-repo.js"),
-    ]);
     const row = await visibleActivityByPublicId(deps.pool, request.params.publicId);
     if (row === null) {
       return reply.status(404).send({ error: { code: "not_found", message: "activity not found" } });
@@ -14,5 +12,3 @@ const txRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
     return toTxDetailDto(row, deps.resolveChain);
   });
 };
-
-export default txRoutes;
