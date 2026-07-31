@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import type { ResolveChain } from "./app.js";
-import type { ActivityDbRow } from "./repos/read-repo.js";
+import type { ActivityDbRow, AgentVolumeRead } from "./repos/read-repo.js";
 
 export type StatsDto = {
   dailyVolumeUsd: string;
@@ -14,6 +15,21 @@ export type ChartPointDto = { day: string; volumeUsd: string; txCount: number };
 export type LookupDto = { publicId: string };
 
 export type ProtocolStatDto = { protocol: string; volumeUsd: string; txCount: number };
+
+export type AgentStatDto = { alias: string; volumeUsd: string; txCount: number };
+
+export function agentAlias(salt: string, agentHash: string): string {
+  const digest = createHash("sha256").update(salt + agentHash).digest("hex");
+  return `agent-${digest.slice(0, 8)}`;
+}
+
+export function toAgentStatDto(salt: string, read: AgentVolumeRead): AgentStatDto {
+  return {
+    alias: agentAlias(salt, read.agentHash),
+    volumeUsd: read.volumeUsd,
+    txCount: read.txCount,
+  };
+}
 
 export type ActivityRowDto = {
   publicId: string;
