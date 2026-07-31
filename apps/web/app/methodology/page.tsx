@@ -63,6 +63,7 @@ export default function MethodologyPage() {
           "Verified activities are always visible.",
           "Pending rows, failed rows and rows without a transaction hash are shown only for agents that already have at least one verified activity.",
           "Public data never contains agent identifiers; each activity is addressed by an opaque random publicId. Network names and explorer links come from the server's own chain registry.",
+          "Agent aliases in the leaderboard are salted pseudonyms, unlinkable to installation identifiers; no individual activity or transaction hash is ever attributed to a pseudonym.",
         ]}
       />
 

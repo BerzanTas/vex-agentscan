@@ -10,6 +10,8 @@ export type ChartPointDto = { day: string; volumeUsd: string; txCount: number };
 
 export type ProtocolStatDto = { protocol: string; volumeUsd: string; txCount: number };
 
+export type AgentStatDto = { alias: string; volumeUsd: string; txCount: number };
+
 export type ActivityRowDto = {
   publicId: string;
   kind: string;
@@ -88,6 +90,12 @@ export async function fetchProtocols(): Promise<ProtocolStatDto[]> {
   const response = await readApi("/api/protocols");
   if (response === null) return [];
   return jsonOrThrow(response, "/api/protocols");
+}
+
+export async function fetchAgents(): Promise<AgentStatDto[]> {
+  const response = await readApi("/api/agents");
+  if (response === null) return [];
+  return jsonOrThrow(response, "/api/agents");
 }
 
 export async function fetchActivity(cursor?: string): Promise<ActivityFeedDto> {
