@@ -14,9 +14,14 @@ export const metadata: Metadata = {
   },
 };
 
+const themeInitScript = `try{var stored=localStorage.getItem("agentscan-theme");if(stored==="cobalt"||stored==="horizon")document.documentElement.dataset.theme=stored}catch(ignored){}`;
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="min-h-screen bg-bg-primary font-sans text-text-primary antialiased">
         <TopBar />
         <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>

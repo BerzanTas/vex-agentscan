@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function TopBar() {
   return (
@@ -12,6 +13,7 @@ export function TopBar() {
             <span className="live-dot" aria-hidden="true" />
             LIVE
           </span>
+          <ThemeToggle />
           <Link href="/methodology" className="text-sm text-text-secondary hover:text-text-primary">
             Methodology
           </Link>
