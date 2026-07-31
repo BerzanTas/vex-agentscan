@@ -44,7 +44,7 @@ export type TxDetailDto = ActivityRowDto & {
   failureCode: string | null;
 };
 
-const REVALIDATE_SECONDS = 30;
+const REVALIDATE_SECONDS = 5;
 
 const emptyStats: StatsDto = {
   dailyVolumeUsd: "0",
