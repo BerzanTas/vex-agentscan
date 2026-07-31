@@ -7,7 +7,8 @@ import { StatCards } from "../components/StatCards";
 import { VolumeChart } from "../components/VolumeChart";
 import { fetchActivity, fetchAgents, fetchChart, fetchProtocols, fetchStats } from "../lib/api";
 
-export const revalidate = 30;
+export const dynamic = "force-dynamic";
+export const fetchCache = "default-cache";
 
 const CHART_DAYS = 30;
 
