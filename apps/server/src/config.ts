@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 const RPC_URLS_PREFIX = "RPC_URLS_";
+const DEFAULT_AGENT_ALIAS_SALT = "agentscan-dev-salt";
 
 const commaSeparated = (value: string) =>
   value
@@ -30,6 +31,7 @@ const envSchema = z.object({
   PURGE_DELAY_H: z.coerce.number().int().default(24),
   PURGE_INTERVAL_MIN: z.coerce.number().int().default(60),
   PUBLIC_FEED_PAGE_SIZE: z.coerce.number().int().default(25),
+  AGENT_ALIAS_SALT: z.string().min(1).default(DEFAULT_AGENT_ALIAS_SALT),
 });
 
 export type Config = z.infer<typeof envSchema> & { rpcUrlOverrides: Map<string, string[]> };
@@ -47,6 +49,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   const parsed = envSchema.parse(env);
   if (parsed.VERIFY_FAKE_MODE === "confirm_all" && env.NODE_ENV === "production") {
     throw new Error("VERIFY_FAKE_MODE=confirm_all is forbidden when NODE_ENV=production");
+  }
+  if (parsed.AGENT_ALIAS_SALT === DEFAULT_AGENT_ALIAS_SALT && env.NODE_ENV === "production") {
+    throw new Error("AGENT_ALIAS_SALT must be set to a random value when NODE_ENV=production");
   }
   return { ...parsed, rpcUrlOverrides: rpcUrlOverridesFrom(env) };
 }

@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { toActivityRowDto, toTxDetailDto, type LookupDto } from "../public-dto.js";
+import { agentAlias, toActivityRowDto, toAgentStatDto, toTxDetailDto, type LookupDto } from "../public-dto.js";
 
 const stubResolve = () => null;
 const fixtureActivityRow = () => ({
@@ -29,4 +29,32 @@ it("lookup DTO contains only the publicId", () => {
   const dto: LookupDto = { publicId: "f".repeat(32) };
   expect(Object.keys(dto)).toEqual(["publicId"]);
   for (const key of BANNED) expect(key in dto).toBe(false);
+});
+
+const rankedAgentHash = "0123456789abcdef".repeat(4);
+
+it("agent stat DTO exposes only alias, volumeUsd and txCount", () => {
+  const dto = toAgentStatDto("agentscan-dev-salt", {
+    agentHash: rankedAgentHash,
+    volumeUsd: "10.5",
+    txCount: 2,
+  });
+  expect(Object.keys(dto)).toEqual(["alias", "volumeUsd", "txCount"]);
+  for (const key of BANNED) expect(key in dto).toBe(false);
+});
+
+it("agent alias is stable for the same salt", () => {
+  const alias = agentAlias("salt-a", rankedAgentHash);
+  expect(agentAlias("salt-a", rankedAgentHash)).toBe(alias);
+  expect(alias).toMatch(/^agent-[0-9a-f]{8}$/);
+});
+
+it("agent alias changes when the salt changes", () => {
+  expect(agentAlias("salt-a", rankedAgentHash)).not.toBe(agentAlias("salt-b", rankedAgentHash));
+});
+
+it("agent alias is never a prefix or fragment of the agent hash", () => {
+  const aliasHex = agentAlias("agentscan-dev-salt", rankedAgentHash).slice("agent-".length);
+  expect(rankedAgentHash.startsWith(aliasHex)).toBe(false);
+  expect(rankedAgentHash.includes(aliasHex)).toBe(false);
 });

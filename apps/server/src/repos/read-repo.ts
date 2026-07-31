@@ -223,6 +223,26 @@ export async function chartByDay(pool: pg.Pool, days: number): Promise<ChartDayR
   return result.rows.map((row) => ({ day: row.day, volumeUsd: row.volume_usd, txCount: row.tx_count }));
 }
 
+export type AgentVolumeRead = { agentHash: string; volumeUsd: string; txCount: number };
+
+export async function agentLeaderboard(pool: pg.Pool): Promise<AgentVolumeRead[]> {
+  const result = await pool.query<{ agent_hash: string; volume_usd: string; tx_count: number }>(
+    `SELECT agent_hash, COALESCE(SUM(usd_in_est), 0)::text AS volume_usd, COUNT(*)::int AS tx_count
+     FROM activities
+     WHERE verification_state IN ('verified_full','verified_basic')
+       AND event_role IN ('swap','bridge_deposit')
+       AND client_confirmed_at > now() - interval '30 days'
+     GROUP BY agent_hash
+     ORDER BY COALESCE(SUM(usd_in_est), 0) DESC
+     LIMIT 10`,
+  );
+  return result.rows.map((row) => ({
+    agentHash: row.agent_hash,
+    volumeUsd: row.volume_usd,
+    txCount: row.tx_count,
+  }));
+}
+
 export type ProtocolRead = { protocol: string; volumeUsd: string; txCount: number };
 
 export async function protocolRanking(pool: pg.Pool): Promise<ProtocolRead[]> {

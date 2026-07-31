@@ -30,4 +30,8 @@ describe("loadConfig", () => {
       loadConfig({ ...baseEnv, VERIFY_FAKE_MODE: "confirm_all", NODE_ENV: "production" }),
     ).toThrow();
   });
+
+  it("throws when the default AGENT_ALIAS_SALT runs in production", () => {
+    expect(() => loadConfig({ ...baseEnv, NODE_ENV: "production" })).toThrow();
+  });
 });
