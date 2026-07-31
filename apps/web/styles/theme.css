@@ -330,6 +330,28 @@
   .hash-chip-copy:hover {
     color: var(--color-text-primary);
   }
+
+  .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.5rem;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: color 150ms ease, background-color 150ms ease;
+  }
+
+  .theme-toggle:hover {
+    color: var(--color-text-primary);
+    background: rgba(31, 68, 255, 0.12);
+  }
+
+  .theme-toggle:focus-visible {
+    outline: 2px solid rgba(31, 68, 255, 0.7);
+    outline-offset: 2px;
+  }
 }
 
 @keyframes live-dot-pulse {
@@ -396,4 +418,50 @@
   .feed-row {
     animation: none;
   }
+}
+
+[data-theme="horizon"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-color: var(--color-bg-primary);
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(10, 13, 24, 0.2) 0%,
+      rgba(10, 13, 24, 0.22) 40%,
+      rgba(10, 13, 24, 0.3) 52%,
+      rgba(10, 13, 24, 0.3) 68%,
+      rgba(10, 13, 24, 0.22) 82%,
+      rgba(10, 13, 24, 0.2) 100%
+    ),
+    url("/bg/horizon.webp");
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+[data-theme="horizon"] .topbar {
+  background: rgba(10, 13, 24, 0.7);
+}
+
+[data-theme="horizon"] .hero {
+  border-color: transparent;
+  background: none;
+}
+
+[data-theme="horizon"] .hero-grid,
+[data-theme="horizon"] .hero-sweep {
+  display: none;
+}
+
+[data-theme="horizon"] .card {
+  background: rgba(10, 13, 24, 0.7);
+}
+
+[data-theme="horizon"] .stat-card {
+  border-color: transparent;
+  background: none;
+  box-shadow: none;
 }
