@@ -25,11 +25,11 @@ export default async function DashboardPage() {
       <AutoRefresh />
       <Hero />
       <StatCards stats={stats} />
-      <div className="section-enter grid grid-cols-1 gap-8 xl:grid-cols-3">
-        <section className="card card-hover p-4">
-          <h2 className="mb-4 text-sm text-text-secondary">Volume ({CHART_DAYS}d, USD est.)</h2>
-          <VolumeChart points={chart} />
-        </section>
+      <section className="section-enter card card-hover p-4">
+        <h2 className="mb-4 text-sm text-text-secondary">Volume ({CHART_DAYS}d, USD est.)</h2>
+        <VolumeChart points={chart} />
+      </section>
+      <div className="section-enter grid grid-cols-1 gap-8 lg:grid-cols-2">
         <section className="card card-hover p-4">
           <h2 className="mb-4 text-sm text-text-secondary">Protocols</h2>
           <ProtocolRanking protocols={protocols} />
