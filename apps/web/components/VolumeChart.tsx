@@ -40,11 +40,11 @@ export function VolumeChart({ points }: { points: ChartPointDto[] }) {
 
   if (points.length === 0) {
     return (
-      <div className="flex h-70 items-center justify-center text-sm text-text-muted">
+      <div className="flex h-80 items-center justify-center text-sm text-text-muted">
         No volume data yet
       </div>
     );
   }
 
-  return <div ref={containerRef} className="h-70 w-full" />;
+  return <div ref={containerRef} className="h-80 w-full" />;
 }
