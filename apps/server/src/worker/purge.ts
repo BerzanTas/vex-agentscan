@@ -2,6 +2,7 @@ import type pg from "pg";
 import type { Logger } from "pino";
 import type { Config } from "../config.js";
 import { findAgentsDueForPurge, purgeAgentData } from "../repos/purge-repo.js";
+import { deleteExpiredRateLimitHits } from "../repos/rate-limit-repo.js";
 
 export async function runPurgeSweep(pool: pg.Pool, config: Config): Promise<{ purgedAgents: number }> {
   const dueAgents = await findAgentsDueForPurge(pool, config.PURGE_DELAY_H);
@@ -9,6 +10,8 @@ export async function runPurgeSweep(pool: pg.Pool, config: Config): Promise<{ pu
   for (const agentHash of dueAgents) {
     if (await purgeAgentData(pool, agentHash)) purgedAgents += 1;
   }
+  const longestRateLimitWindowSec = Math.max(config.INGEST_RATE_WINDOW_SEC, config.REGISTER_RATE_WINDOW_SEC);
+  await deleteExpiredRateLimitHits(pool, longestRateLimitWindowSec);
   return { purgedAgents };
 }
 
