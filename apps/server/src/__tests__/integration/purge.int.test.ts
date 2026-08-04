@@ -106,6 +106,22 @@ async function aggregateOf(protocol: string): Promise<{ day: string; kind: strin
   return onlyRow(result.rows);
 }
 
+async function seedRateLimitHit(keyHash: string, updatedMinutesAgo: number): Promise<void> {
+  await db.pool.query(
+    `INSERT INTO rate_limit_hits (key_hash, hits, updated_at)
+     VALUES ($1, ARRAY[now()]::timestamptz[], now() - make_interval(mins => $2))`,
+    [keyHash, updatedMinutesAgo],
+  );
+}
+
+async function rateLimitHitExists(keyHash: string): Promise<boolean> {
+  const result = await db.pool.query<{ count: number }>(
+    "SELECT count(*)::int AS count FROM rate_limit_hits WHERE key_hash = $1",
+    [keyHash],
+  );
+  return onlyRow(result.rows).count > 0;
+}
+
 describe("purge sweep", () => {
   it("purges activities, verification jobs and strikes of an agent revoked past PURGE_DELAY_H, stamps purged_at and leaves daily_aggregates untouched", async () => {
     await seedRevokedAgent(dueAgent, 25);
@@ -162,5 +178,21 @@ describe("purge sweep", () => {
     expect(await countActivities(dueAgent)).toBe(0);
     expect(await countJobs(restoredActivityId)).toBe(0);
     expect(await countActivities(recentAgent)).toBe(1);
+  });
+
+  it("keeps a rate limit counter that is inside the register window but outside the ingest window", async () => {
+    await seedRateLimitHit("rate-limit-within-register-window", 10);
+
+    await runPurgeSweep(db.pool, config);
+
+    expect(await rateLimitHitExists("rate-limit-within-register-window")).toBe(true);
+  });
+
+  it("deletes a rate limit counter that is outside both the ingest and register windows", async () => {
+    await seedRateLimitHit("rate-limit-outside-both-windows", 120);
+
+    await runPurgeSweep(db.pool, config);
+
+    expect(await rateLimitHitExists("rate-limit-outside-both-windows")).toBe(false);
   });
 });
