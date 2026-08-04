@@ -26,25 +26,3 @@ export function decideSlidingWindow(input: SlidingWindowInput): SlidingWindowOut
   }
   return { decision: { ok: true }, hitsMs: [...recentHits, input.nowMs] };
 }
-
-export class SlidingWindowLimiter implements RateLimiter {
-  private readonly limit: number;
-  private readonly windowSec: number;
-  private readonly hitsByKey = new Map<string, number[]>();
-
-  constructor(limit: number, windowSec: number) {
-    this.limit = limit;
-    this.windowSec = windowSec;
-  }
-
-  async allow(key: string): Promise<RateLimitDecision> {
-    const outcome = decideSlidingWindow({
-      hitsMs: this.hitsByKey.get(key) ?? [],
-      nowMs: Date.now(),
-      limit: this.limit,
-      windowSec: this.windowSec,
-    });
-    this.hitsByKey.set(key, outcome.hitsMs);
-    return outcome.decision;
-  }
-}

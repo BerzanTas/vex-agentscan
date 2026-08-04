@@ -1,33 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { decideSlidingWindow, SlidingWindowLimiter } from "../plugins/rate-limit.js";
-
-describe("SlidingWindowLimiter", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("rejects the third call within the window at limit 2 per 60s", async () => {
-    const limiter = new SlidingWindowLimiter(2, 60);
-    expect(await limiter.allow("key")).toEqual({ ok: true });
-    expect(await limiter.allow("key")).toEqual({ ok: true });
-    const third = (await limiter.allow("key")) as { ok: false; retryAfterSec: number };
-    expect(third.ok).toBe(false);
-    expect(third.retryAfterSec).toBeGreaterThanOrEqual(1);
-    expect(third.retryAfterSec).toBeLessThanOrEqual(60);
-  });
-
-  it("allows again after the window has passed", async () => {
-    const limiter = new SlidingWindowLimiter(2, 60);
-    expect(await limiter.allow("key")).toEqual({ ok: true });
-    expect(await limiter.allow("key")).toEqual({ ok: true });
-    vi.advanceTimersByTime(60_001);
-    expect(await limiter.allow("key")).toEqual({ ok: true });
-  });
-});
+import { describe, expect, it } from "vitest";
+import { decideSlidingWindow } from "../plugins/rate-limit.js";
 
 describe("decideSlidingWindow", () => {
   it("odrzuca trzecie trafienie przy limicie 2 i nie dopisuje go do okna", () => {
