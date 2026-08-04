@@ -28,6 +28,8 @@ const envSchema = z.object({
   UNKNOWN_CHAIN_BACKOFF_MIN: z.coerce.number().int().default(360),
   WORKER_POLL_INTERVAL_SEC: z.coerce.number().int().default(15),
   WORKER_BATCH: z.coerce.number().int().default(20),
+  WORKER_LEASE_SEC: z.coerce.number().int().default(120),
+  WORKER_RPC_CONCURRENCY: z.coerce.number().int().default(10),
   WORKER_HEARTBEAT_MAX_AGE_SEC: z.coerce.number().int().default(120),
   PURGE_DELAY_H: z.coerce.number().int().default(24),
   PURGE_INTERVAL_MIN: z.coerce.number().int().default(60),

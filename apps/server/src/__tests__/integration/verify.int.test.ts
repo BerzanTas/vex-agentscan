@@ -361,25 +361,16 @@ describe("verification worker", () => {
       await seedQueuedActivity({ agentHash: agent, protocol: "p-race" }),
       await seedQueuedActivity({ agentHash: agent, protocol: "p-race" }),
     ];
-    const firstClient = await db.pool.connect();
-    const secondClient = await db.pool.connect();
-    try {
-      await firstClient.query("BEGIN");
-      await secondClient.query("BEGIN");
-      const firstClaim = await claimDueJobs(firstClient, 2);
-      const secondClaim = await claimDueJobs(secondClient, 2);
-      const firstIds = firstClaim.map((job) => job.activityId);
-      const secondIds = secondClaim.map((job) => job.activityId);
-      expect(firstIds).toHaveLength(2);
-      expect(secondIds).toHaveLength(2);
-      expect(firstIds.filter((id) => secondIds.includes(id))).toEqual([]);
-      expect([...firstIds, ...secondIds].sort()).toEqual([...seededIds].sort());
-    } finally {
-      await firstClient.query("ROLLBACK");
-      await secondClient.query("ROLLBACK");
-      firstClient.release();
-      secondClient.release();
-    }
+    const [firstClaim, secondClaim] = await Promise.all([
+      claimDueJobs(db.pool, 2, config.WORKER_LEASE_SEC),
+      claimDueJobs(db.pool, 2, config.WORKER_LEASE_SEC),
+    ]);
+    const firstIds = firstClaim.map((job) => job.activityId);
+    const secondIds = secondClaim.map((job) => job.activityId);
+    expect(firstIds).toHaveLength(2);
+    expect(secondIds).toHaveLength(2);
+    expect(firstIds.filter((id) => secondIds.includes(id))).toEqual([]);
+    expect([...firstIds, ...secondIds].sort()).toEqual([...seededIds].sort());
     await db.pool.query("DELETE FROM verification_jobs");
   });
 

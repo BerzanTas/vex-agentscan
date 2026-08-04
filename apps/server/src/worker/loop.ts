@@ -2,8 +2,9 @@ import type pg from "pg";
 import type { Logger } from "pino";
 import type { ChainEntry, ChainReader, ResolveChain } from "@agentscan/core";
 import type { Config } from "../config.js";
-import { claimDueJobs } from "../repos/activities-verify-repo.js";
-import { runVerifyJob, type ChainReaderContext } from "./verify-job.js";
+import { claimDueJobs, type ClaimedJob } from "../repos/activities-verify-repo.js";
+import { applyJobOutcome } from "./apply-outcome.js";
+import { resolveJobOutcome, type ChainReaderContext, type JobOutcome } from "./verify-job.js";
 
 export type VerificationLoopDeps = {
   pool: pg.Pool;
@@ -13,20 +14,46 @@ export type VerificationLoopDeps = {
   logger: Logger;
 };
 
-export async function runVerificationPass(deps: VerificationLoopDeps): Promise<number> {
+type ResolvedJob = { job: ClaimedJob; outcome: JobOutcome };
+
+async function resolveWithConcurrency(
+  jobs: ClaimedJob[],
+  concurrency: number,
+  deps: VerificationLoopDeps,
+): Promise<ResolvedJob[]> {
+  const resolved: ResolvedJob[] = [];
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(concurrency, jobs.length) }, async () => {
+    while (nextIndex < jobs.length) {
+      const job = jobs[nextIndex++];
+      if (job === undefined) return;
+      resolved.push({ job, outcome: await resolveJobOutcome(job, deps) });
+    }
+  });
+  await Promise.all(workers);
+  return resolved;
+}
+
+async function persistOutcome(deps: VerificationLoopDeps, resolved: ResolvedJob): Promise<void> {
   const client = await deps.pool.connect();
   try {
     await client.query("BEGIN");
-    const jobs = await claimDueJobs(client, deps.config.WORKER_BATCH);
-    for (const job of jobs) await runVerifyJob(client, job, deps);
+    await applyJobOutcome(client, resolved.job.activityId, resolved.outcome, deps.config);
     await client.query("COMMIT");
-    return jobs.length;
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
-    throw error;
+    deps.logger.error({ err: error, activityId: String(resolved.job.activityId) }, "persist outcome failed");
   } finally {
     client.release();
   }
+}
+
+export async function runVerificationPass(deps: VerificationLoopDeps): Promise<number> {
+  const jobs = await claimDueJobs(deps.pool, deps.config.WORKER_BATCH, deps.config.WORKER_LEASE_SEC);
+  if (jobs.length === 0) return 0;
+  const resolved = await resolveWithConcurrency(jobs, deps.config.WORKER_RPC_CONCURRENCY, deps);
+  for (const entry of resolved) await persistOutcome(deps, entry);
+  return jobs.length;
 }
 
 export function startVerificationLoop(deps: VerificationLoopDeps): () => void {

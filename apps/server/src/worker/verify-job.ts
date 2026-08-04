@@ -9,8 +9,7 @@ import {
   type VerificationInput,
 } from "@agentscan/core";
 import type { Config } from "../config.js";
-import type { ClaimedJob, SqlExecutor, TerminalVerdict } from "../repos/activities-verify-repo.js";
-import { applyJobOutcome } from "./apply-outcome.js";
+import type { ClaimedJob, TerminalVerdict } from "../repos/activities-verify-repo.js";
 
 export type ChainReaderContext = {
   clientConfirmedAt: Date | null;
@@ -35,10 +34,6 @@ type ReceiptRead =
   | { outcome: "receipt"; receipt: ReceiptView }
   | { outcome: "not_found" }
   | { outcome: "error"; message: string };
-
-export async function runVerifyJob(client: SqlExecutor, job: ClaimedJob, deps: VerifyJobDeps): Promise<void> {
-  await applyJobOutcome(client, job.activityId, await resolveJobOutcome(job, deps), deps.config);
-}
 
 export async function resolveJobOutcome(job: ClaimedJob, deps: VerifyJobDeps): Promise<JobOutcome> {
   const entry = deps.resolveChain({
