@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const RPC_URLS_PREFIX = "RPC_URLS_";
 const DEFAULT_AGENT_ALIAS_SALT = "agentscan-dev-salt";
+const DEFAULT_RATE_LIMIT_KEY_SALT = "agentscan-dev-rate-salt";
 
 const commaSeparated = (value: string) =>
   value
@@ -32,6 +33,7 @@ const envSchema = z.object({
   PURGE_INTERVAL_MIN: z.coerce.number().int().default(60),
   PUBLIC_FEED_PAGE_SIZE: z.coerce.number().int().default(25),
   AGENT_ALIAS_SALT: z.string().min(1).default(DEFAULT_AGENT_ALIAS_SALT),
+  RATE_LIMIT_KEY_SALT: z.string().min(1).default(DEFAULT_RATE_LIMIT_KEY_SALT),
 });
 
 export type Config = z.infer<typeof envSchema> & { rpcUrlOverrides: Map<string, string[]> };
@@ -52,6 +54,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   }
   if (parsed.AGENT_ALIAS_SALT === DEFAULT_AGENT_ALIAS_SALT && env.NODE_ENV === "production") {
     throw new Error("AGENT_ALIAS_SALT must be set to a random value when NODE_ENV=production");
+  }
+  if (parsed.RATE_LIMIT_KEY_SALT === DEFAULT_RATE_LIMIT_KEY_SALT && env.NODE_ENV === "production") {
+    throw new Error("RATE_LIMIT_KEY_SALT must be set to a random value when NODE_ENV=production");
   }
   return { ...parsed, rpcUrlOverrides: rpcUrlOverridesFrom(env) };
 }
