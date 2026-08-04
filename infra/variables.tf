@@ -10,7 +10,7 @@ variable "resource_group_name" {
 
 variable "location" {
   type    = string
-  default = "eastus"
+  default = "eastus2"
 }
 
 variable "name_prefix" {
