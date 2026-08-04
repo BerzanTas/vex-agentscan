@@ -52,7 +52,7 @@ describe("resolveJobOutcome", () => {
     });
   });
 
-  it("nie dotyka bazy podczas rozstrzygania", async () => {
+  it("zamienia rzucony wyjątek RPC w reschedule z backoffem, nigdy w strike", async () => {
     const outcome = await resolveJobOutcome(jobFixture(), {
       config,
       resolveChain: () => ({
