@@ -1,0 +1,2 @@
+FROM amacneil/dbmate:2
+COPY db /db
