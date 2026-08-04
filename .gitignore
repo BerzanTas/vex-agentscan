@@ -13,4 +13,3 @@ test-results/
 !*.tfvars.example
 *.tfplan
 .terraform/
-.terraform.lock.hcl
