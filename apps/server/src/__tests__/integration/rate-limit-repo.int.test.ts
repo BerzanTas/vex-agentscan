@@ -19,6 +19,21 @@ beforeEach(async () => {
   await pool.query("DELETE FROM rate_limit_hits");
 });
 
+async function blockedAdvisoryLockWaiterCount(): Promise<number> {
+  const result = await pool.query<{ count: string }>(
+    `SELECT count(*)::text AS count FROM pg_stat_activity
+     WHERE wait_event_type = 'Lock' AND query ILIKE '%pg_advisory_xact_lock%' AND pid <> pg_backend_pid()`,
+  );
+  return Number(result.rows[0]?.count ?? "0");
+}
+
+async function waitUntilBlockedOnAdvisoryLock(): Promise<void> {
+  let waiters = await blockedAdvisoryLockWaiterCount();
+  while (waiters === 0) {
+    waiters = await blockedAdvisoryLockWaiterCount();
+  }
+}
+
 describe("PostgresSlidingWindowLimiter", () => {
   it("dzieli licznik między dwie niezależne instancje limitera", async () => {
     const first = new PostgresSlidingWindowLimiter(pool, 2, 60);
@@ -55,13 +70,29 @@ describe("PostgresSlidingWindowLimiter", () => {
     expect(rejected.retryAfterSec).toBeLessThanOrEqual(60);
   });
 
-  it("dwa równoległe żądania na świeży klucz przepuszczają dokładnie jedno przy limicie 1", async () => {
+  it("blokuje równoległy allow() na tym samym kluczu dopóki inna transakcja trzyma blokadę adwisyjną, i wznawia go po jej zwolnieniu", async () => {
     const limiter = new PostgresSlidingWindowLimiter(pool, 1, 60);
-    const decisions = await Promise.all([
-      limiter.allow("fresh-key"),
-      limiter.allow("fresh-key"),
-    ]);
-    const allowed = decisions.filter((decision) => decision.ok);
-    expect(allowed).toHaveLength(1);
+    const lockClient = await pool.connect();
+    try {
+      await lockClient.query("BEGIN");
+      await lockClient.query("SELECT pg_advisory_xact_lock(hashtext($1)::bigint)", ["fresh-key"]);
+
+      let allowSettled = false;
+      const allowPromise = limiter.allow("fresh-key").then((decision) => {
+        allowSettled = true;
+        return decision;
+      });
+
+      await waitUntilBlockedOnAdvisoryLock();
+      expect(allowSettled).toBe(false);
+
+      await lockClient.query("COMMIT");
+      const decision = await allowPromise;
+
+      expect(allowSettled).toBe(true);
+      expect(decision).toEqual({ ok: true });
+    } finally {
+      lockClient.release();
+    }
   });
 });
