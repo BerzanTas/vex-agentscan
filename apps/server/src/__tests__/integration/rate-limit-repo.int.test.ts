@@ -54,4 +54,14 @@ describe("PostgresSlidingWindowLimiter", () => {
     expect(rejected.retryAfterSec).toBeGreaterThanOrEqual(1);
     expect(rejected.retryAfterSec).toBeLessThanOrEqual(60);
   });
+
+  it("dwa równoległe żądania na świeży klucz przepuszczają dokładnie jedno przy limicie 1", async () => {
+    const limiter = new PostgresSlidingWindowLimiter(pool, 1, 60);
+    const decisions = await Promise.all([
+      limiter.allow("fresh-key"),
+      limiter.allow("fresh-key"),
+    ]);
+    const allowed = decisions.filter((decision) => decision.ok);
+    expect(allowed).toHaveLength(1);
+  });
 });

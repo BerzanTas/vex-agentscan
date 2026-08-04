@@ -20,6 +20,7 @@ export class PostgresSlidingWindowLimiter implements RateLimiter {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1)::bigint)", [key]);
       const existing = await client.query<{ hits: Date[] }>(
         "SELECT hits FROM rate_limit_hits WHERE key_hash = $1 FOR UPDATE",
         [key],
