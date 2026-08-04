@@ -18,6 +18,10 @@ resource "azurerm_subnet" "container_apps" {
       actions = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
     }
   }
+
+  lifecycle {
+    replace_triggered_by = [azurerm_virtual_network.main.id]
+  }
 }
 
 resource "azurerm_subnet" "postgres" {
@@ -32,6 +36,10 @@ resource "azurerm_subnet" "postgres" {
       name    = "Microsoft.DBforPostgreSQL/flexibleServers"
       actions = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
     }
+  }
+
+  lifecycle {
+    replace_triggered_by = [azurerm_virtual_network.main.id]
   }
 }
 
