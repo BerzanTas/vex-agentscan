@@ -96,7 +96,7 @@ export const eventsRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
     if (agent.status === "quarantined") {
       return sendError(reply, 403, "quarantined", "agent is quarantined");
     }
-    const rateDecision = ingestLimiter.allow(bearerToken);
+    const rateDecision = await ingestLimiter.allow(bearerToken);
     if (!rateDecision.ok) {
       return reply
         .status(429)

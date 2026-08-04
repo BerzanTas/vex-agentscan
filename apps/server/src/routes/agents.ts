@@ -15,7 +15,7 @@ export const agentsRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
   );
 
   app.post("/v1/agents/register", async (request, reply) => {
-    const rateDecision = registerLimiter.allow(request.ip);
+    const rateDecision = await registerLimiter.allow(request.ip);
     if (!rateDecision.ok) {
       return reply
         .status(429)

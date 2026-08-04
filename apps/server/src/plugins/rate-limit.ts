@@ -1,6 +1,33 @@
 export type RateLimitDecision = { ok: true } | { ok: false; retryAfterSec: number };
 
-export class SlidingWindowLimiter {
+export type SlidingWindowInput = {
+  hitsMs: number[];
+  nowMs: number;
+  limit: number;
+  windowSec: number;
+};
+
+export type SlidingWindowOutcome = { decision: RateLimitDecision; hitsMs: number[] };
+
+export interface RateLimiter {
+  allow(key: string): Promise<RateLimitDecision>;
+}
+
+export function decideSlidingWindow(input: SlidingWindowInput): SlidingWindowOutcome {
+  const windowStartMs = input.nowMs - input.windowSec * 1000;
+  const recentHits = input.hitsMs.filter((hitMs) => hitMs > windowStartMs);
+  if (recentHits.length >= input.limit) {
+    const oldestHitMs = recentHits[0] ?? input.nowMs;
+    const retryAfterSec = Math.max(
+      1,
+      Math.ceil((oldestHitMs + input.windowSec * 1000 - input.nowMs) / 1000),
+    );
+    return { decision: { ok: false, retryAfterSec }, hitsMs: recentHits };
+  }
+  return { decision: { ok: true }, hitsMs: [...recentHits, input.nowMs] };
+}
+
+export class SlidingWindowLimiter implements RateLimiter {
   private readonly limit: number;
   private readonly windowSec: number;
   private readonly hitsByKey = new Map<string, number[]>();
@@ -10,21 +37,14 @@ export class SlidingWindowLimiter {
     this.windowSec = windowSec;
   }
 
-  allow(key: string): RateLimitDecision {
-    const now = Date.now();
-    const windowStartMs = now - this.windowSec * 1000;
-    const recentHits = (this.hitsByKey.get(key) ?? []).filter((hitMs) => hitMs > windowStartMs);
-    if (recentHits.length >= this.limit) {
-      this.hitsByKey.set(key, recentHits);
-      const oldestHitMs = recentHits[0] ?? now;
-      const retryAfterSec = Math.max(
-        1,
-        Math.ceil((oldestHitMs + this.windowSec * 1000 - now) / 1000),
-      );
-      return { ok: false, retryAfterSec };
-    }
-    recentHits.push(now);
-    this.hitsByKey.set(key, recentHits);
-    return { ok: true };
+  async allow(key: string): Promise<RateLimitDecision> {
+    const outcome = decideSlidingWindow({
+      hitsMs: this.hitsByKey.get(key) ?? [],
+      nowMs: Date.now(),
+      limit: this.limit,
+      windowSec: this.windowSec,
+    });
+    this.hitsByKey.set(key, outcome.hitsMs);
+    return outcome.decision;
   }
 }
