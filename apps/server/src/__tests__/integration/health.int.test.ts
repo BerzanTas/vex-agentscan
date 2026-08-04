@@ -23,6 +23,12 @@ describe("GET /healthz", () => {
     const response = await app.inject({ method: "GET", url: "/healthz" });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ db: "ok", workerAgeSec: null });
+    expect(response.headers["strict-transport-security"]).toBe(
+      "max-age=31536000; includeSubDomains",
+    );
+    expect(response.headers["content-security-policy"]).toBe(
+      "default-src 'self'; script-src 'self' 'unsafe-inline'",
+    );
   });
 
   it("returns 503 unhealthy in strict mode when the heartbeat is stale", async () => {
