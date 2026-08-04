@@ -3,6 +3,7 @@ name: cd
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   build-push:
@@ -34,9 +35,18 @@ jobs:
           tags: |
             ghcr.io/berzantas/vex-agentscan-web:${{ github.sha }}
             ghcr.io/berzantas/vex-agentscan-web:latest
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.migrate
+          push: true
+          tags: |
+            ghcr.io/berzantas/vex-agentscan-migrate:${{ github.sha }}
+            ghcr.io/berzantas/vex-agentscan-migrate:latest
 
   deploy:
     needs: build-push
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: appleboy/ssh-action@v1
