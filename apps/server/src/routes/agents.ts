@@ -2,20 +2,24 @@ import { registerRequestSchema } from "@agentscan/contract";
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import type { Deps } from "../app.js";
 import { authenticateAgent, bearerTokenFrom, sha256Hex } from "../plugins/auth.js";
-import { SlidingWindowLimiter } from "../plugins/rate-limit.js";
+import { rateLimitKeyHash } from "../plugins/rate-limit-key.js";
+import { PostgresSlidingWindowLimiter } from "../repos/rate-limit-repo.js";
 import { revokeAgent, upsertAgentRegistration } from "../repos/agents-repo.js";
 
 const sendError = (reply: FastifyReply, status: number, code: string, message: string) =>
   reply.status(status).send({ error: { code, message } });
 
 export const agentsRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
-  const registerLimiter = new SlidingWindowLimiter(
+  const registerLimiter = new PostgresSlidingWindowLimiter(
+    deps.pool,
     deps.config.REGISTER_RATE_LIMIT_PER_IP,
     deps.config.REGISTER_RATE_WINDOW_SEC,
   );
 
   app.post("/v1/agents/register", async (request, reply) => {
-    const rateDecision = await registerLimiter.allow(request.ip);
+    const rateDecision = await registerLimiter.allow(
+      rateLimitKeyHash("register", request.ip, deps.config.RATE_LIMIT_KEY_SALT),
+    );
     if (!rateDecision.ok) {
       return reply
         .status(429)
