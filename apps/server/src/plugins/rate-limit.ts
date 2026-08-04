@@ -1,30 +1,28 @@
 export type RateLimitDecision = { ok: true } | { ok: false; retryAfterSec: number };
 
-export class SlidingWindowLimiter {
-  private readonly limit: number;
-  private readonly windowSec: number;
-  private readonly hitsByKey = new Map<string, number[]>();
+export type SlidingWindowInput = {
+  hitsMs: number[];
+  nowMs: number;
+  limit: number;
+  windowSec: number;
+};
 
-  constructor(limit: number, windowSec: number) {
-    this.limit = limit;
-    this.windowSec = windowSec;
-  }
+export type SlidingWindowOutcome = { decision: RateLimitDecision; hitsMs: number[] };
 
-  allow(key: string): RateLimitDecision {
-    const now = Date.now();
-    const windowStartMs = now - this.windowSec * 1000;
-    const recentHits = (this.hitsByKey.get(key) ?? []).filter((hitMs) => hitMs > windowStartMs);
-    if (recentHits.length >= this.limit) {
-      this.hitsByKey.set(key, recentHits);
-      const oldestHitMs = recentHits[0] ?? now;
-      const retryAfterSec = Math.max(
-        1,
-        Math.ceil((oldestHitMs + this.windowSec * 1000 - now) / 1000),
-      );
-      return { ok: false, retryAfterSec };
-    }
-    recentHits.push(now);
-    this.hitsByKey.set(key, recentHits);
-    return { ok: true };
+export interface RateLimiter {
+  allow(key: string): Promise<RateLimitDecision>;
+}
+
+export function decideSlidingWindow(input: SlidingWindowInput): SlidingWindowOutcome {
+  const windowStartMs = input.nowMs - input.windowSec * 1000;
+  const recentHits = input.hitsMs.filter((hitMs) => hitMs > windowStartMs);
+  if (recentHits.length >= input.limit) {
+    const oldestHitMs = recentHits[0] ?? input.nowMs;
+    const retryAfterSec = Math.max(
+      1,
+      Math.ceil((oldestHitMs + input.windowSec * 1000 - input.nowMs) / 1000),
+    );
+    return { decision: { ok: false, retryAfterSec }, hitsMs: recentHits };
   }
+  return { decision: { ok: true }, hitsMs: [...recentHits, input.nowMs] };
 }

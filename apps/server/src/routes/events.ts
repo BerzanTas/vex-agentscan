@@ -9,8 +9,9 @@ import type { FastifyBaseLogger, FastifyPluginAsync, FastifyReply } from "fastif
 import type pg from "pg";
 import type { Deps } from "../app.js";
 import { authenticateAgent, bearerTokenFrom } from "../plugins/auth.js";
-import { SlidingWindowLimiter } from "../plugins/rate-limit.js";
+import { rateLimitKeyHash } from "../plugins/rate-limit-key.js";
 import { applyEvent, type ApplyEventOutcome } from "../repos/activities-ingest-repo.js";
+import { PostgresSlidingWindowLimiter } from "../repos/rate-limit-repo.js";
 
 const sendError = (reply: FastifyReply, status: number, code: string, message: string) =>
   reply.status(status).send({ error: { code, message } });
@@ -76,7 +77,8 @@ async function ingestBatch(
 }
 
 export const eventsRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
-  const ingestLimiter = new SlidingWindowLimiter(
+  const ingestLimiter = new PostgresSlidingWindowLimiter(
+    deps.pool,
     deps.config.INGEST_RATE_LIMIT_PER_TOKEN,
     deps.config.INGEST_RATE_WINDOW_SEC,
   );
@@ -96,7 +98,9 @@ export const eventsRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
     if (agent.status === "quarantined") {
       return sendError(reply, 403, "quarantined", "agent is quarantined");
     }
-    const rateDecision = ingestLimiter.allow(bearerToken);
+    const rateDecision = await ingestLimiter.allow(
+      rateLimitKeyHash("ingest", bearerToken, deps.config.RATE_LIMIT_KEY_SALT),
+    );
     if (!rateDecision.ok) {
       return reply
         .status(429)

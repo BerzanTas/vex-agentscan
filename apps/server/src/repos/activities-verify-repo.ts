@@ -36,19 +36,28 @@ type ClaimedJobRow = {
   token_out_address: string | null;
 };
 
-export async function claimDueJobs(client: SqlExecutor, limit: number): Promise<ClaimedJob[]> {
-  const result = await client.query<ClaimedJobRow>(
-    `SELECT vj.activity_id, vj.attempts, vj.first_attempt_at,
-            a.tx_hash, a.protocol, a.chain_family, a.chain_id,
-            a.client_confirmed_at, a.executed_in_raw, a.executed_out_raw,
-            a.token_in_address, a.token_out_address
-     FROM verification_jobs vj
-     JOIN activities a ON a.id = vj.activity_id
-     WHERE vj.next_attempt_at <= now()
-     ORDER BY vj.next_attempt_at
-     LIMIT $1
-     FOR UPDATE OF vj SKIP LOCKED`,
-    [limit],
+export async function claimDueJobs(
+  pool: pg.Pool,
+  limit: number,
+  leaseSec: number,
+): Promise<ClaimedJob[]> {
+  const result = await pool.query<ClaimedJobRow>(
+    `UPDATE verification_jobs vj
+     SET next_attempt_at = now() + make_interval(secs => $2::float8)
+     FROM activities a
+     WHERE a.id = vj.activity_id
+       AND vj.activity_id IN (
+         SELECT activity_id FROM verification_jobs
+         WHERE next_attempt_at <= now()
+         ORDER BY next_attempt_at
+         LIMIT $1
+         FOR UPDATE SKIP LOCKED
+       )
+     RETURNING vj.activity_id, vj.attempts, vj.first_attempt_at,
+               a.tx_hash, a.protocol, a.chain_family, a.chain_id,
+               a.client_confirmed_at, a.executed_in_raw, a.executed_out_raw,
+               a.token_in_address, a.token_out_address`,
+    [limit, leaseSec],
   );
   return result.rows.map((row) => ({
     activityId: BigInt(row.activity_id),

@@ -9,13 +9,7 @@ import {
   type VerificationInput,
 } from "@agentscan/core";
 import type { Config } from "../config.js";
-import {
-  closeUnverifiable,
-  finalizeVerification,
-  rescheduleJob,
-  type ClaimedJob,
-  type SqlExecutor,
-} from "../repos/activities-verify-repo.js";
+import type { ClaimedJob, TerminalVerdict } from "../repos/activities-verify-repo.js";
 
 export type ChainReaderContext = {
   clientConfirmedAt: Date | null;
@@ -31,21 +25,31 @@ export type VerifyJobDeps = {
   chainReaderFor: (entry: ChainEntry, context: ChainReaderContext) => ChainReader;
 };
 
+export type JobOutcome =
+  | { kind: "reschedule"; delayMs: number; lastError: string }
+  | { kind: "close_unverifiable" }
+  | { kind: "finalize"; verdict: TerminalVerdict };
+
 type ReceiptRead =
   | { outcome: "receipt"; receipt: ReceiptView }
   | { outcome: "not_found" }
   | { outcome: "error"; message: string };
 
-export async function runVerifyJob(client: SqlExecutor, job: ClaimedJob, deps: VerifyJobDeps): Promise<void> {
-  const entry = deps.resolveChain({ protocol: job.protocol, chainFamily: job.chainFamily, chainId: job.chainId });
+export async function resolveJobOutcome(job: ClaimedJob, deps: VerifyJobDeps): Promise<JobOutcome> {
+  const entry = deps.resolveChain({
+    protocol: job.protocol,
+    chainFamily: job.chainFamily,
+    chainId: job.chainId,
+  });
   if (entry === null) {
-    await rescheduleJob(client, job.activityId, deps.config.UNKNOWN_CHAIN_BACKOFF_MIN * 60_000, "chain_not_in_registry");
-    return;
+    return {
+      kind: "reschedule",
+      delayMs: deps.config.UNKNOWN_CHAIN_BACKOFF_MIN * 60_000,
+      lastError: "chain_not_in_registry",
+    };
   }
-  if (job.txHash === null) {
-    await closeUnverifiable(client, job.activityId);
-    return;
-  }
+  if (job.txHash === null) return { kind: "close_unverifiable" };
+
   const reader = deps.chainReaderFor(entry, {
     clientConfirmedAt: job.clientConfirmedAt,
     executedInRaw: job.executedInRaw,
@@ -55,10 +59,8 @@ export async function runVerifyJob(client: SqlExecutor, job: ClaimedJob, deps: V
   });
   const read = await readReceipt(reader, job.txHash);
   const verdict = verdictFrom(read, job, entry, deps.config, job.txHash);
-  if (verdict.result !== "retry") {
-    await finalizeVerification(client, job.activityId, verdict, deps.config);
-    return;
-  }
+  if (verdict.result !== "retry") return { kind: "finalize", verdict };
+
   const backoff = nextBackoff({
     attempts: job.attempts,
     schedule: deps.config.VERIFY_BACKOFF_SCHEDULE,
@@ -67,14 +69,12 @@ export async function runVerifyJob(client: SqlExecutor, job: ClaimedJob, deps: V
     now: new Date(),
   });
   if ("delayMs" in backoff) {
-    await rescheduleJob(client, job.activityId, backoff.delayMs, verdict.error);
-    return;
+    return { kind: "reschedule", delayMs: backoff.delayMs, lastError: verdict.error };
   }
   if (read.outcome === "not_found") {
-    await finalizeVerification(client, job.activityId, { result: "strike", reason: "tx_not_found" }, deps.config);
-    return;
+    return { kind: "finalize", verdict: { result: "strike", reason: "tx_not_found" } };
   }
-  await closeUnverifiable(client, job.activityId);
+  return { kind: "close_unverifiable" };
 }
 
 async function readReceipt(reader: ChainReader, txHash: string): Promise<ReceiptRead> {

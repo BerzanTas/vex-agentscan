@@ -2,6 +2,7 @@ import { fastify, type FastifyInstance } from "fastify";
 import type pg from "pg";
 import type { Config } from "./config.js";
 import { errorEnvelope } from "./plugins/error-envelope.js";
+import { securityHeaders } from "./plugins/security-headers.js";
 import { routePlugins } from "./routes/index.js";
 
 export type ChainEntry = {
@@ -25,6 +26,7 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
     logger: { redact: { paths: ["req.headers.authorization"], censor: "[redacted]" } },
     bodyLimit: deps.config.MAX_BODY_BYTES,
   });
+  await app.register(securityHeaders);
   await app.register(errorEnvelope);
   for (const plugin of routePlugins) await app.register(plugin, deps);
   return app;
