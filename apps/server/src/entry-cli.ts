@@ -7,7 +7,11 @@ import { loadConfig } from "./config.js";
 import { createPool } from "./db.js";
 
 async function withPool<T>(run: (pool: pg.Pool) => Promise<T>): Promise<T> {
-  const pool = createPool(loadConfig(process.env).DATABASE_URL);
+  const config = loadConfig(process.env);
+  const pool = createPool(config.DATABASE_URL, {
+    max: config.DATABASE_POOL_MAX,
+    connectionTimeoutMillis: config.DATABASE_POOL_ACQUIRE_TIMEOUT_MS,
+  });
   try {
     return await run(pool);
   } finally {

@@ -8,7 +8,10 @@ import { startVerificationLoop } from "./worker/loop.js";
 import { startPurgeInterval } from "./worker/purge.js";
 
 const config = loadConfig(process.env);
-const pool = createPool(config.DATABASE_URL);
+const pool = createPool(config.DATABASE_URL, {
+  max: config.DATABASE_POOL_MAX,
+  connectionTimeoutMillis: config.DATABASE_POOL_ACQUIRE_TIMEOUT_MS,
+});
 const logger = pino();
 
 await pool.query("SELECT 1");
