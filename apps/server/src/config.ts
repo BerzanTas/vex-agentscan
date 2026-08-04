@@ -12,8 +12,8 @@ const commaSeparated = (value: string) =>
 
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
-  DATABASE_POOL_MAX: z.coerce.number().int().default(10),
-  DATABASE_POOL_ACQUIRE_TIMEOUT_MS: z.coerce.number().int().default(5000),
+  DATABASE_POOL_MAX: z.coerce.number().int().min(1).default(10),
+  DATABASE_POOL_ACQUIRE_TIMEOUT_MS: z.coerce.number().int().min(1).default(5000),
   PORT: z.coerce.number().int().default(3000),
   INGEST_RATE_LIMIT_PER_TOKEN: z.coerce.number().int().default(60),
   INGEST_RATE_WINDOW_SEC: z.coerce.number().int().default(60),
