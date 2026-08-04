@@ -1,0 +1,4 @@
+subscription_id         = "00000000-0000-0000-0000-000000000000"
+postgres_admin_password = "wygeneruj-losowo"
+agent_alias_salt        = "wygeneruj-losowo"
+rate_limit_key_salt     = "wygeneruj-losowo"

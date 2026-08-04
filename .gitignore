@@ -6,3 +6,11 @@ dist/
 .env
 coverage/
 test-results/
+
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+*.tfplan
+.terraform/
+.terraform.lock.hcl
