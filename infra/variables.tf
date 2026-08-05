@@ -10,7 +10,7 @@ variable "resource_group_name" {
 
 variable "location" {
   type    = string
-  default = "eastus"
+  default = "eastus2"
 }
 
 variable "name_prefix" {
@@ -20,13 +20,17 @@ variable "name_prefix" {
 
 variable "image_tag" {
   type        = string
-  default     = "latest"
-  description = "Tag obrazów w GHCR, w CD ustawiany na SHA commita"
+  description = "Niezmienny SHA commita w GHCR; nigdy \"latest\""
 }
 
 variable "postgres_admin_password" {
   type      = string
   sensitive = true
+
+  validation {
+    condition     = !can(regex("\\s", var.postgres_admin_password))
+    error_message = "Hasło nie może zawierać białych znaków: urlencode() mapuje spację na \"+\", a \"+\" w części userinfo adresu URL to znak dosłowny, nie zakodowana spacja."
+  }
 }
 
 variable "agent_alias_salt" {
