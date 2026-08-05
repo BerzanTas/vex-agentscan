@@ -18,6 +18,11 @@ variable "name_prefix" {
   default = "agentscan"
 }
 
+variable "public_hostname" {
+  type        = string
+  description = "Wlasna domena publiczna wskazujaca rekordem A na staticIp srodowiska"
+}
+
 variable "image_tag" {
   type        = string
   description = "Niezmienny SHA commita w GHCR; nigdy \"latest\""

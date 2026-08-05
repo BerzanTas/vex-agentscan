@@ -5,6 +5,13 @@ resource "azapi_resource" "routing" {
 
   body = {
     properties = {
+      customDomains = [
+        {
+          name        = var.public_hostname
+          bindingType = "Auto"
+        }
+      ]
+
       rules = [
         {
           description = "ingest and public read api"
@@ -25,4 +32,20 @@ resource "azapi_resource" "routing" {
   }
 
   response_export_values = ["properties.fqdn"]
+}
+
+resource "azapi_resource" "public_hostname_certificate" {
+  type      = "Microsoft.App/managedEnvironments/managedCertificates@2026-01-01"
+  name      = replace(var.public_hostname, ".", "-")
+  parent_id = azurerm_container_app_environment.main.id
+  location  = var.location
+
+  body = {
+    properties = {
+      subjectName             = var.public_hostname
+      domainControlValidation = "HTTP"
+    }
+  }
+
+  depends_on = [azapi_resource.routing]
 }
