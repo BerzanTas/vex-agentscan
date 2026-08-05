@@ -24,41 +24,16 @@ jobs:
           context: .
           file: deploy/Dockerfile.server
           push: true
-          tags: |
-            ghcr.io/berzantas/vex-agentscan-server:${{ github.sha }}
-            ghcr.io/berzantas/vex-agentscan-server:latest
+          tags: ghcr.io/berzantas/vex-agentscan-server:${{ github.sha }}
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/Dockerfile.web
           push: true
-          tags: |
-            ghcr.io/berzantas/vex-agentscan-web:${{ github.sha }}
-            ghcr.io/berzantas/vex-agentscan-web:latest
+          tags: ghcr.io/berzantas/vex-agentscan-web:${{ github.sha }}
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/Dockerfile.migrate
           push: true
-          tags: |
-            ghcr.io/berzantas/vex-agentscan-migrate:${{ github.sha }}
-            ghcr.io/berzantas/vex-agentscan-migrate:latest
-
-  deploy:
-    needs: build-push
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            set -eu
-            cd /opt/vex-agentscan
-            git pull --ff-only
-            cd deploy
-            export IMAGE_TAG=${{ github.sha }}
-            docker compose pull
-            docker compose up -d
+          tags: ghcr.io/berzantas/vex-agentscan-migrate:${{ github.sha }}
