@@ -26,6 +26,11 @@ variable "image_tag" {
 variable "postgres_admin_password" {
   type      = string
   sensitive = true
+
+  validation {
+    condition     = !can(regex("\\s", var.postgres_admin_password))
+    error_message = "Hasło nie może zawierać białych znaków: urlencode() mapuje spację na \"+\", a \"+\" w części userinfo adresu URL to znak dosłowny, nie zakodowana spacja."
+  }
 }
 
 variable "agent_alias_salt" {

@@ -36,7 +36,7 @@ locals {
   database_url = format(
     "postgres://%s:%s@%s:5432/%s?sslmode=require",
     azurerm_postgresql_flexible_server.main.administrator_login,
-    var.postgres_admin_password,
+    urlencode(var.postgres_admin_password),
     azurerm_postgresql_flexible_server.main.fqdn,
     azurerm_postgresql_flexible_server_database.main.name,
   )
