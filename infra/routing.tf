@@ -11,6 +11,7 @@ resource "azapi_resource" "routing" {
           routes = [
             { match = { prefix = "/v1" } },
             { match = { prefix = "/api" } },
+            { match = { prefix = "/healthz" } },
           ]
           targets = [{ containerApp = azurerm_container_app.api.name }]
         },
