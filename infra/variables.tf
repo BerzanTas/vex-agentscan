@@ -20,8 +20,7 @@ variable "name_prefix" {
 
 variable "image_tag" {
   type        = string
-  default     = "latest"
-  description = "Tag obrazów w GHCR, w CD ustawiany na SHA commita"
+  description = "Niezmienny SHA commita w GHCR; nigdy \"latest\""
 }
 
 variable "postgres_admin_password" {
