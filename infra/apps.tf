@@ -81,6 +81,15 @@ resource "azurerm_container_app" "api" {
         name  = "DATABASE_POOL_MAX"
         value = "3"
       }
+
+      readiness_probe {
+        transport               = "HTTP"
+        port                    = 3000
+        path                    = "/healthz"
+        initial_delay           = 2
+        interval_seconds        = 15
+        failure_count_threshold = 3
+      }
     }
   }
 
