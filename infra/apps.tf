@@ -39,7 +39,7 @@ resource "azurerm_container_app" "api" {
   }
 
   template {
-    min_replicas = 0
+    min_replicas = 1
     max_replicas = 3
 
     http_scale_rule {
@@ -117,7 +117,7 @@ resource "azurerm_container_app" "web" {
   }
 
   template {
-    min_replicas = 0
+    min_replicas = 1
     max_replicas = 10
 
     http_scale_rule {
