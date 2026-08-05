@@ -1,6 +1,6 @@
 variable "monthly_budget_usd" {
   type    = number
-  default = 30
+  default = 40
 }
 
 variable "budget_alert_emails" {
