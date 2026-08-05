@@ -9,6 +9,7 @@ import { resolveJobOutcome, type ChainReaderContext, type JobOutcome } from "./v
 export type VerificationLoopDeps = {
   pool: pg.Pool;
   config: Config;
+  now: () => Date;
   resolveChain: ResolveChain;
   chainReaderFor: (entry: ChainEntry, context: ChainReaderContext) => ChainReader;
   logger: Logger;

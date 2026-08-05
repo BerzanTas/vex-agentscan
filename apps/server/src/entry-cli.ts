@@ -5,6 +5,7 @@ import { liftQuarantine, listQuarantinedAgents } from "./cli/quarantine.js";
 import { retryVerification } from "./cli/verify-retry.js";
 import { loadConfig } from "./config.js";
 import { createPool } from "./db.js";
+import { runPurgeSweep } from "./worker/purge.js";
 
 async function withPool<T>(run: (pool: pg.Pool) => Promise<T>): Promise<T> {
   const config = loadConfig(process.env);
@@ -46,12 +47,19 @@ quarantine
     printJson(outcome);
   });
 
-program
-  .command("purge")
+const purge = program.command("purge");
+purge
   .command("status")
   .description("list revoked agents awaiting purge")
   .action(async () => {
     printJson(await withPool(listAgentsAwaitingPurge));
+  });
+purge
+  .command("run")
+  .description("run one purge sweep")
+  .action(async () => {
+    const config = loadConfig(process.env);
+    printJson(await withPool((pool) => runPurgeSweep(pool, config)));
   });
 
 program

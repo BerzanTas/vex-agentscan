@@ -19,9 +19,10 @@ startHeartbeat({ pool, workerName: "worker", intervalSec: config.WORKER_POLL_INT
 startVerificationLoop({
   pool,
   config,
+  now: () => new Date(),
   resolveChain,
   chainReaderFor: (entry, context) => makeChainReader(entry, config, context),
   logger,
 });
-startPurgeInterval({ pool, config, logger });
+if (config.PURGE_IN_WORKER) startPurgeInterval({ pool, config, logger });
 logger.info("worker ready");
