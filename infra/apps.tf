@@ -40,11 +40,11 @@ resource "azurerm_container_app" "api" {
 
   template {
     min_replicas = 0
-    max_replicas = 10
+    max_replicas = 3
 
     http_scale_rule {
       name                = "http"
-      concurrent_requests = 20
+      concurrent_requests = 3
     }
 
     container {
@@ -76,6 +76,10 @@ resource "azurerm_container_app" "api" {
       env {
         name  = "TRUST_PROXY"
         value = azurerm_subnet.container_apps.address_prefixes[0]
+      }
+      env {
+        name  = "DATABASE_POOL_MAX"
+        value = "3"
       }
     }
   }
@@ -146,7 +150,7 @@ resource "azurerm_container_app" "worker" {
 
   template {
     min_replicas = 0
-    max_replicas = 5
+    max_replicas = 2
 
     custom_scale_rule {
       name             = "verification-queue"
@@ -181,6 +185,10 @@ resource "azurerm_container_app" "worker" {
       env {
         name        = "RATE_LIMIT_KEY_SALT"
         secret_name = "rate-limit-key-salt"
+      }
+      env {
+        name  = "DATABASE_POOL_MAX"
+        value = "3"
       }
     }
   }
