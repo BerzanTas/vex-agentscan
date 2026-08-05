@@ -5,6 +5,13 @@ resource "azapi_resource" "routing" {
 
   body = {
     properties = {
+      customDomains = [
+        {
+          name        = var.public_hostname
+          bindingType = "Auto"
+        }
+      ]
+
       rules = [
         {
           description = "ingest and public read api"
