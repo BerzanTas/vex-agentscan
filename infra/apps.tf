@@ -88,6 +88,8 @@ resource "azurerm_container_app" "api" {
         path                    = "/healthz"
         initial_delay           = 2
         interval_seconds        = 15
+        timeout                 = 5
+        success_count_threshold = 1
         failure_count_threshold = 3
       }
     }
