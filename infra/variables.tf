@@ -43,6 +43,13 @@ variable "rate_limit_key_salt" {
   sensitive = true
 }
 
+variable "rpc_url_overrides" {
+  type        = map(string)
+  default     = {}
+  sensitive   = true
+  description = "Klucz: canonicalSlug z rejestru sieci w packages/core. Wartość: lista URL-i RPC po przecinku, primary jako pierwszy. Puste = wyłącznie publiczne endpointy z rejestru."
+}
+
 variable "backup_retention_days" {
   type    = number
   default = 30

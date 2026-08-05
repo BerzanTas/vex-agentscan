@@ -156,6 +156,13 @@ resource "azurerm_container_app" "worker" {
     name  = "rate-limit-key-salt"
     value = var.rate_limit_key_salt
   }
+  dynamic "secret" {
+    for_each = var.rpc_url_overrides
+    content {
+      name  = "rpc-urls-${secret.key}"
+      value = secret.value
+    }
+  }
 
   template {
     min_replicas = 0
@@ -202,6 +209,17 @@ resource "azurerm_container_app" "worker" {
       env {
         name  = "PURGE_IN_WORKER"
         value = "false"
+      }
+      env {
+        name  = "WORKER_RPC_CONCURRENCY"
+        value = "5"
+      }
+      dynamic "env" {
+        for_each = var.rpc_url_overrides
+        content {
+          name        = "RPC_URLS_${upper(env.key)}"
+          secret_name = "rpc-urls-${env.key}"
+        }
       }
     }
   }
