@@ -154,6 +154,7 @@ require_image_published "$WEB_IMAGE" "$sha"
 require_image_published "$MIGRATE_IMAGE" "$sha"
 
 cd "$repo_root/infra"
+terraform init -input=false
 confirm_plan "$sha"
 run_migrations "$sha"
 record_released_tag "$sha"
