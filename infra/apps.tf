@@ -73,6 +73,10 @@ resource "azurerm_container_app" "api" {
         name        = "RATE_LIMIT_KEY_SALT"
         secret_name = "rate-limit-key-salt"
       }
+      env {
+        name  = "TRUST_PROXY"
+        value = azurerm_subnet.container_apps.address_prefixes[0]
+      }
     }
   }
 
