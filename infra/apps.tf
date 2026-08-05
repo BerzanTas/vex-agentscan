@@ -190,6 +190,10 @@ resource "azurerm_container_app" "worker" {
         name  = "DATABASE_POOL_MAX"
         value = "3"
       }
+      env {
+        name  = "PURGE_IN_WORKER"
+        value = "false"
+      }
     }
   }
 
