@@ -40,11 +40,11 @@ resource "azurerm_container_app" "api" {
 
   template {
     min_replicas = 0
-    max_replicas = 10
+    max_replicas = 3
 
     http_scale_rule {
       name                = "http"
-      concurrent_requests = 20
+      concurrent_requests = 3
     }
 
     container {
@@ -72,6 +72,23 @@ resource "azurerm_container_app" "api" {
       env {
         name        = "RATE_LIMIT_KEY_SALT"
         secret_name = "rate-limit-key-salt"
+      }
+      env {
+        name  = "TRUST_PROXY"
+        value = azurerm_subnet.container_apps.address_prefixes[0]
+      }
+      env {
+        name  = "DATABASE_POOL_MAX"
+        value = "3"
+      }
+
+      readiness_probe {
+        transport               = "HTTP"
+        port                    = 3000
+        path                    = "/healthz"
+        initial_delay           = 2
+        interval_seconds        = 15
+        failure_count_threshold = 3
       }
     }
   }
@@ -139,10 +156,17 @@ resource "azurerm_container_app" "worker" {
     name  = "rate-limit-key-salt"
     value = var.rate_limit_key_salt
   }
+  dynamic "secret" {
+    for_each = var.rpc_url_overrides
+    content {
+      name  = "rpc-urls-${secret.key}"
+      value = secret.value
+    }
+  }
 
   template {
     min_replicas = 0
-    max_replicas = 5
+    max_replicas = 2
 
     custom_scale_rule {
       name             = "verification-queue"
@@ -177,6 +201,25 @@ resource "azurerm_container_app" "worker" {
       env {
         name        = "RATE_LIMIT_KEY_SALT"
         secret_name = "rate-limit-key-salt"
+      }
+      env {
+        name  = "DATABASE_POOL_MAX"
+        value = "3"
+      }
+      env {
+        name  = "PURGE_IN_WORKER"
+        value = "false"
+      }
+      env {
+        name  = "WORKER_RPC_CONCURRENCY"
+        value = "5"
+      }
+      dynamic "env" {
+        for_each = var.rpc_url_overrides
+        content {
+          name        = "RPC_URLS_${upper(env.key)}"
+          secret_name = "rpc-urls-${env.key}"
+        }
       }
     }
   }
