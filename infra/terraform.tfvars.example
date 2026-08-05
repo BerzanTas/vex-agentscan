@@ -1,4 +1,5 @@
 subscription_id         = "00000000-0000-0000-0000-000000000000"
+public_hostname         = "agentscan.example.pl"
 image_tag               = "wstaw-sha-commita-z-ghcr"
 postgres_admin_password = "wygeneruj-losowo"
 agent_alias_salt        = "wygeneruj-losowo"
