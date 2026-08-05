@@ -7,7 +7,7 @@ import { agentAlias, type AgentStatDto } from "../../public-dto.js";
 import { startTestDb } from "../../testing/pg-harness.js";
 import { runPurgeSweep } from "../../worker/purge.js";
 
-const config = loadConfig({ DATABASE_URL: "postgres://unused-in-tests" });
+const config = loadConfig({ DATABASE_URL: "postgres://unused-in-tests", READ_CACHE_TTL_SEC: "0" });
 const stubResolveChain: ResolveChain = () => null;
 
 const hashOf = (index: number) => index.toString(16).padStart(2, "0").repeat(32);
@@ -186,5 +186,38 @@ describe("GET /api/agents", () => {
         { alias: aliasOf(6), volumeUsd: "60", txCount: 1 },
       ]);
     });
+  });
+});
+
+describe("GET /api/agents with the response cache enabled", () => {
+  let cachedApp: FastifyInstance;
+
+  beforeAll(async () => {
+    const cachedConfig = loadConfig({
+      DATABASE_URL: "postgres://unused-in-tests",
+      READ_CACHE_TTL_SEC: "300",
+    });
+    cachedApp = await buildApp({
+      pool: db.pool,
+      config: cachedConfig,
+      resolveChain: stubResolveChain,
+    });
+    await resetData(db.pool);
+  });
+
+  afterAll(async () => {
+    await cachedApp.close();
+  });
+
+  it("serves the first result for the whole window and labels it cacheable", async () => {
+    const first = await cachedApp.inject({ method: "GET", url: "/api/agents" });
+    expect(first.json<AgentStatDto[]>()).toEqual([]);
+    expect(first.headers["cache-control"]).toBe("public, s-maxage=300");
+
+    await seedAgent(db.pool, hashOf(8));
+    await seedActivity(db.pool, { agentHash: hashOf(8), usdInEst: "90" });
+
+    const second = await cachedApp.inject({ method: "GET", url: "/api/agents" });
+    expect(second.json<AgentStatDto[]>()).toEqual([]);
   });
 });
