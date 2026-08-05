@@ -28,6 +28,7 @@ afterAll(async () => {
 const depsWithReader = (reader: ChainReader): VerificationLoopDeps => ({
   pool: db.pool,
   config,
+  now: () => new Date(),
   resolveChain,
   chainReaderFor: () => reader,
   logger,
@@ -398,6 +399,7 @@ describe("verification worker", () => {
     await runVerificationPass({
       pool: db.pool,
       config: fakeModeConfig,
+      now: () => new Date(),
       resolveChain,
       chainReaderFor: (entry, context) => makeChainReader(entry, fakeModeConfig, context),
       logger,

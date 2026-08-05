@@ -14,7 +14,9 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   DATABASE_POOL_MAX: z.coerce.number().int().min(1).default(10),
   DATABASE_POOL_ACQUIRE_TIMEOUT_MS: z.coerce.number().int().min(1).default(5000),
+  POOL_TIMEOUT_RETRY_AFTER_SEC: z.coerce.number().int().min(1).default(5),
   PORT: z.coerce.number().int().default(3000),
+  TRUST_PROXY: z.string().optional(),
   INGEST_RATE_LIMIT_PER_TOKEN: z.coerce.number().int().default(60),
   INGEST_RATE_WINDOW_SEC: z.coerce.number().int().default(60),
   REGISTER_RATE_LIMIT_PER_IP: z.coerce.number().int().default(10),
@@ -35,7 +37,12 @@ const envSchema = z.object({
   WORKER_HEARTBEAT_MAX_AGE_SEC: z.coerce.number().int().default(120),
   PURGE_DELAY_H: z.coerce.number().int().default(24),
   PURGE_INTERVAL_MIN: z.coerce.number().int().default(60),
+  PURGE_IN_WORKER: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
   PUBLIC_FEED_PAGE_SIZE: z.coerce.number().int().default(25),
+  READ_CACHE_TTL_SEC: z.coerce.number().int().min(0).default(5),
   AGENT_ALIAS_SALT: z.string().min(1).default(DEFAULT_AGENT_ALIAS_SALT),
   RATE_LIMIT_KEY_SALT: z.string().min(1).default(DEFAULT_RATE_LIMIT_KEY_SALT),
 });

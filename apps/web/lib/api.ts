@@ -46,26 +46,12 @@ export type TxDetailDto = ActivityRowDto & {
 
 const REVALIDATE_SECONDS = 5;
 
-const emptyStats: StatsDto = {
-  dailyVolumeUsd: "0",
-  totalVolumeUsd: "0",
-  dailyTx: 0,
-  totalTx: 0,
-  activeAgents7d: 0,
-};
-
-const emptyFeed: ActivityFeedDto = { items: [], nextCursor: null };
-
 function apiBaseUrl(): string {
   return process.env.API_BASE_URL ?? "http://localhost:3000";
 }
 
-async function readApi(path: string): Promise<Response | null> {
-  try {
-    return await fetch(`${apiBaseUrl()}${path}`, { next: { revalidate: REVALIDATE_SECONDS } });
-  } catch {
-    return null;
-  }
+async function readApi(path: string): Promise<Response> {
+  return fetch(`${apiBaseUrl()}${path}`, { next: { revalidate: REVALIDATE_SECONDS } });
 }
 
 async function jsonOrThrow<T>(response: Response, path: string): Promise<T> {
@@ -75,26 +61,22 @@ async function jsonOrThrow<T>(response: Response, path: string): Promise<T> {
 
 export async function fetchStats(): Promise<StatsDto> {
   const response = await readApi("/api/stats");
-  if (response === null) return emptyStats;
   return jsonOrThrow(response, "/api/stats");
 }
 
 export async function fetchChart(days: number): Promise<ChartPointDto[]> {
   const path = `/api/chart?days=${days}`;
   const response = await readApi(path);
-  if (response === null) return [];
   return jsonOrThrow(response, path);
 }
 
 export async function fetchProtocols(): Promise<ProtocolStatDto[]> {
   const response = await readApi("/api/protocols");
-  if (response === null) return [];
   return jsonOrThrow(response, "/api/protocols");
 }
 
 export async function fetchAgents(): Promise<AgentStatDto[]> {
   const response = await readApi("/api/agents");
-  if (response === null) return [];
   return jsonOrThrow(response, "/api/agents");
 }
 
@@ -102,7 +84,6 @@ export async function fetchActivity(cursor?: string): Promise<ActivityFeedDto> {
   const path =
     cursor === undefined ? "/api/activity" : `/api/activity?cursor=${encodeURIComponent(cursor)}`;
   const response = await readApi(path);
-  if (response === null) return emptyFeed;
   return jsonOrThrow(response, path);
 }
 
@@ -122,7 +103,6 @@ export async function fetchLookup(q: string): Promise<{ publicId: string } | nul
 export async function fetchTxDetail(publicId: string): Promise<TxDetailDto | null> {
   const path = `/api/tx/${encodeURIComponent(publicId)}`;
   const response = await readApi(path);
-  if (response === null) return null;
   if (response.status === 404) return null;
   return jsonOrThrow(response, path);
 }

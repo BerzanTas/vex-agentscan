@@ -25,9 +25,12 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   const app = fastify({
     logger: { redact: { paths: ["req.headers.authorization"], censor: "[redacted]" } },
     bodyLimit: deps.config.MAX_BODY_BYTES,
+    trustProxy: deps.config.TRUST_PROXY ?? false,
   });
   await app.register(securityHeaders);
-  await app.register(errorEnvelope);
+  await app.register(errorEnvelope, {
+    poolTimeoutRetryAfterSec: deps.config.POOL_TIMEOUT_RETRY_AFTER_SEC,
+  });
   for (const plugin of routePlugins) await app.register(plugin, deps);
   return app;
 }

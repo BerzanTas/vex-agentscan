@@ -4,6 +4,7 @@ import type { ClaimedJob } from "../repos/activities-verify-repo.js";
 import { loadConfig } from "../config.js";
 
 const config = loadConfig({ DATABASE_URL: "postgres://unused" });
+const now = () => new Date("2026-08-04T11:00:00Z");
 
 function jobFixture(overrides: Partial<ClaimedJob> = {}): ClaimedJob {
   return {
@@ -27,6 +28,7 @@ describe("resolveJobOutcome", () => {
   it("zwraca close_unverifiable gdy brak tx_hash", async () => {
     const outcome = await resolveJobOutcome(jobFixture({ txHash: null }), {
       config,
+      now,
       resolveChain: () => ({
         canonicalSlug: "base",
         displayName: "Base",
@@ -39,9 +41,10 @@ describe("resolveJobOutcome", () => {
     expect(outcome).toEqual({ kind: "close_unverifiable" });
   });
 
-  it("zwraca reschedule z backoffem gdy sieci nie ma w rejestrze", async () => {
+  it("ponawia zadanie nieznanego łańcucha z backoffem, dopóki mieści się w oknie wieku", async () => {
     const outcome = await resolveJobOutcome(jobFixture(), {
       config,
+      now,
       resolveChain: () => null,
       chainReaderFor: () => ({ getReceipt: async () => null }),
     });
@@ -52,9 +55,20 @@ describe("resolveJobOutcome", () => {
     });
   });
 
+  it("zamyka zadanie nieznanego łańcucha po przekroczeniu VERIFY_MAX_AGE_DAYS", async () => {
+    const outcome = await resolveJobOutcome(jobFixture(), {
+      config,
+      now: () => new Date("2026-08-20T10:00:01Z"),
+      resolveChain: () => null,
+      chainReaderFor: () => ({ getReceipt: async () => null }),
+    });
+    expect(outcome).toEqual({ kind: "close_unverifiable" });
+  });
+
   it("zamienia rzucony wyjątek RPC w reschedule z backoffem, nigdy w strike", async () => {
     const outcome = await resolveJobOutcome(jobFixture(), {
       config,
+      now,
       resolveChain: () => ({
         canonicalSlug: "base",
         displayName: "Base",

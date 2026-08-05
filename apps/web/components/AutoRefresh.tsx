@@ -2,16 +2,26 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-
-const REFRESH_INTERVAL_MS = 10_000;
+import { startAutoRefresh } from "../lib/auto-refresh";
 
 export function AutoRefresh() {
   const router = useRouter();
 
-  useEffect(() => {
-    const timer = setInterval(() => router.refresh(), REFRESH_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [router]);
+  useEffect(
+    () =>
+      startAutoRefresh(() => router.refresh(), {
+        isVisible: () => document.visibilityState === "visible",
+        onVisibilityChange: (listener) => {
+          document.addEventListener("visibilitychange", listener);
+          return () => document.removeEventListener("visibilitychange", listener);
+        },
+        every: (ms, listener) => {
+          const timer = setInterval(listener, ms);
+          return () => clearInterval(timer);
+        },
+      }),
+    [router],
+  );
 
   return null;
 }

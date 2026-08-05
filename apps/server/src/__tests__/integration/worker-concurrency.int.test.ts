@@ -54,6 +54,7 @@ describe("współbieżność workera", () => {
     const slowPass = runVerificationPass({
       pool,
       config,
+      now: () => new Date(),
       resolveChain,
       logger,
       chainReaderFor: () => {

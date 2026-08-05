@@ -21,6 +21,7 @@ export type ChainReaderContext = {
 
 export type VerifyJobDeps = {
   config: Config;
+  now: () => Date;
   resolveChain: ResolveChain;
   chainReaderFor: (entry: ChainEntry, context: ChainReaderContext) => ChainReader;
 };
@@ -42,11 +43,21 @@ export async function resolveJobOutcome(job: ClaimedJob, deps: VerifyJobDeps): P
     chainId: job.chainId,
   });
   if (entry === null) {
-    return {
-      kind: "reschedule",
-      delayMs: deps.config.UNKNOWN_CHAIN_BACKOFF_MIN * 60_000,
-      lastError: "chain_not_in_registry",
-    };
+    const unknownChainBackoff = nextBackoff({
+      attempts: job.attempts,
+      schedule: [`${deps.config.UNKNOWN_CHAIN_BACKOFF_MIN}m`],
+      firstAttemptAt: job.firstAttemptAt,
+      maxAgeDays: deps.config.VERIFY_MAX_AGE_DAYS,
+      now: deps.now(),
+    });
+    if ("delayMs" in unknownChainBackoff) {
+      return {
+        kind: "reschedule",
+        delayMs: unknownChainBackoff.delayMs,
+        lastError: "chain_not_in_registry",
+      };
+    }
+    return { kind: "close_unverifiable" };
   }
   if (job.txHash === null) return { kind: "close_unverifiable" };
 
@@ -66,7 +77,7 @@ export async function resolveJobOutcome(job: ClaimedJob, deps: VerifyJobDeps): P
     schedule: deps.config.VERIFY_BACKOFF_SCHEDULE,
     firstAttemptAt: job.firstAttemptAt,
     maxAgeDays: deps.config.VERIFY_MAX_AGE_DAYS,
-    now: new Date(),
+    now: deps.now(),
   });
   if ("delayMs" in backoff) {
     return { kind: "reschedule", delayMs: backoff.delayMs, lastError: verdict.error };
