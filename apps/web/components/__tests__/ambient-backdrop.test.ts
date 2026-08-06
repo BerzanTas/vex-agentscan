@@ -8,16 +8,29 @@ function markup(): string {
 }
 
 describe("AmbientBackdrop", () => {
-  it("renders the fog layer", () => {
-    expect(markup()).toContain('class="ambient-fog"');
+  it("renders three drifting aurora layers", () => {
+    expect(markup().match(/class="ambient-aurora ambient-aurora-\w+"/g)).toHaveLength(3);
   });
 
-  it("renders the dot grid layer", () => {
+  it("renders the receding horizon grid", () => {
+    expect(markup()).toContain('class="ambient-horizon"');
+  });
+
+  it("renders the dot texture layer", () => {
     expect(markup()).toContain('class="ambient-grid"');
   });
 
-  it("renders the beam layer", () => {
-    expect(markup()).toContain('class="ambient-beam"');
+  it("renders the shimmer layer", () => {
+    expect(markup()).toContain('class="ambient-shimmer"');
+  });
+
+  it("renders the grain texture from an inline filter the production CSP allows", () => {
+    expect(markup()).toContain("feTurbulence");
+    expect(markup()).not.toContain("data:image");
+  });
+
+  it("renders the edge vignette", () => {
+    expect(markup()).toContain('class="ambient-vignette"');
   });
 
   it("hides the whole backdrop from assistive technology", () => {
