@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { AmbientBackdrop } from "../components/AmbientBackdrop";
+import { SiteFooter } from "../components/SiteFooter";
 import { TopBar } from "../components/TopBar";
 import "../styles/theme.css";
 
@@ -27,9 +28,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <AmbientBackdrop />
         <TopBar />
         <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
-        <footer className="mx-auto max-w-6xl px-6 py-8 text-xs text-text-muted">
-          All USD values are estimates.
-        </footer>
+        <SiteFooter />
       </body>
     </html>
   );
