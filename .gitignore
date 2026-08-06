@@ -1,5 +1,6 @@
 local
 CLAUDE.md
+.superpowers/
 node_modules/
 dist/
 .next/
