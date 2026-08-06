@@ -59,11 +59,18 @@ describe("TopBarSearch", () => {
     expect(topBarSearchMarkupOn("/")).toBe("");
   });
 
-  it("offers the search on the activity page", () => {
-    expect(topBarSearchMarkupOn("/activity")).toContain('class="search-input"');
+  it("offers the compact search on the activity page", () => {
+    expect(topBarSearchMarkupOn("/activity")).toContain('class="search-compact-input"');
   });
 
-  it("offers the search on a transaction detail page", () => {
-    expect(topBarSearchMarkupOn("/tx/pub-1")).toContain('class="search-input"');
+  it("offers the compact search on a transaction detail page", () => {
+    expect(topBarSearchMarkupOn("/tx/pub-1")).toContain('class="search-compact-input"');
+  });
+
+  it("never puts the hero-sized field and its button in the top bar", () => {
+    const markup = topBarSearchMarkupOn("/activity");
+
+    expect(markup).not.toContain('class="search-input"');
+    expect(markup).not.toContain("cobalt-button");
   });
 });

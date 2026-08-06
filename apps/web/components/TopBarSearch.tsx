@@ -10,8 +10,8 @@ export function TopBarSearch() {
   if (pathname === DASHBOARD_PATH) return null;
 
   return (
-    <div className="hidden w-64 md:block">
-      <SearchBar />
+    <div className="hidden sm:block">
+      <SearchBar variant="compact" />
     </div>
   );
 }
