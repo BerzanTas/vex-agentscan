@@ -6,7 +6,11 @@ export type StatsDto = {
   activeAgents7d: number;
 };
 
-export type ChartPointDto = { day: string; volumeUsd: string; txCount: number };
+export type ChartPointDto = { bucketStart: number; volumeUsd: string; txCount: number };
+
+export type ChartRange = "24h" | "7d" | "30d" | "all";
+
+export const DEFAULT_CHART_RANGE: ChartRange = "30d";
 
 export type ProtocolStatDto = { protocol: string; volumeUsd: string; txCount: number };
 
@@ -64,9 +68,19 @@ export async function fetchStats(): Promise<StatsDto> {
   return jsonOrThrow(response, "/api/stats");
 }
 
-export async function fetchChart(days: number): Promise<ChartPointDto[]> {
-  const path = `/api/chart?days=${days}`;
+export function chartPath(range: ChartRange): string {
+  return `/api/chart?range=${range}`;
+}
+
+export async function fetchChart(range: ChartRange): Promise<ChartPointDto[]> {
+  const path = chartPath(range);
   const response = await readApi(path);
+  return jsonOrThrow(response, path);
+}
+
+export async function fetchChartFromBrowser(range: ChartRange): Promise<ChartPointDto[]> {
+  const path = chartPath(range);
+  const response = await fetch(path, { cache: "no-store" });
   return jsonOrThrow(response, path);
 }
 
@@ -80,10 +94,20 @@ export async function fetchAgents(): Promise<AgentStatDto[]> {
   return jsonOrThrow(response, "/api/agents");
 }
 
+export function activityPath(cursor?: string): string {
+  if (cursor === undefined) return "/api/activity";
+  return `/api/activity?cursor=${encodeURIComponent(cursor)}`;
+}
+
 export async function fetchActivity(cursor?: string): Promise<ActivityFeedDto> {
-  const path =
-    cursor === undefined ? "/api/activity" : `/api/activity?cursor=${encodeURIComponent(cursor)}`;
+  const path = activityPath(cursor);
   const response = await readApi(path);
+  return jsonOrThrow(response, path);
+}
+
+export async function fetchActivityFromBrowser(cursor: string): Promise<ActivityFeedDto> {
+  const path = activityPath(cursor);
+  const response = await fetch(path, { cache: "no-store" });
   return jsonOrThrow(response, path);
 }
 
