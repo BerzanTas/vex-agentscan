@@ -67,7 +67,7 @@ function AmountStack({
 
 export function LegsTable({ detail }: { detail: TxDetailDto }) {
   return (
-    <div className="card card-hover overflow-x-auto">
+    <div className="glass overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-bg-overlay text-xs text-text-muted">
