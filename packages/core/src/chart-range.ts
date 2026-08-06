@@ -17,6 +17,13 @@ function isChartRange(raw: string | undefined): raw is ChartRange {
   return raw === "24h" || raw === "7d" || raw === "30d" || raw === "all";
 }
 
+const SECONDS_PER_DAY = 86_400;
+
 export function resolveChartRange(raw: string | undefined): ChartRangePlan {
   return PLANS[isChartRange(raw) ? raw : DEFAULT_RANGE];
+}
+
+export function rangeWindowSeconds(plan: ChartRangePlan): number | null {
+  if (plan.source === "activities") return plan.bucketSeconds * plan.bucketCount;
+  return plan.days === null ? null : plan.days * SECONDS_PER_DAY;
 }
