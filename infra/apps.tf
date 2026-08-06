@@ -40,7 +40,7 @@ resource "azurerm_container_app" "api" {
 
   template {
     min_replicas = 1
-    max_replicas = 3
+    max_replicas = 1
 
     http_scale_rule {
       name                = "http"
@@ -118,7 +118,7 @@ resource "azurerm_container_app" "web" {
 
   template {
     min_replicas = 1
-    max_replicas = 10
+    max_replicas = 1
 
     http_scale_rule {
       name                = "http"
@@ -168,7 +168,7 @@ resource "azurerm_container_app" "worker" {
 
   template {
     min_replicas = 0
-    max_replicas = 2
+    max_replicas = 1
 
     custom_scale_rule {
       name             = "verification-queue"
