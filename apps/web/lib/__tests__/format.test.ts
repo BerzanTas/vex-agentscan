@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatAge, formatRawAmount, formatRawAmountDisplay, formatUsdEstimate } from "../format";
+import {
+  formatAge,
+  formatRawAmount,
+  formatRawAmountDisplay,
+  formatUsdCompact,
+  formatUsdEstimate,
+} from "../format";
 
 describe("formatRawAmount", () => {
   it("formats a whole token amount without a fractional part", () => {
@@ -46,8 +52,34 @@ describe("formatUsdEstimate", () => {
     expect(formatUsdEstimate("1234567.891")).toBe("1,234,567.89");
   });
 
-  it("leaves small whole values untouched", () => {
-    expect(formatUsdEstimate("42")).toBe("42");
+  it("always shows two fraction digits so a money column stays aligned", () => {
+    expect(formatUsdEstimate("42")).toBe("42.00");
+    expect(formatUsdEstimate("1139862.7")).toBe("1,139,862.70");
+  });
+
+  it("truncates without rounding up so an estimate never inflates", () => {
+    expect(formatUsdEstimate("9.999")).toBe("9.99");
+  });
+
+  it("keeps the integer part of a high-scale numeric from the api", () => {
+    expect(formatUsdEstimate("5888494.0000000000000000")).toBe("5,888,494.00");
+  });
+});
+
+describe("formatUsdCompact", () => {
+  it("shortens millions to one fraction digit", () => {
+    expect(formatUsdCompact("321334950")).toBe("321.3M");
+    expect(formatUsdCompact("5888494.0000000000000000")).toBe("5.9M");
+  });
+
+  it("shortens thousands from exactly one thousand up", () => {
+    expect(formatUsdCompact("1000")).toBe("1K");
+    expect(formatUsdCompact("48219")).toBe("48.2K");
+  });
+
+  it("falls back to the exact two-digit form below a thousand", () => {
+    expect(formatUsdCompact("999.99")).toBe("999.99");
+    expect(formatUsdCompact("931.4")).toBe("931.40");
   });
 });
 

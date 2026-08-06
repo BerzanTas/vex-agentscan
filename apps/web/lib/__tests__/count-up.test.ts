@@ -3,7 +3,7 @@ import { COUNT_UP_MS, COUNT_UP_THRESHOLD, countUpText, easeOutCubic } from "../c
 
 describe("countUpText", () => {
   it("formats an intermediate usd frame with the estimate formatter", () => {
-    expect(countUpText("usd", 1284.5)).toBe("$1,284.5");
+    expect(countUpText("usd", 1284.5)).toBe("$1,284.50");
   });
 
   it("keeps both cents of an intermediate usd frame", () => {
@@ -12,6 +12,17 @@ describe("countUpText", () => {
 
   it("rounds an intermediate count frame to grouped whole digits", () => {
     expect(countUpText("count", 4187.6)).toBe("4,188");
+  });
+});
+
+describe("countUpText for compact usd", () => {
+  it("keeps intermediate frames compact so a card never reflows mid-flight", () => {
+    expect(countUpText("usdCompact", 321334950)).toBe("$321.3M");
+    expect(countUpText("usdCompact", 5888494)).toBe("$5.9M");
+  });
+
+  it("falls back to the exact form below a thousand", () => {
+    expect(countUpText("usdCompact", 931.4)).toBe("$931.40");
   });
 });
 
