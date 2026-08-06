@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { AmbientBackdrop } from "../components/AmbientBackdrop";
 import { TopBar } from "../components/TopBar";
 import "../styles/theme.css";
 
@@ -14,7 +15,7 @@ export const metadata: Metadata = {
   },
 };
 
-const themeInitScript = `try{var stored=localStorage.getItem("agentscan-theme");if(stored==="cobalt"||stored==="horizon")document.documentElement.dataset.theme=stored}catch(ignored){}`;
+const themeInitScript = `try{var stored=localStorage.getItem("agentscan-theme");document.documentElement.dataset.theme=stored==="light"?"light":"cobalt"}catch(ignored){document.documentElement.dataset.theme="cobalt"}`;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
@@ -23,6 +24,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="min-h-screen bg-bg-primary font-sans text-text-primary antialiased">
+        <AmbientBackdrop />
         <TopBar />
         <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
         <footer className="mx-auto max-w-6xl px-6 py-8 text-xs text-text-muted">
