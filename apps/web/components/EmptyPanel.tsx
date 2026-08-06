@@ -1,7 +1,13 @@
-export function EmptyPanel({ message }: { message: string }) {
+export function EmptyPanel({
+  message,
+  withLiveDot = true,
+}: {
+  message: string;
+  withLiveDot?: boolean;
+}) {
   return (
     <div className="empty-panel">
-      <span className="empty-panel-dot" aria-hidden="true" />
+      {withLiveDot && <span className="empty-panel-dot" aria-hidden="true" />}
       {message}
     </div>
   );

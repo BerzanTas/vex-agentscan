@@ -90,7 +90,7 @@ export function ChartPanel({
         </div>
       </div>
       {chartSeriesIsEmpty(points, metric) ? (
-        <EmptyPanel message="No volume in this range" />
+        <EmptyPanel message="No volume in this range" withLiveDot={false} />
       ) : (
         <VolumeChart points={points} metric={metric} />
       )}
