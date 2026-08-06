@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { formatUsdEstimate } from "../lib/format";
+import { formatUsdCompact, formatUsdEstimate } from "../lib/format";
 
 export type RankingRow = {
   key: string;
@@ -8,11 +8,11 @@ export type RankingRow = {
   txCount: number;
 };
 
-const COLUMNS = "grid grid-cols-[1.25rem_minmax(0,1fr)_auto_4rem] items-baseline gap-x-3";
+const MIN_BAR_PERCENT = 3;
 
-function barWidthOf(volumeUsd: string, maxVolume: number): number {
+function barPercentOf(volumeUsd: string, maxVolume: number): number {
   if (maxVolume <= 0) return 0;
-  return Math.max(2, (Number(volumeUsd) / maxVolume) * 100);
+  return Math.max(MIN_BAR_PERCENT, (Number(volumeUsd) / maxVolume) * 100);
 }
 
 export function RankingList({
@@ -29,46 +29,50 @@ export function RankingList({
   }
   const maxVolume = Math.max(...rows.map((row) => Number(row.volumeUsd)));
   return (
-    <div className="flex flex-col gap-3">
-      <div className={`${COLUMNS} text-xs tracking-wide text-text-muted`}>
-        <span />
-        <span />
-        <span className="text-right">Volume</span>
-        <span className="border-l border-white/8 pl-3 text-right">Tx</span>
+    <div className="flex flex-col gap-4">
+      <div className="table-head flex items-baseline justify-end gap-6">
+        <span>Volume</span>
+        <span className="w-12 text-right">Tx</span>
       </div>
       <ol className="flex flex-col gap-4">
         {rows.map((row, index) => (
-          <li key={row.key} className="flex flex-col gap-1.5">
-            <div className={COLUMNS}>
-              <span className="text-right font-mono text-xs text-text-muted">{index + 1}</span>
-              <span className="min-w-0 truncate text-sm text-text-secondary">{row.label}</span>
-              <span className="whitespace-nowrap text-right font-mono text-sm text-text-primary">
-                ${formatUsdEstimate(row.volumeUsd)}
+          <li key={row.key} className="ranking-row">
+            <div className="flex items-baseline gap-3">
+              <span className="w-4 shrink-0 text-right font-mono text-xs text-text-muted">
+                {index + 1}
+              </span>
+              <span className="ranking-label min-w-0 flex-1">{row.label}</span>
+              <span
+                className="whitespace-nowrap font-mono text-sm text-text-primary"
+                title={`$${formatUsdEstimate(row.volumeUsd)}`}
+              >
+                ${formatUsdCompact(row.volumeUsd)}
                 <span className="ml-1 text-xs text-text-muted">est.</span>
               </span>
-              <span className="border-l border-white/8 pl-3 text-right font-mono text-xs text-text-muted">
+              <span className="w-12 whitespace-nowrap text-right font-mono text-xs text-text-muted">
                 {row.txCount.toLocaleString("en-US")}
               </span>
             </div>
             <svg
-              className="h-1.5 w-full"
-              viewBox="0 0 100 6"
+              className="h-1 w-full"
+              viewBox="0 0 100 4"
               preserveAspectRatio="none"
               aria-hidden="true"
             >
               <defs>
-                <linearGradient id={`${gradientPrefix}-${index}`} x1="0" y1="0" x2="1" y2="0">
+                <linearGradient id={`${gradientPrefix}-fill`} x1="0" y1="0" x2="1" y2="0">
                   <stop offset="0%" stopColor="#1f44ff" />
-                  <stop offset="100%" stopColor="#0a23b8" />
+                  <stop offset="100%" stopColor="#7f96ff" />
                 </linearGradient>
               </defs>
+              <rect x="0" y="0" width="100" height="4" rx="2" fill="rgba(31,68,255,0.16)" />
               <rect
                 x="0"
                 y="0"
-                height="6"
-                rx="3"
-                width={barWidthOf(row.volumeUsd, maxVolume)}
-                fill={`url(#${gradientPrefix}-${index})`}
+                height="4"
+                rx="2"
+                width={barPercentOf(row.volumeUsd, maxVolume)}
+                fill={`url(#${gradientPrefix}-fill)`}
               />
             </svg>
           </li>

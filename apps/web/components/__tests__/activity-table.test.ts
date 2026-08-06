@@ -72,3 +72,12 @@ describe("ActivityTable", () => {
     expect(markup).not.toContain("<table");
   });
 });
+
+describe("ActivityTable protocol column", () => {
+  it("shows the protocol name next to its icon instead of a bare icon", () => {
+    const markup = markupFor([row]);
+
+    expect(markup).toContain('class="protocol-name"');
+    expect(markup).toContain(">kyberswap<");
+  });
+});

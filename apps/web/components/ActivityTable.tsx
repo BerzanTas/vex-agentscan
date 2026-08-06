@@ -43,11 +43,11 @@ export function ActivityTable({ rows, emptyMessage }: { rows: ActivityRowDto[]; 
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-bg-overlay text-xs text-text-muted">
-            <th className="px-4 py-3 font-normal">Protocol</th>
-            <th className="px-4 py-3 font-normal">Pair</th>
-            <th className="px-4 py-3 font-normal">Amount</th>
-            <th className="px-4 py-3 font-normal">Chain</th>
-            <th className="px-4 py-3 font-normal">Age</th>
+            <th className="table-head px-4 py-3 font-normal">Protocol</th>
+            <th className="table-head px-4 py-3 font-normal">Pair</th>
+            <th className="table-head px-4 py-3 font-normal">Amount</th>
+            <th className="table-head px-4 py-3 font-normal">Chain</th>
+            <th className="table-head px-4 py-3 font-normal">Age</th>
           </tr>
         </thead>
         <tbody>
@@ -59,7 +59,7 @@ export function ActivityTable({ rows, emptyMessage }: { rows: ActivityRowDto[]; 
                   className="feed-row-link"
                   aria-label={`${row.protocol} ${pairLabel(row)}`}
                 >
-                  <ProtocolBadge protocol={row.protocol} />
+                  <ProtocolBadge protocol={row.protocol} withName />
                 </Link>
               </td>
               <td className="px-4 py-3 text-text-primary" title={row.kind}>
