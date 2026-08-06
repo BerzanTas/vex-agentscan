@@ -20,7 +20,20 @@ export type LookupDto = { publicId: string };
 
 export type ProtocolStatDto = { protocol: string; volumeUsd: string; txCount: number };
 
-export type AgentStatDto = { alias: string; volumeUsd: string; txCount: number };
+export type ProtocolRankingDto = ProtocolStatDto & {
+  chainCount: number;
+  swapTxCount: number;
+  bridgeTxCount: number;
+};
+
+export type AgentStatDto = {
+  alias: string;
+  volumeUsd: string;
+  txCount: number;
+  protocolCount: number;
+  chainCount: number;
+  lastSeenSeconds: number;
+};
 
 export function agentAlias(salt: string, agentHash: string): string {
   const digest = createHash("sha256").update(salt + agentHash).digest("hex");
@@ -32,6 +45,9 @@ export function toAgentStatDto(salt: string, read: AgentVolumeRead): AgentStatDt
     alias: agentAlias(salt, read.agentHash),
     volumeUsd: read.volumeUsd,
     txCount: read.txCount,
+    protocolCount: read.protocolCount,
+    chainCount: read.chainCount,
+    lastSeenSeconds: read.lastSeenSeconds,
   };
 }
 

@@ -46,13 +46,23 @@ it("lookup DTO contains only the publicId", () => {
 
 const rankedAgentHash = "0123456789abcdef".repeat(4);
 
-it("agent stat DTO exposes only alias, volumeUsd and txCount", () => {
+it("agent stat DTO exposes only the ranking fields and never the agent hash", () => {
   const dto = toAgentStatDto("agentscan-dev-salt", {
     agentHash: rankedAgentHash,
     volumeUsd: "10.5",
     txCount: 2,
+    protocolCount: 2,
+    chainCount: 3,
+    lastSeenSeconds: 42,
   });
-  expect(Object.keys(dto)).toEqual(["alias", "volumeUsd", "txCount"]);
+  expect(Object.keys(dto)).toEqual([
+    "alias",
+    "volumeUsd",
+    "txCount",
+    "protocolCount",
+    "chainCount",
+    "lastSeenSeconds",
+  ]);
   for (const key of BANNED) expect(key in dto).toBe(false);
 });
 

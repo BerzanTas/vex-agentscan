@@ -104,6 +104,9 @@ describe("GET /api/agents", () => {
         alias: aliasOf(index),
         volumeUsd: String(1100 - index * 100),
         txCount: 1,
+        protocolCount: 1,
+        chainCount: 1,
+        lastSeenSeconds: expect.any(Number),
       }));
       expect(await leaderboardResponse()).toEqual(expected);
     });
@@ -121,7 +124,14 @@ describe("GET /api/agents", () => {
 
     it("counts only rows confirmed within the last 30 days", async () => {
       expect(await leaderboardResponse()).toEqual([
-        { alias: aliasOf(1), volumeUsd: "100.25", txCount: 1 },
+        {
+          alias: aliasOf(1),
+          volumeUsd: "100.25",
+          txCount: 1,
+          protocolCount: 1,
+          chainCount: 1,
+          lastSeenSeconds: expect.any(Number),
+        },
       ]);
     });
   });
@@ -140,7 +150,14 @@ describe("GET /api/agents", () => {
 
     it("counts neither pending nor mismatch rows", async () => {
       expect(await leaderboardResponse()).toEqual([
-        { alias: aliasOf(3), volumeUsd: "50.5", txCount: 1 },
+        {
+          alias: aliasOf(3),
+          volumeUsd: "50.5",
+          txCount: 1,
+          protocolCount: 1,
+          chainCount: 1,
+          lastSeenSeconds: expect.any(Number),
+        },
       ]);
     });
   });
@@ -160,7 +177,14 @@ describe("GET /api/agents", () => {
 
     it("counts only the bridge deposit leg", async () => {
       expect(await leaderboardResponse()).toEqual([
-        { alias: aliasOf(5), volumeUsd: "300.75", txCount: 1 },
+        {
+          alias: aliasOf(5),
+          volumeUsd: "300.75",
+          txCount: 1,
+          protocolCount: 1,
+          chainCount: 1,
+          lastSeenSeconds: expect.any(Number),
+        },
       ]);
     });
   });
@@ -176,14 +200,35 @@ describe("GET /api/agents", () => {
 
     it("drops the purged agent's alias from the response", async () => {
       expect(await leaderboardResponse()).toEqual([
-        { alias: aliasOf(7), volumeUsd: "80", txCount: 1 },
-        { alias: aliasOf(6), volumeUsd: "60", txCount: 1 },
+        {
+          alias: aliasOf(7),
+          volumeUsd: "80",
+          txCount: 1,
+          protocolCount: 1,
+          chainCount: 1,
+          lastSeenSeconds: expect.any(Number),
+        },
+        {
+          alias: aliasOf(6),
+          volumeUsd: "60",
+          txCount: 1,
+          protocolCount: 1,
+          chainCount: 1,
+          lastSeenSeconds: expect.any(Number),
+        },
       ]);
 
       await runPurgeSweep(db.pool, config);
 
       expect(await leaderboardResponse()).toEqual([
-        { alias: aliasOf(6), volumeUsd: "60", txCount: 1 },
+        {
+          alias: aliasOf(6),
+          volumeUsd: "60",
+          txCount: 1,
+          protocolCount: 1,
+          chainCount: 1,
+          lastSeenSeconds: expect.any(Number),
+        },
       ]);
     });
   });
