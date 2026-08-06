@@ -24,10 +24,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
-      <body className="min-h-screen bg-bg-primary font-sans text-text-primary antialiased">
+      <body className="flex min-h-screen flex-col bg-bg-primary font-sans text-text-primary antialiased">
         <AmbientBackdrop />
         <TopBar />
-        <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+        <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">{children}</main>
         <SiteFooter />
       </body>
     </html>
