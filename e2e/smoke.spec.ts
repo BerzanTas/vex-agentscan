@@ -241,13 +241,21 @@ test("the activity page appends the next page of rows on demand", async ({ page,
 test.describe("with reduced motion", () => {
   test.use({ contextOptions: { reducedMotion: "reduce" } });
 
-  test("the ambient beam is not animated", async ({ page }) => {
+  test("the drifting ambient layers are not animated", async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    const beam = page.locator(".ambient-beam");
-    await expect(beam).toHaveCount(1);
+    const shimmer = page.locator(".ambient-shimmer");
+    const horizon = page.locator(".ambient-horizon");
+    const aurora = page.locator(".ambient-aurora");
+    await expect(shimmer).toHaveCount(1);
+    await expect(horizon).toHaveCount(1);
+    await expect(aurora).toHaveCount(3);
 
-    const animationName = await beam.evaluate((node) => getComputedStyle(node).animationName);
+    const animationNames = await page.evaluate(() =>
+      [...document.querySelectorAll(".ambient-shimmer, .ambient-horizon, .ambient-aurora")].map(
+        (node) => getComputedStyle(node).animationName,
+      ),
+    );
 
-    expect(animationName).toBe("none");
+    expect(animationNames).toEqual(["none", "none", "none", "none", "none"]);
   });
 });
