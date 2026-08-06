@@ -12,3 +12,4 @@ export {
 export { nextBackoff } from "./backoff.js";
 export { generatePublicId } from "./public-id.js";
 export { resolveChartRange, type ChartRange, type ChartRangePlan } from "./chart-range.js";
+export { resolveBridgeChain } from "./bridge-chain.js";
