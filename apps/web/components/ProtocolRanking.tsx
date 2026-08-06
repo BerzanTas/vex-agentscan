@@ -6,7 +6,7 @@ export function ProtocolRanking({ protocols }: { protocols: ProtocolStatDto[] })
   return (
     <RankingList
       gradientPrefix="cobalt-protocol-bar"
-      emptyMessage="No protocols yet"
+      emptyMessage="No verified activity yet"
       rows={protocols.map((entry) => ({
         key: entry.protocol,
         label: <ProtocolBadge protocol={entry.protocol} />,
