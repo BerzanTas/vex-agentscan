@@ -6,7 +6,7 @@ export function TopBar() {
     <header className="topbar sticky top-0 z-50">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
         <Link href="/" aria-label="AgentScan" className="inline-flex items-center">
-          <img src="/logo.png" alt="AgentScan" className="h-11 w-auto" />
+          <img src="/logo-dark.svg" alt="AgentScan" className="h-11 w-auto" />
         </Link>
         <div className="flex items-center gap-6">
           <span className="flex items-center gap-2 font-mono text-xs tracking-widest text-text-secondary">
