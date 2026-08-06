@@ -253,6 +253,11 @@
     pointer-events: none;
   }
 
+  .cursor-light > * {
+    position: relative;
+    z-index: 1;
+  }
+
   .cursor-light:hover {
     transform: translateY(-3px);
     box-shadow: var(--panel-lift-shadow);

@@ -1,6 +1,7 @@
 import type { StatsDto } from "../lib/api";
 import { formatUsdEstimate } from "../lib/format";
 import { CountUpValue, type CountUpKind } from "./CountUpValue";
+import { CursorLight } from "./CursorLight";
 
 type StatCard = {
   label: string;
@@ -44,13 +45,13 @@ export function StatCards({ stats }: { stats: StatsDto }) {
   return (
     <section className="section-enter grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
       {cardsFrom(stats).map((card) => (
-        <div key={card.label} className="card card-hover stat-card p-4">
+        <CursorLight key={card.label} className="p-4">
           <p className="text-xs text-text-muted">{card.label}</p>
           <p className="mt-2 font-mono text-xl text-text-primary">
             <CountUpValue target={card.target} finalText={card.finalText} kind={card.kind} />
             {card.estimate && <span className="ml-1 text-xs text-text-muted">est.</span>}
           </p>
-        </div>
+        </CursorLight>
       ))}
     </section>
   );
