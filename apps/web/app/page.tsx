@@ -37,7 +37,7 @@ export default async function DashboardPage() {
       <Hero />
       <StatCards stats={stats} />
       <ChartPanel initialPoints={chart} initialRange={DEFAULT_CHART_RANGE} />
-      <div className="section-enter grid grid-cols-1 gap-8 lg:grid-cols-2">
+      <div className="section-enter grid grid-cols-1 items-start gap-8 lg:grid-cols-2">
         <section className="glass p-4">
           <PanelHeading title="Protocols" meta="all time" />
           <ProtocolRanking protocols={protocols} />

@@ -116,8 +116,15 @@ export function tooltipPosition(
   };
 }
 
+const AXIS_VOLUME_FORMAT = new Intl.NumberFormat("en", {
+  notation: "compact",
+  maximumFractionDigits: 2,
+});
+
 function priceFormatFor(metric: ChartMetric): AreaSeriesPartialOptions["priceFormat"] {
-  if (metric === "volume") return { type: "volume" };
+  if (metric === "volume") {
+    return { type: "custom", formatter: (value: number) => AXIS_VOLUME_FORMAT.format(value) };
+  }
   return { type: "custom", formatter: (value: number) => Math.round(value).toLocaleString("en-US") };
 }
 
