@@ -1,5 +1,18 @@
 import { expect, it } from "vitest";
-import { agentAlias, toActivityRowDto, toAgentStatDto, toTxDetailDto, type LookupDto } from "../public-dto.js";
+import {
+  agentAlias,
+  toActivityRowDto,
+  toAgentStatDto,
+  toTxDetailDto,
+  type BridgeRouteDto,
+  type LookupDto,
+  type NetworkDetailDto,
+  type NetworkStatDto,
+  type ResolveBridgeChain,
+  type TokenDetailDto,
+  type TokenStatDto,
+  type VerificationStatsDto,
+} from "../public-dto.js";
 
 const stubResolve = () => null;
 const fixtureActivityRow = () => ({
@@ -57,4 +70,168 @@ it("agent alias is never a prefix or fragment of the agent hash", () => {
   const aliasHex = agentAlias("agentscan-dev-salt", rankedAgentHash).slice("agent-".length);
   expect(rankedAgentHash.startsWith(aliasHex)).toBe(false);
   expect(rankedAgentHash.includes(aliasHex)).toBe(false);
+});
+
+const fakeBridgeChains = new Map([
+  ["relay:8453", "base"],
+  ["relay:792703809", "solana"],
+]);
+
+const fakeResolveBridgeChain: ResolveBridgeChain = (protocol, chainId) => {
+  const canonicalSlug = fakeBridgeChains.get(`${protocol}:${chainId}`);
+  if (canonicalSlug === undefined) return null;
+  return {
+    canonicalSlug,
+    displayName: canonicalSlug,
+    explorerTxUrl: () => null,
+    rpcUrls: [],
+    verificationTier: "basic",
+  };
+};
+
+const fixtureBridgeRow = (fromChainId: bigint | null, toChainId: bigint | null) => ({
+  ...fixtureActivityRow(),
+  kind: "bridge",
+  event_role: "bridge_send",
+  protocol: "relay",
+  from_chain_id: fromChainId,
+  to_chain_id: toChainId,
+});
+
+it("swap rows carry no bridge route slugs even when their chain ids resolve", () => {
+  const swapWithChainIds = { ...fixtureActivityRow(), protocol: "relay", from_chain_id: 8453n, to_chain_id: 792703809n };
+  const dto = toActivityRowDto(swapWithChainIds, stubResolve, fakeResolveBridgeChain);
+  expect(dto.fromChainSlug).toBe(null);
+  expect(dto.toChainSlug).toBe(null);
+});
+
+it("bridge rows expose the slug of each resolvable leg", () => {
+  const dto = toActivityRowDto(fixtureBridgeRow(8453n, 792703809n), stubResolve, fakeResolveBridgeChain);
+  expect(dto.fromChainSlug).toBe("base");
+  expect(dto.toChainSlug).toBe("solana");
+});
+
+it("bridge detail rows expose the slug of each resolvable leg", () => {
+  const dto = toTxDetailDto(fixtureBridgeRow(8453n, 792703809n), stubResolve, fakeResolveBridgeChain);
+  expect(dto.fromChainSlug).toBe("base");
+  expect(dto.toChainSlug).toBe("solana");
+});
+
+it("an unresolvable bridge leg becomes null and leaves the other leg intact", () => {
+  const dto = toActivityRowDto(fixtureBridgeRow(8453n, 20011000000n), stubResolve, fakeResolveBridgeChain);
+  expect(dto.fromChainSlug).toBe("base");
+  expect(dto.toChainSlug).toBe(null);
+});
+
+it("a bridge leg without a chain id becomes null", () => {
+  const dto = toActivityRowDto(fixtureBridgeRow(null, 8453n), stubResolve, fakeResolveBridgeChain);
+  expect(dto.fromChainSlug).toBe(null);
+  expect(dto.toChainSlug).toBe("base");
+});
+
+const tokenStat: TokenStatDto = {
+  chainSlug: "base",
+  address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+  symbol: "USDC",
+  volumeUsd: "3312.44",
+  txCount: 2,
+  agentCount: 1,
+  protocols: ["kyberswap"],
+  lastSeenSeconds: 42,
+};
+
+const tokenDetail: TokenDetailDto = {
+  chainSlug: "base",
+  address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+  symbol: "USDC",
+  decimals: 6,
+  volumeUsd: "3312.44",
+  txCount: 2,
+  agentCount: 1,
+  protocols: [{ protocol: "kyberswap", volumeUsd: "3312.44", txCount: 2 }],
+  pairs: [{ tokenInSymbol: "USDC", tokenOutSymbol: "WETH", txCount: 2 }],
+  series: [{ bucketStart: 1754438400, volumeUsd: "3312.44", txCount: 2 }],
+};
+
+const networkStat: NetworkStatDto = {
+  chainSlug: "base",
+  displayName: "Base",
+  verificationTier: "full",
+  volumeUsd: "3312.44",
+  txCount: 2,
+  bridgeInCount: 1,
+  bridgeOutCount: 0,
+  lastSeenSeconds: 42,
+};
+
+const bridgeRoute: BridgeRouteDto = {
+  fromChainSlug: "base",
+  toChainSlug: "solana",
+  legCount: 3,
+  volumeUsd: "120.00",
+};
+
+const networkDetail: NetworkDetailDto = {
+  chainSlug: "base",
+  displayName: "Base",
+  verificationTier: "full",
+  volumeUsd: "3312.44",
+  txCount: 2,
+  protocols: [{ protocol: "kyberswap", volumeUsd: "3312.44", txCount: 2 }],
+  tokens: [{ address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", symbol: "USDC", volumeUsd: "3312.44", txCount: 2 }],
+  routes: [bridgeRoute],
+  series: [{ bucketStart: 1754438400, volumeUsd: "3312.44", txCount: 2 }],
+};
+
+const verificationStats: VerificationStatsDto = {
+  verifiedFull: 12,
+  verifiedBasic: 3,
+  queued: 1,
+  latencySeconds: { median: 8, p90: 41 },
+  chains: [{ chainSlug: "base", displayName: "Base", verificationTier: "full" }],
+};
+
+function keysOf(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(keysOf);
+  if (value === null || typeof value !== "object") return [];
+  return Object.entries(value).flatMap(([key, nested]) => [key, ...keysOf(nested)]);
+}
+
+const dimensionDtos: Array<[string, object]> = [
+  ["TokenStatDto", tokenStat],
+  ["TokenDetailDto", tokenDetail],
+  ["NetworkStatDto", networkStat],
+  ["NetworkDetailDto", networkDetail],
+  ["BridgeRouteDto", bridgeRoute],
+  ["VerificationStatsDto", verificationStats],
+];
+
+it.each(dimensionDtos)("%s never exposes banned identifiers, at any depth", (_name, dto) => {
+  const serialised = JSON.parse(JSON.stringify(dto)) as unknown;
+  expect(keysOf(serialised).filter((key) => BANNED.includes(key))).toEqual([]);
+});
+
+it("bridge activity DTOs never expose banned identifiers", () => {
+  const bridgeRow = fixtureBridgeRow(8453n, 792703809n);
+  for (const dto of [
+    toActivityRowDto(bridgeRow, stubResolve, fakeResolveBridgeChain),
+    toTxDetailDto(bridgeRow, stubResolve, fakeResolveBridgeChain),
+  ]) {
+    const serialised = JSON.parse(JSON.stringify(dto)) as unknown;
+    expect(keysOf(serialised).filter((key) => BANNED.includes(key))).toEqual([]);
+  }
+});
+
+it("every monetary field of the dimension DTOs stays a string", () => {
+  const monetary = [
+    tokenStat.volumeUsd,
+    tokenDetail.volumeUsd,
+    tokenDetail.protocols[0]?.volumeUsd,
+    tokenDetail.series[0]?.volumeUsd,
+    networkStat.volumeUsd,
+    networkDetail.volumeUsd,
+    networkDetail.tokens[0]?.volumeUsd,
+    bridgeRoute.volumeUsd,
+  ];
+  for (const value of monetary) expect(typeof value).toBe("string");
 });

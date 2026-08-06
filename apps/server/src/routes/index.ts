@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import type { Deps } from "../app.js";
+import type { WiredDeps } from "../app.js";
 import { healthRoutes } from "./health.js";
 import { agentsRoutes } from "./agents.js";
 import { eventsRoutes } from "./events.js";
@@ -11,7 +11,7 @@ import { activityRoutes } from "./public/activity.js";
 import { lookupRoutes } from "./public/lookup.js";
 import { txRoutes } from "./public/tx.js";
 
-export const routePlugins: FastifyPluginAsync<Deps>[] = [
+export const routePlugins: FastifyPluginAsync<WiredDeps>[] = [
   healthRoutes,
   agentsRoutes,
   eventsRoutes,

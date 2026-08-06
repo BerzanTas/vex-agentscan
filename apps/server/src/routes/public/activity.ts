@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import type { Deps } from "../../app.js";
+import type { WiredDeps } from "../../app.js";
 import { toActivityRowDto, type ActivityFeedDto } from "../../public-dto.js";
 import { visibleActivityPage, type ActivityDbRow, type FeedCursor } from "../../repos/read-repo.js";
 
@@ -22,7 +22,7 @@ function encodeCursor(row: ActivityDbRow): string {
   return Buffer.from(payload, "utf8").toString("base64url");
 }
 
-export const activityRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
+export const activityRoutes: FastifyPluginAsync<WiredDeps> = async (app, deps) => {
   app.get<{ Querystring: { cursor?: string } }>("/api/activity", async (request, reply) => {
     let cursor: FeedCursor | null = null;
     if (request.query.cursor !== undefined) {
@@ -36,7 +36,7 @@ export const activityRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
     const pageRows = rows.slice(0, pageSize);
     const lastRow = pageRows.at(-1);
     const feed: ActivityFeedDto = {
-      items: pageRows.map((row) => toActivityRowDto(row, deps.resolveChain)),
+      items: pageRows.map((row) => toActivityRowDto(row, deps.resolveChain, deps.resolveBridgeChain)),
       nextCursor: rows.length > pageSize && lastRow !== undefined ? encodeCursor(lastRow) : null,
     };
     return feed;
