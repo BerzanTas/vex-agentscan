@@ -168,14 +168,36 @@ describe("GET /api/stats", () => {
   });
 });
 
+function utcMidnightSecondsOf(day: string): number {
+  return Date.parse(`${day}T00:00:00Z`) / 1000;
+}
+
 describe("GET /api/chart", () => {
-  it("returns seeded daily aggregates as chart points ordered by day", async () => {
-    const response = await app.inject({ method: "GET", url: "/api/chart?days=30" });
+  it("returns daily buckets from aggregates for the 30d range", async () => {
+    const [yesterdayStart, todayStart] = seededDays.map(utcMidnightSecondsOf);
+    const response = await app.inject({ method: "GET", url: "/api/chart?range=30d" });
     expect(response.statusCode).toBe(200);
-    expect(response.json<ChartPointDto[]>()).toEqual([
-      { day: seededDays[0], volumeUsd: "50.25", txCount: 1 },
-      { day: seededDays[1], volumeUsd: "100.5", txCount: 2 },
+    const seeded = response.json<ChartPointDto[]>().filter((point) => point.txCount > 0);
+    expect(seeded).toEqual([
+      { bucketStart: yesterdayStart, volumeUsd: "50.25", txCount: 1 },
+      { bucketStart: todayStart, volumeUsd: "100.5", txCount: 2 },
     ]);
+  });
+
+  it("zero-fills the days without aggregates in the 30d range", async () => {
+    const response = await app.inject({ method: "GET", url: "/api/chart?range=30d" });
+    expect(response.json<ChartPointDto[]>()).toHaveLength(30);
+  });
+
+  it("returns twenty four buckets for the 24h range", async () => {
+    const response = await app.inject({ method: "GET", url: "/api/chart?range=24h" });
+    expect(response.json<ChartPointDto[]>()).toHaveLength(24);
+  });
+
+  it("falls back to the 30d range for an unknown range", async () => {
+    const unknown = await app.inject({ method: "GET", url: "/api/chart?range=42h" });
+    const fallback = await app.inject({ method: "GET", url: "/api/chart?range=30d" });
+    expect(unknown.json<ChartPointDto[]>()).toEqual(fallback.json<ChartPointDto[]>());
   });
 });
 

@@ -62,24 +62,26 @@ export default async function TxDetailPage({ params }: TxPageProps) {
   return (
     <div className="flex flex-col gap-8">
       <div className="section-enter flex flex-col gap-4">
-        <Link href="/" className="text-sm text-text-secondary hover:text-text-primary">
+        <Link href="/activity" className="text-sm text-text-secondary hover:text-text-primary">
           ← Activity
         </Link>
-        <header className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl text-text-primary">{pairLabel(detail)}</h1>
-          <span className="rounded bg-bg-overlay px-2 py-0.5 text-xs text-text-secondary">
-            {detail.kind}
-          </span>
-          <span className="rounded bg-bg-overlay px-2 py-0.5 text-xs text-accent">
-            {detail.protocol}
-          </span>
-          {detail.chainSlug !== null && (
-            <span className="rounded bg-bg-overlay px-2 py-0.5 font-mono text-xs text-text-secondary">
-              {detail.chainSlug}
+        <header className="flex flex-col gap-4">
+          <h1 className="font-serif text-3xl text-text-primary sm:text-4xl">{pairLabel(detail)}</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="rounded bg-bg-overlay px-2 py-0.5 text-xs text-text-secondary">
+              {detail.kind}
             </span>
-          )}
-          <StatusPill status={detail.status} />
-          <VerificationBadge state={detail.verificationState} />
+            <span className="rounded bg-bg-overlay px-2 py-0.5 text-xs text-accent">
+              {detail.protocol}
+            </span>
+            {detail.chainSlug !== null && (
+              <span className="rounded bg-bg-overlay px-2 py-0.5 font-mono text-xs text-text-secondary">
+                {detail.chainSlug}
+              </span>
+            )}
+            <StatusPill status={detail.status} />
+            <VerificationBadge state={detail.verificationState} />
+          </div>
         </header>
       </div>
       <div className="section-enter grid grid-cols-1 gap-8 lg:grid-cols-3">
@@ -92,7 +94,7 @@ export default async function TxDetailPage({ params }: TxPageProps) {
           <StatusTimeline source={detail} />
         </section>
       </div>
-      <section className="section-enter card card-hover p-4">
+      <section className="section-enter glass p-4">
         <h2 className="mb-4 text-sm text-text-secondary">Details</h2>
         <dl className="grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-[auto_1fr]">
           <dt className="text-text-muted">Network</dt>

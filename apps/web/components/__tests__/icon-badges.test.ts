@@ -69,3 +69,20 @@ describe("ChainBadge", () => {
     expect(markup).toContain("robinhood");
   });
 });
+
+describe("ProtocolBadge with the name shown", () => {
+  it("renders the icon next to the protocol name for a known protocol", () => {
+    const markup = render(ProtocolBadge, { protocol: "kyberswap", withName: true });
+
+    expect(markup).toContain('src="/protocols/kyberswap.svg"');
+    expect(markup).toContain('class="protocol-name"');
+    expect(markup).toContain(">kyberswap<");
+  });
+
+  it("keeps the single text badge for an unknown protocol instead of doubling the name", () => {
+    const markup = render(ProtocolBadge, { protocol: "newdex", withName: true });
+
+    expect(markup).not.toContain("protocol-name");
+    expect(markup).toContain(">newdex<");
+  });
+});

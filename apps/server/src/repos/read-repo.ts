@@ -1,4 +1,5 @@
 import type pg from "pg";
+import type { ChartRangePlan } from "@agentscan/core";
 
 export type ActivityDbRow = {
   id: bigint;
@@ -209,18 +210,94 @@ export async function countActiveAgents7d(pool: pg.Pool): Promise<number> {
   return singleRow(result).active_agents;
 }
 
-export type ChartDayRead = { day: string; volumeUsd: string; txCount: number };
+export type ChartBucketRead = { bucketStart: number; volumeUsd: string; txCount: number };
 
-export async function chartByDay(pool: pg.Pool, days: number): Promise<ChartDayRead[]> {
-  const result = await pool.query<{ day: string; volume_usd: string; tx_count: number }>(
-    `SELECT day::text AS day, SUM(volume_usd)::text AS volume_usd, SUM(tx_count)::int AS tx_count
-     FROM daily_aggregates
-     WHERE day > (now() AT TIME ZONE 'utc')::date - $1::int
-     GROUP BY day
-     ORDER BY day`,
+type ChartBucketQueryRow = { bucket_start: string; volume_usd: string; tx_count: number };
+
+const VERIFIED_VOLUME_ROLES = "('swap','bridge_deposit')";
+
+function chartBucketFrom(row: ChartBucketQueryRow): ChartBucketRead {
+  return {
+    bucketStart: Number(row.bucket_start),
+    volumeUsd: row.volume_usd,
+    txCount: row.tx_count,
+  };
+}
+
+async function bucketsFromActivities(
+  pool: pg.Pool,
+  bucketSeconds: number,
+  bucketCount: number,
+): Promise<ChartBucketRead[]> {
+  const result = await pool.query<ChartBucketQueryRow>(
+    `WITH latest AS (
+       SELECT (floor(extract(epoch FROM now()) / $1::bigint) * $1::bigint)::bigint AS bucket_start
+     ),
+     span AS (
+       SELECT bucket_start AS last_start,
+              bucket_start - $1::bigint * ($2::int - 1) AS first_start
+       FROM latest
+     ),
+     series AS (
+       SELECT generate_series(first_start, last_start, $1::bigint) AS bucket_start FROM span
+     ),
+     bucketed AS (
+       SELECT (floor(extract(epoch FROM COALESCE(a.client_confirmed_at, a.verified_at)) / $1::bigint)
+                 * $1::bigint)::bigint AS bucket_start,
+              SUM(CASE WHEN a.event_role IN ${VERIFIED_VOLUME_ROLES}
+                       THEN COALESCE(a.usd_in_est, 0) ELSE 0 END) AS volume_usd,
+              COUNT(*)::int AS tx_count
+       FROM activities a
+       WHERE a.verification_state IN ('verified_full','verified_basic')
+         AND COALESCE(a.client_confirmed_at, a.verified_at) >= to_timestamp((SELECT first_start FROM span))
+       GROUP BY 1
+     )
+     SELECT s.bucket_start::text AS bucket_start,
+            COALESCE(b.volume_usd, 0)::text AS volume_usd,
+            COALESCE(b.tx_count, 0)::int AS tx_count
+     FROM series s
+     LEFT JOIN bucketed b ON b.bucket_start = s.bucket_start
+     ORDER BY s.bucket_start`,
+    [bucketSeconds, bucketCount],
+  );
+  return result.rows.map(chartBucketFrom);
+}
+
+async function bucketsFromAggregates(pool: pg.Pool, days: number | null): Promise<ChartBucketRead[]> {
+  const result = await pool.query<ChartBucketQueryRow>(
+    `WITH bounds AS (
+       SELECT COALESCE(
+                CASE WHEN $1::int IS NULL THEN (SELECT MIN(day) FROM daily_aggregates)
+                     ELSE (now() AT TIME ZONE 'utc')::date - ($1::int - 1) END,
+                (now() AT TIME ZONE 'utc')::date
+              ) AS first_day
+     ),
+     series AS (
+       SELECT generate_series((SELECT first_day FROM bounds)::timestamp,
+                              (now() AT TIME ZONE 'utc')::date::timestamp,
+                              interval '1 day')::date AS day
+     ),
+     summed AS (
+       SELECT day, SUM(volume_usd) AS volume_usd, SUM(tx_count)::int AS tx_count
+       FROM daily_aggregates
+       GROUP BY day
+     )
+     SELECT extract(epoch FROM s.day::timestamp AT TIME ZONE 'utc')::bigint::text AS bucket_start,
+            COALESCE(d.volume_usd, 0)::text AS volume_usd,
+            COALESCE(d.tx_count, 0)::int AS tx_count
+     FROM series s
+     LEFT JOIN summed d ON d.day = s.day
+     ORDER BY s.day`,
     [days],
   );
-  return result.rows.map((row) => ({ day: row.day, volumeUsd: row.volume_usd, txCount: row.tx_count }));
+  return result.rows.map(chartBucketFrom);
+}
+
+export async function chartBuckets(pool: pg.Pool, plan: ChartRangePlan): Promise<ChartBucketRead[]> {
+  if (plan.source === "activities") {
+    return bucketsFromActivities(pool, plan.bucketSeconds, plan.bucketCount);
+  }
+  return bucketsFromAggregates(pool, plan.days);
 }
 
 export type AgentVolumeRead = { agentHash: string; volumeUsd: string; txCount: number };

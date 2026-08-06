@@ -61,9 +61,9 @@ function stepsFrom(source: TimelineSource): TimelineStep[] {
 export function StatusTimeline({ source }: { source: TimelineSource }) {
   const steps = stepsFrom(source);
   return (
-    <ol className="card card-hover flex flex-col p-4">
+    <ol className="glass flex flex-col p-4">
       {steps.map((step, index) => (
-        <li key={step.label} className="relative flex gap-3 pb-5 last:pb-0">
+        <li key={step.label} className="timeline-step relative flex gap-3 pb-5 last:pb-0">
           {index < steps.length - 1 && <span className="timeline-line" aria-hidden="true" />}
           <span
             className={`timeline-dot ${toneDotClass[step.tone]} ${

@@ -10,7 +10,7 @@ export type StatsDto = {
   activeAgents7d: number;
 };
 
-export type ChartPointDto = { day: string; volumeUsd: string; txCount: number };
+export type ChartPointDto = { bucketStart: number; volumeUsd: string; txCount: number };
 
 export type LookupDto = { publicId: string };
 

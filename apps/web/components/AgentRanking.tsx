@@ -5,7 +5,7 @@ export function AgentRanking({ agents }: { agents: AgentStatDto[] }) {
   return (
     <RankingList
       gradientPrefix="cobalt-agent-bar"
-      emptyMessage="No verified agents yet"
+      emptyMessage="No verified activity yet"
       rows={agents.map((entry) => ({
         key: entry.alias,
         label: <span className="font-mono">{entry.alias}</span>,

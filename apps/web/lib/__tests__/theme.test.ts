@@ -12,36 +12,47 @@ describe("resolveTheme", () => {
     expect(resolveTheme(null)).toBe("cobalt");
   });
 
-  it("defaults to cobalt for garbage values", () => {
+  it("migrates the retired horizon theme to cobalt", () => {
+    expect(resolveTheme("horizon")).toBe("cobalt");
+  });
+
+  it("defaults to cobalt for an empty value", () => {
     expect(resolveTheme("")).toBe("cobalt");
-    expect(resolveTheme("light")).toBe("cobalt");
-    expect(resolveTheme("HORIZON")).toBe("cobalt");
-    expect(resolveTheme("horizon ")).toBe("cobalt");
+  });
+
+  it("defaults to cobalt for a differently cased value", () => {
+    expect(resolveTheme("LIGHT")).toBe("cobalt");
+  });
+
+  it("defaults to cobalt for a padded value", () => {
+    expect(resolveTheme("light ")).toBe("cobalt");
   });
 
   it("accepts cobalt", () => {
     expect(resolveTheme("cobalt")).toBe("cobalt");
   });
 
-  it("accepts horizon", () => {
-    expect(resolveTheme("horizon")).toBe("horizon");
+  it("accepts light", () => {
+    expect(resolveTheme("light")).toBe("light");
   });
 });
 
 describe("toggleTheme", () => {
-  it("flips cobalt to horizon", () => {
-    expect(toggleTheme("cobalt")).toBe("horizon");
+  it("flips cobalt to light", () => {
+    expect(toggleTheme("cobalt")).toBe("light");
   });
 
-  it("flips horizon to cobalt", () => {
-    expect(toggleTheme("horizon")).toBe("cobalt");
+  it("flips light to cobalt", () => {
+    expect(toggleTheme("light")).toBe("cobalt");
   });
 });
 
 describe("persistTheme", () => {
   it("writes the theme under the storage key", () => {
     const written = new Map<string, string>();
-    persistTheme({ setItem: (key, value) => written.set(key, value) }, "horizon");
-    expect(written.get("agentscan-theme")).toBe("horizon");
+
+    persistTheme({ setItem: (key, value) => written.set(key, value) }, "light");
+
+    expect(written.get("agentscan-theme")).toBe("light");
   });
 });
