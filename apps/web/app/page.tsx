@@ -26,7 +26,7 @@ export default async function DashboardPage() {
   const [stats, chart, protocols, agents, activity] = await Promise.all([
     fetchStats(),
     fetchChart(DEFAULT_CHART_RANGE),
-    fetchProtocols(),
+    fetchProtocols("all"),
     fetchAgents(),
     fetchActivity(),
   ]);

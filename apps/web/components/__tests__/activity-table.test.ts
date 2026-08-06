@@ -12,6 +12,8 @@ const row: ActivityRowDto = {
   status: "confirmed",
   verificationState: "verified_full",
   chainSlug: "base",
+  fromChainSlug: null,
+  toChainSlug: null,
   explorerUrl: "https://basescan.org/tx/0xabc",
   tokenInSymbol: "USDC",
   tokenOutSymbol: "WETH",
