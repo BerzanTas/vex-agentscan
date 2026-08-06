@@ -4,6 +4,8 @@ import {
   AreaSeries,
   ColorType,
   createChart,
+  LineStyle,
+  LineType,
   type AreaSeriesPartialOptions,
   type DeepPartial,
   type ChartOptions,
@@ -123,11 +125,23 @@ function themedChartOptions(palette: ChartPalette): DeepPartial<ChartOptions> {
   return {
     layout: { textColor: palette.textColor },
     grid: {
-      vertLines: { color: palette.gridColor },
-      horzLines: { color: palette.gridColor },
+      vertLines: { visible: false },
+      horzLines: { color: palette.gridColor, style: LineStyle.Dotted },
     },
-    rightPriceScale: { borderColor: palette.gridColor },
-    timeScale: { borderColor: palette.gridColor },
+    rightPriceScale: { borderVisible: false },
+    timeScale: { borderVisible: false },
+    crosshair: {
+      vertLine: {
+        color: palette.crosshairColor,
+        style: LineStyle.Dashed,
+        labelBackgroundColor: palette.labelBackground,
+      },
+      horzLine: {
+        color: palette.crosshairColor,
+        style: LineStyle.Dashed,
+        labelBackgroundColor: palette.labelBackground,
+      },
+    },
   };
 }
 
@@ -136,6 +150,7 @@ function themedSeriesOptions(palette: ChartPalette): AreaSeriesPartialOptions {
     lineColor: palette.lineColor,
     topColor: palette.topColor,
     bottomColor: palette.bottomColor,
+    priceLineColor: palette.lineColor,
   };
 }
 
@@ -248,7 +263,14 @@ export function VolumeChart({ points, metric }: { points: ChartPointDto[]; metri
       localization: { locale: "en-US" },
       handleScale: { axisPressedMouseMove: { price: false } },
     });
-    const series = chart.addSeries(AreaSeries, { lineWidth: LINE_WIDTH });
+    const series = chart.addSeries(AreaSeries, {
+      lineWidth: LINE_WIDTH,
+      lineType: LineType.Curved,
+      priceLineVisible: true,
+      priceLineStyle: LineStyle.Dashed,
+      crosshairMarkerBorderWidth: 0,
+      crosshairMarkerRadius: 4,
+    });
     chartRef.current = chart;
     seriesRef.current = series;
 
@@ -300,7 +322,7 @@ export function VolumeChart({ points, metric }: { points: ChartPointDto[]; metri
 
   return (
     <div ref={frameRef} className="chart-frame">
-      <div ref={containerRef} className="h-80 w-full" />
+      <div ref={containerRef} className="chart-glow h-80 w-full" />
       <span
         ref={liveDotRef}
         className="chart-live-dot"
