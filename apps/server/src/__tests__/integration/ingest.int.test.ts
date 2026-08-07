@@ -338,4 +338,31 @@ describe("POST /v1/events", () => {
     expect(joinedLogs).toContain("wallet_address");
     expect(joinedLogs).not.toContain(walletValue);
   });
+
+  it("logs exactly one ingest outcome line per batch with accepted/duplicates/rejected/events/backfill", async () => {
+    const linesBefore = logLines.length;
+    const response = await postEvents(
+      activeToken,
+      batchOf([goldenEvent({ sourceRowId: "r23" }), { sourceRowId: "r23-broken" }]),
+    );
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      accepted: 1,
+      duplicates: 0,
+      rejected: [{ index: 1, code: "validation_failed" }],
+    });
+    const outcomeEntries = logLines
+      .slice(linesBefore)
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .filter((entry) => entry.msg === "ingest batch outcome");
+    expect(outcomeEntries).toHaveLength(1);
+    expect(outcomeEntries[0]).toMatchObject({
+      accepted: 1,
+      duplicates: 0,
+      rejected: 1,
+      events: 2,
+      backfill: false,
+    });
+    expect(JSON.stringify(outcomeEntries[0])).not.toContain(activeAgentHash);
+  });
 });

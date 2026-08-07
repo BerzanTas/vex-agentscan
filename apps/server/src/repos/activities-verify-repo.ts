@@ -78,6 +78,36 @@ export async function claimDueJobs(
   }));
 }
 
+export type QueueDepth = {
+  dueJobs: number;
+  totalPending: number;
+  oldestDueAgeSec: number | null;
+};
+
+type QueueDepthRow = {
+  due_jobs: number;
+  total_pending: number;
+  oldest_due_age_sec: number | null;
+};
+
+export async function queueDepth(pool: pg.Pool): Promise<QueueDepth> {
+  const result = await pool.query<QueueDepthRow>(
+    `SELECT
+       count(*) FILTER (WHERE next_attempt_at <= now())::int AS due_jobs,
+       count(*)::int AS total_pending,
+       EXTRACT(EPOCH FROM (now() - min(next_attempt_at) FILTER (WHERE next_attempt_at <= now())))::float8
+         AS oldest_due_age_sec
+     FROM verification_jobs`,
+  );
+  const row = result.rows[0];
+  if (row === undefined) throw new Error("queue depth query returned no rows");
+  return {
+    dueJobs: row.due_jobs,
+    totalPending: row.total_pending,
+    oldestDueAgeSec: row.oldest_due_age_sec,
+  };
+}
+
 type FinalizedActivityRow = {
   agent_hash: string;
   protocol: string;
