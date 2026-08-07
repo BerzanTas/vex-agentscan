@@ -3,7 +3,12 @@
 import { useState } from "react";
 import { fetchChartFromBrowser, type ChartPointDto, type ChartRange } from "../lib/api";
 import { EmptyPanel } from "./EmptyPanel";
-import { VolumeChart, chartSeriesIsEmpty, type ChartMetric } from "./VolumeChart";
+import {
+  VolumeChart,
+  chartSeriesIsEmpty,
+  type ChartMetric,
+  type ChartScale,
+} from "./VolumeChart";
 
 const RANGE_CHIPS: { range: ChartRange; label: string }[] = [
   { range: "24h", label: "24H" },
@@ -15,6 +20,11 @@ const RANGE_CHIPS: { range: ChartRange; label: string }[] = [
 const METRIC_CHIPS: { metric: ChartMetric; label: string }[] = [
   { metric: "volume", label: "VOL" },
   { metric: "txns", label: "TXNS" },
+];
+
+const SCALE_CHIPS: { scale: ChartScale; label: string }[] = [
+  { scale: "linear", label: "LIN" },
+  { scale: "log", label: "LOG" },
 ];
 
 function chipClass(active: boolean): string {
@@ -30,6 +40,7 @@ export function ChartPanel({
 }) {
   const [range, setRange] = useState<ChartRange>(initialRange);
   const [metric, setMetric] = useState<ChartMetric>("volume");
+  const [scale, setScale] = useState<ChartScale>("linear");
   const [points, setPoints] = useState<ChartPointDto[]>(initialPoints);
   const [loading, setLoading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -87,12 +98,26 @@ export function ChartPanel({
               </button>
             ))}
           </div>
+          <span className="chart-chip-separator" aria-hidden="true" />
+          <div className="chart-chip-group" role="group" aria-label="Chart scale">
+            {SCALE_CHIPS.map((chip) => (
+              <button
+                key={chip.scale}
+                type="button"
+                className={chipClass(chip.scale === scale)}
+                aria-pressed={chip.scale === scale}
+                onClick={() => setScale(chip.scale)}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
       {chartSeriesIsEmpty(points, metric) ? (
         <EmptyPanel message="No volume in this range" withLiveDot={false} />
       ) : (
-        <VolumeChart points={points} metric={metric} />
+        <VolumeChart points={points} metric={metric} scale={scale} />
       )}
       {loadFailed && (
         <p role="status" className="mt-4 text-center text-sm text-warning">

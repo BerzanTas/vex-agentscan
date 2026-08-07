@@ -1,8 +1,14 @@
+import { LineStyle, PriceScaleMode, TickMarkType, type Time } from "lightweight-charts";
 import { describe, expect, it } from "vitest";
 import {
+  baseSeriesOptions,
+  crosshairTimeFormatter,
   formatBucketMoment,
   formatBucketValue,
+  formatTickMark,
+  priceScaleModeFor,
   resolveBucketSpan,
+  timeScaleOptionsFor,
   tooltipPosition,
 } from "../VolumeChart";
 import type { ChartPointDto } from "../../lib/api";
@@ -19,6 +25,103 @@ function bucketsEvery(seconds: number, count: number): ChartPointDto[] {
 }
 
 const point: ChartPointDto = { bucketStart: MIDNIGHT, volumeUsd: "12045.44", txCount: 1234 };
+
+describe("baseSeriesOptions", () => {
+  it("keeps the two-pixel trace and dashed reference price line on the custom area series", () => {
+    expect(baseSeriesOptions()).toEqual({
+      lineWidth: 2,
+      priceLineVisible: true,
+      priceLineStyle: LineStyle.Dashed,
+    });
+  });
+});
+
+describe("formatTickMark", () => {
+  it("labels an intraday tick with the viewer's local hour in Warsaw", () => {
+    expect(formatTickMark(MIDNIGHT + 13 * HOUR, "hour", "Europe/Warsaw")).toBe("15:00");
+  });
+
+  it("labels the same intraday tick with the viewer's local hour in New York", () => {
+    expect(formatTickMark(MIDNIGHT + 13 * HOUR, "hour", "America/New_York")).toBe("09:00");
+  });
+
+  it("labels a local midnight as 00:00 even when it falls before UTC midnight", () => {
+    expect(formatTickMark(MIDNIGHT + 22 * HOUR, "hour", "Europe/Warsaw")).toBe("00:00");
+  });
+
+  it("labels an intraday tick with the plain hour for a UTC viewer", () => {
+    expect(formatTickMark(MIDNIGHT + 13 * HOUR, "hour", "UTC")).toBe("13:00");
+  });
+
+  it("labels a daily tick with its UTC date regardless of the viewer zone", () => {
+    expect(formatTickMark(MIDNIGHT, "day", "America/New_York")).toBe("Aug 6");
+  });
+
+  it("keeps the date of the last UTC hour before midnight", () => {
+    expect(formatTickMark(MIDNIGHT + 23 * HOUR, "day")).toBe("Aug 6");
+  });
+
+  it("rolls the date over at the UTC midnight boundary", () => {
+    expect(formatTickMark(MIDNIGHT + 24 * HOUR, "day")).toBe("Aug 7");
+  });
+});
+
+describe("timeScaleOptionsFor", () => {
+  it("shows times on the axis for intraday buckets", () => {
+    const options = timeScaleOptionsFor("hour");
+
+    expect(options.timeVisible).toBe(true);
+    expect(options.secondsVisible).toBe(false);
+  });
+
+  it("keeps a date-only axis for daily buckets", () => {
+    expect(timeScaleOptionsFor("day").timeVisible).toBe(false);
+  });
+
+  it("labels intraday ticks through the viewer-zone hour formatter", () => {
+    const label = timeScaleOptionsFor("hour", "Europe/Warsaw").tickMarkFormatter?.(
+      (MIDNIGHT + 13 * HOUR) as Time,
+      TickMarkType.Time,
+      "en-US",
+    );
+
+    expect(label).toBe("15:00");
+  });
+
+  it("labels daily ticks through the UTC date formatter regardless of the viewer zone", () => {
+    const label = timeScaleOptionsFor("day", "America/New_York").tickMarkFormatter?.(
+      (MIDNIGHT + 24 * HOUR) as Time,
+      TickMarkType.DayOfMonth,
+      "en-US",
+    );
+
+    expect(label).toBe("Aug 7");
+  });
+});
+
+describe("crosshairTimeFormatter", () => {
+  it("renders the crosshair label exactly like the intraday tooltip moment", () => {
+    const label = crosshairTimeFormatter("hour", "Europe/Warsaw")((MIDNIGHT + 8 * HOUR) as Time);
+
+    expect(label).toBe("Aug 6, 10:00 GMT+2");
+  });
+
+  it("renders the crosshair label as the UTC date for daily buckets regardless of the viewer zone", () => {
+    const label = crosshairTimeFormatter("day", "America/New_York")(MIDNIGHT as Time);
+
+    expect(label).toBe("Aug 6, 2026");
+  });
+});
+
+describe("priceScaleModeFor", () => {
+  it("maps the linear choice to the normal price scale mode", () => {
+    expect(priceScaleModeFor("linear")).toBe(PriceScaleMode.Normal);
+  });
+
+  it("maps the log choice to the logarithmic price scale mode", () => {
+    expect(priceScaleModeFor("log")).toBe(PriceScaleMode.Logarithmic);
+  });
+});
 
 describe("resolveBucketSpan", () => {
   it("reads hourly buckets as an intraday span", () => {
@@ -39,12 +142,24 @@ describe("resolveBucketSpan", () => {
 });
 
 describe("formatBucketMoment", () => {
-  it("names a daily bucket by its date in the en locale", () => {
-    expect(formatBucketMoment(MIDNIGHT, "day")).toBe("Aug 6, 2026");
+  it("names a daily bucket by its UTC date regardless of the viewer zone", () => {
+    expect(formatBucketMoment(MIDNIGHT, "day", "America/New_York")).toBe("Aug 6, 2026");
   });
 
-  it("adds the UTC time to an intraday bucket", () => {
-    expect(formatBucketMoment(MIDNIGHT + 14 * HOUR, "hour")).toBe("Aug 6, 14:00 UTC");
+  it("renders an intraday bucket in the viewer zone with an explicit zone name", () => {
+    expect(formatBucketMoment(MIDNIGHT + 8 * HOUR, "hour", "Europe/Warsaw")).toBe(
+      "Aug 6, 10:00 GMT+2",
+    );
+  });
+
+  it("keeps rendering UTC when the viewer zone is UTC", () => {
+    expect(formatBucketMoment(MIDNIGHT + 14 * HOUR, "hour", "UTC")).toBe("Aug 6, 14:00 UTC");
+  });
+
+  it("rolls the local date forward when the zone crosses midnight before UTC", () => {
+    expect(formatBucketMoment(MIDNIGHT + 22 * HOUR, "hour", "Europe/Warsaw")).toBe(
+      "Aug 7, 00:00 GMT+2",
+    );
   });
 });
 
