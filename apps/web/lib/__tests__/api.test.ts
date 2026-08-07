@@ -6,12 +6,14 @@ import {
   chartPath,
   DEFAULT_CHART_RANGE,
   fetchNetworkDetail,
+  fetchProtocolRanking,
   fetchProtocols,
   fetchStats,
   fetchTokenDetail,
   fetchTxDetail,
   networkDetailPath,
   networksPath,
+  protocolRankingPath,
   protocolsPath,
   routesPath,
   tokenDetailPath,
@@ -140,8 +142,14 @@ describe("verificationPath", () => {
 });
 
 describe("protocolsPath", () => {
-  it("carries the range", () => {
-    expect(protocolsPath("24h")).toBe("/api/protocols?range=24h");
+  it("asks the purge durable aggregate endpoint, which has no window", () => {
+    expect(protocolsPath()).toBe("/api/protocols");
+  });
+});
+
+describe("protocolRankingPath", () => {
+  it("carries the range to the windowed ranking endpoint", () => {
+    expect(protocolRankingPath("24h")).toBe("/api/protocols/ranking?range=24h");
   });
 });
 
@@ -211,16 +219,18 @@ describe("ACTIVITY_VERIFICATION_FILTERS", () => {
 });
 
 describe("fetchProtocols", () => {
-  it("requests the default window when the caller asks for none", async () => {
+  it("requests the aggregate endpoint, which carries no window", async () => {
     const { requested } = stubFetchCapturingUrl();
     await fetchProtocols();
-    expect(requested).toStrictEqual(["http://localhost:3000/api/protocols?range=30d"]);
+    expect(requested).toStrictEqual(["http://localhost:3000/api/protocols"]);
   });
 
-  it("requests the window the caller asked for", async () => {
+  it("requests the windowed ranking from its own endpoint", async () => {
     const { requested } = stubFetchCapturingUrl();
-    await fetchProtocols("24h");
-    expect(requested).toStrictEqual(["http://localhost:3000/api/protocols?range=24h"]);
+    await fetchProtocolRanking("24h");
+    expect(requested).toStrictEqual([
+      "http://localhost:3000/api/protocols/ranking?range=24h",
+    ]);
   });
 });
 

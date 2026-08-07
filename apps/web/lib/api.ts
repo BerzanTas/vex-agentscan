@@ -14,7 +14,20 @@ export const DEFAULT_CHART_RANGE: ChartRange = "30d";
 
 export type ProtocolStatDto = { protocol: string; volumeUsd: string; txCount: number };
 
-export type AgentStatDto = { alias: string; volumeUsd: string; txCount: number };
+export type AgentStatDto = {
+  alias: string;
+  volumeUsd: string;
+  txCount: number;
+  protocolCount: number;
+  chainCount: number;
+  lastSeenSeconds: number;
+};
+
+export type ProtocolRankingDto = ProtocolStatDto & {
+  chainCount: number;
+  swapTxCount: number;
+  bridgeTxCount: number;
+};
 
 export type VerificationTier = "full" | "basic";
 
@@ -242,8 +255,12 @@ export function verificationPath(): string {
   return "/api/verification";
 }
 
-export function protocolsPath(range: ChartRange): string {
-  return pathWithQuery("/api/protocols", [["range", range]]);
+export function protocolsPath(): string {
+  return "/api/protocols";
+}
+
+export function protocolRankingPath(range: ChartRange): string {
+  return pathWithQuery("/api/protocols/ranking", [["range", range]]);
 }
 
 export function agentsPath(range: ChartRange): string {
@@ -299,10 +316,14 @@ export async function fetchVerificationStats(): Promise<VerificationStatsDto> {
   return readApiJson(verificationPath());
 }
 
-export async function fetchProtocols(
+export async function fetchProtocols(): Promise<ProtocolStatDto[]> {
+  return readApiJson(protocolsPath());
+}
+
+export async function fetchProtocolRanking(
   range: ChartRange = DEFAULT_CHART_RANGE,
-): Promise<ProtocolStatDto[]> {
-  return readApiJson(protocolsPath(range));
+): Promise<ProtocolRankingDto[]> {
+  return readApiJson(protocolRankingPath(range));
 }
 
 export async function fetchAgents(
@@ -329,8 +350,10 @@ export async function fetchNetworksFromBrowser(range: ChartRange): Promise<Netwo
   return readBrowserJson(networksPath(range));
 }
 
-export async function fetchProtocolsFromBrowser(range: ChartRange): Promise<ProtocolStatDto[]> {
-  return readBrowserJson(protocolsPath(range));
+export async function fetchProtocolRankingFromBrowser(
+  range: ChartRange,
+): Promise<ProtocolRankingDto[]> {
+  return readBrowserJson(protocolRankingPath(range));
 }
 
 export async function fetchAgentsFromBrowser(range: ChartRange): Promise<AgentStatDto[]> {
