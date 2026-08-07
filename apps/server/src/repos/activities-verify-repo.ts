@@ -1,5 +1,5 @@
 import type pg from "pg";
-import type { Verdict } from "@agentscan/core";
+import { isStrikeEligibleKind, type Verdict, type VerificationKind } from "@agentscan/core";
 import type { Config } from "../config.js";
 
 export type SqlExecutor = Pick<pg.PoolClient, "query">;
@@ -14,6 +14,7 @@ export type ClaimedJob = {
   protocol: string;
   chainFamily: "eip155" | "solana";
   chainId: bigint;
+  kind: VerificationKind;
   clientConfirmedAt: Date | null;
   executedInRaw: string | null;
   executedOutRaw: string | null;
@@ -29,6 +30,7 @@ type ClaimedJobRow = {
   protocol: string;
   chain_family: "eip155" | "solana";
   chain_id: string;
+  kind: VerificationKind;
   client_confirmed_at: Date | null;
   executed_in_raw: string | null;
   executed_out_raw: string | null;
@@ -54,7 +56,7 @@ export async function claimDueJobs(
          FOR UPDATE SKIP LOCKED
        )
      RETURNING vj.activity_id, vj.attempts, vj.first_attempt_at,
-               a.tx_hash, a.protocol, a.chain_family, a.chain_id,
+               a.tx_hash, a.protocol, a.chain_family, a.chain_id, a.kind,
                a.client_confirmed_at, a.executed_in_raw, a.executed_out_raw,
                a.token_in_address, a.token_out_address`,
     [limit, leaseSec],
@@ -67,6 +69,7 @@ export async function claimDueJobs(
     protocol: row.protocol,
     chainFamily: row.chain_family,
     chainId: BigInt(row.chain_id),
+    kind: row.kind,
     clientConfirmedAt: row.client_confirmed_at,
     executedInRaw: row.executed_in_raw,
     executedOutRaw: row.executed_out_raw,
@@ -78,7 +81,7 @@ export async function claimDueJobs(
 type FinalizedActivityRow = {
   agent_hash: string;
   protocol: string;
-  kind: string;
+  kind: VerificationKind;
   event_role: string;
   usd_in_est: string | null;
   client_confirmed_at: Date | null;
@@ -99,9 +102,9 @@ export async function finalizeVerification(
   );
   const activity = finalized.rows[0];
   if (activity === undefined) return;
-  if (verdict.result === "strike") {
+  if (verdict.result === "strike" && isStrikeEligibleKind(activity.kind)) {
     await recordStrike(client, activityId, activity.agent_hash, verdict.reason, config);
-  } else {
+  } else if (verdict.result !== "strike") {
     await recordVerifiedSuccess(client, activity, verdict.blockTimestamp);
   }
   await deleteJob(client, activityId);

@@ -1,5 +1,5 @@
-export const EVENT_KINDS = ["swap", "bridge"] as const;
-export const EVENT_ROLES = ["swap", "bridge_deposit", "bridge_fill_expected", "bridge_fill_observed", "bridge_refund"] as const;
+export const EVENT_KINDS = ["swap", "bridge", "launch"] as const;
+export const EVENT_ROLES = ["swap", "bridge_deposit", "bridge_fill_expected", "bridge_fill_observed", "bridge_refund", "token_launch"] as const;
 export const EVENT_STATUSES = ["pending", "confirmed", "definitively_failed"] as const;
 export const CHAIN_FAMILIES = ["eip155", "solana"] as const;
 export const FAILURE_CODES = ["route_not_found", "slippage", "deadline_expired", "insufficient_liquidity", "allowance_or_balance", "chain_unsupported", "simulation_reverted", "mined_revert", "broadcast_error", "confirmation_timeout", "unknown", "bridge_failed", "bridge_refunded"] as const;

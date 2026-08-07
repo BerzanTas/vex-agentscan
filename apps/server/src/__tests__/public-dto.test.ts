@@ -139,6 +139,15 @@ it("a bridge leg without a chain id becomes null", () => {
   expect(dto.toChainSlug).toBe("base");
 });
 
+it("a launch row serves with no bridge route slugs and its kind intact", () => {
+  const launchRow = { ...fixtureActivityRow(), kind: "launch", event_role: "token_launch" };
+  const dto = toActivityRowDto(launchRow, stubResolve, fakeResolveBridgeChain);
+  expect(dto.kind).toBe("launch");
+  expect(dto.eventRole).toBe("token_launch");
+  expect(dto.fromChainSlug).toBe(null);
+  expect(dto.toChainSlug).toBe(null);
+});
+
 const tokenStat: TokenStatDto = {
   chainSlug: "base",
   address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",

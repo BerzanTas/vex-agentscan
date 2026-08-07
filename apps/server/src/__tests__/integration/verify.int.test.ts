@@ -58,7 +58,7 @@ async function seedAgent(agentHash: string): Promise<void> {
 type QueuedActivitySeed = {
   agentHash: string;
   protocol?: string;
-  kind?: "swap" | "bridge";
+  kind?: "swap" | "bridge" | "launch";
   eventRole?: string;
   chainId?: number;
   usdInEst?: string | null;
@@ -411,6 +411,81 @@ describe("verification worker", () => {
       day: expectedDay,
       kind: "swap",
       volume_usd: "42.5",
+      tx_count: 1,
+    });
+  });
+
+  it("caps a launch activity at verified_basic on a full-tier chain, never checking declared amounts", async () => {
+    const agent = "c1".repeat(32);
+    await seedAgent(agent);
+    const activityId = await seedQueuedActivity({
+      agentHash: agent,
+      protocol: "p-launch-tier",
+      kind: "launch",
+      eventRole: "token_launch",
+      chainId: 8453,
+      tokenInAddress: "0xaaa",
+      executedInRaw: "1000000",
+    });
+    const receipt: ReceiptView = { status: "success", blockTimestamp: new Date(), erc20Transfers: [] };
+
+    await runVerificationPass(depsWithReader(readerReturning(receipt)));
+
+    expect((await activityStateOf(activityId)).verification_state).toBe("verified_basic");
+    expect(await strikesOf(agent)).toEqual([]);
+  });
+
+  it("marks a launch verification mismatch without incrementing strikes", async () => {
+    const agent = "c2".repeat(32);
+    await seedAgent(agent);
+    const activityId = await seedQueuedActivity({
+      agentHash: agent,
+      protocol: "p-launch-mismatch",
+      kind: "launch",
+      eventRole: "token_launch",
+    });
+    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [] };
+
+    await runVerificationPass(depsWithReader(readerReturning(reverted)));
+
+    expect((await activityStateOf(activityId)).verification_state).toBe("mismatch");
+    expect(await strikesOf(agent)).toEqual([]);
+    expect((await agentRowOf(agent)).strike_count).toBe(0);
+  });
+
+  it("still increments strikes for a swap verification mismatch (regression guard)", async () => {
+    const agent = "c3".repeat(32);
+    await seedAgent(agent);
+    const activityId = await seedQueuedActivity({ agentHash: agent, protocol: "p-swap-mismatch" });
+    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [] };
+
+    await runVerificationPass(depsWithReader(readerReturning(reverted)));
+
+    expect((await activityStateOf(activityId)).verification_state).toBe("mismatch");
+    expect(await strikesOf(agent)).toHaveLength(1);
+    expect((await agentRowOf(agent)).strike_count).toBe(1);
+  });
+
+  it("books a verified launch under its own kind aggregate with zero volume but a counted transaction", async () => {
+    const agent = "c4".repeat(32);
+    await seedAgent(agent);
+    const confirmedAt = new Date("2026-07-29T10:00:00.000Z");
+    await seedQueuedActivity({
+      agentHash: agent,
+      protocol: "p-launch-agg",
+      kind: "launch",
+      eventRole: "token_launch",
+      usdInEst: "500",
+      clientConfirmedAt: confirmedAt,
+    });
+    const receipt: ReceiptView = { status: "success", blockTimestamp: confirmedAt, erc20Transfers: [] };
+
+    await runVerificationPass(depsWithReader(readerReturning(receipt)));
+
+    expect(await aggregateOf("p-launch-agg")).toEqual({
+      day: "2026-07-29",
+      kind: "launch",
+      volume_usd: "0",
       tx_count: 1,
     });
   });

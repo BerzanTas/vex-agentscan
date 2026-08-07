@@ -1,6 +1,7 @@
 import {
   evaluateVerification,
   nextBackoff,
+  resolveVerificationTier,
   type ChainEntry,
   type ChainReader,
   type ReceiptView,
@@ -116,7 +117,7 @@ function verificationInputFrom(
     executedOutRaw: job.executedOutRaw,
     tokenInAddress: job.tokenInAddress,
     tokenOutAddress: job.tokenOutAddress,
-    tier: entry.verificationTier,
+    tier: resolveVerificationTier(job.kind, entry.verificationTier),
     timeToleranceMin: config.VERIFY_TIME_TOLERANCE_MIN,
     amountTolerancePct: config.VERIFY_AMOUNT_TOLERANCE_PCT,
   };

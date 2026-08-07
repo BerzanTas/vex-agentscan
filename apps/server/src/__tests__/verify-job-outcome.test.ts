@@ -15,6 +15,7 @@ function jobFixture(overrides: Partial<ClaimedJob> = {}): ClaimedJob {
     protocol: "kyberswap",
     chainFamily: "eip155",
     chainId: 8453n,
+    kind: "swap",
     clientConfirmedAt: new Date("2026-08-04T10:00:00Z"),
     executedInRaw: null,
     executedOutRaw: null,
@@ -83,5 +84,35 @@ describe("resolveJobOutcome", () => {
       }),
     });
     expect(outcome.kind).toBe("reschedule");
+  });
+
+  it("caps a launch job at verified_basic on a full-tier chain, skipping the amount check that would otherwise strike it", async () => {
+    const blockTimestamp = new Date("2026-08-04T10:00:00Z");
+    const outcome = await resolveJobOutcome(
+      jobFixture({
+        kind: "launch",
+        tokenInAddress: "0xaaa",
+        executedInRaw: "1000000",
+      }),
+      {
+        config,
+        now,
+        resolveChain: () => ({
+          canonicalSlug: "base",
+          displayName: "Base",
+          explorerTxUrl: () => null,
+          rpcUrls: [],
+          verificationTier: "full",
+        }),
+        chainReaderFor: () => ({
+          getReceipt: async () => ({
+            status: "success",
+            blockTimestamp,
+            erc20Transfers: [],
+          }),
+        }),
+      },
+    );
+    expect(outcome).toEqual({ kind: "finalize", verdict: { result: "verified_basic", blockTimestamp } });
   });
 });

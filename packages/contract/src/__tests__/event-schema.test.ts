@@ -52,4 +52,27 @@ describe("eventSchema", () => {
     const batch = { schemaVersion: 1, agentHash: "a".repeat(64), backfill: false, events: new Array(501).fill({}) };
     expect(eventsBatchSchema.parse(batch).events).toHaveLength(501);
   });
+  it("accepts a v1 envelope", () => {
+    const batch = { schemaVersion: 1, agentHash: "a".repeat(64), backfill: false, events: [] };
+    expect(eventsBatchSchema.parse(batch).schemaVersion).toBe(1);
+  });
+  it("accepts a v2 envelope", () => {
+    const batch = { schemaVersion: 2, agentHash: "a".repeat(64), backfill: false, events: [] };
+    expect(eventsBatchSchema.parse(batch).schemaVersion).toBe(2);
+  });
+  it("accepts a v2 envelope carrying only swap events (v2 is a strict superset)", () => {
+    const batch = { schemaVersion: 2, agentHash: "a".repeat(64), backfill: false, events: [goldenEvent] };
+    expect(eventsBatchSchema.parse(batch).events).toHaveLength(1);
+  });
+  it("rejects schemaVersion 3", () => {
+    const batch = { schemaVersion: 3, agentHash: "a".repeat(64), backfill: false, events: [] };
+    expect(() => eventsBatchSchema.parse(batch)).toThrow();
+  });
+  it("accepts a launch/token_launch event", () => {
+    const launchEvent = { ...goldenEvent, kind: "launch", eventRole: "token_launch" };
+    expect(eventSchema.parse(launchEvent)).toMatchObject({ kind: "launch", eventRole: "token_launch" });
+  });
+  it("still rejects an unchanged-scope kind outside swap/bridge/launch", () => {
+    expect(() => eventSchema.parse({ ...goldenEvent, kind: "airdrop" })).toThrow();
+  });
 });

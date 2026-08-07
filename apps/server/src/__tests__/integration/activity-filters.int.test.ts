@@ -37,7 +37,7 @@ async function seedAgent(pool: pg.Pool, agentHash: string, everVerified: boolean
 type ActivitySeed = {
   publicId: string;
   agentHash: string;
-  kind: "swap" | "bridge";
+  kind: "swap" | "bridge" | "launch";
   eventRole: string;
   protocol: string;
   chainFamily: "eip155" | "solana";
@@ -428,6 +428,39 @@ describe("GET /api/agents with a range", () => {
   it("never ranks an agent without a verified activity", async () => {
     const aliases = (await agents("?range=all")).map((row) => row.alias);
     expect(aliases).not.toContain(aliasOf(agentGhost));
+  });
+});
+
+describe("GET /api/activity serving a launch kind row", () => {
+  afterAll(async () => {
+    await db.pool.query("DELETE FROM activities WHERE public_id = 'launch-base-verified'");
+  });
+
+  it("serves a verified launch row without breaking, with its kind and eventRole intact", async () => {
+    await seedActivity(db.pool, {
+      publicId: "launch-base-verified",
+      agentHash: agentAlpha,
+      kind: "launch",
+      eventRole: "token_launch",
+      protocol: "p-launch-feed",
+      chainFamily: "eip155",
+      chainId: "8453",
+      status: "confirmed",
+      verificationState: "verified_basic",
+      usdInEst: null,
+      receivedSecondsAgo: 5,
+      confirmedDaysAgo: 0,
+    });
+
+    const response = await app.inject({ method: "GET", url: "/api/activity?protocol=p-launch-feed" });
+    expect(response.statusCode).toBe(200);
+    const page = response.json<ActivityFeedDto>();
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]).toMatchObject({
+      publicId: "launch-base-verified",
+      kind: "launch",
+      eventRole: "token_launch",
+    });
   });
 });
 

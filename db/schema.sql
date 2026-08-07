@@ -64,8 +64,8 @@ CREATE TABLE public.activities (
     received_at timestamp with time zone DEFAULT now() NOT NULL,
     received_schema_version integer NOT NULL,
     CONSTRAINT activities_chain_family_check CHECK ((chain_family = ANY (ARRAY['eip155'::text, 'solana'::text]))),
-    CONSTRAINT activities_event_role_check CHECK ((event_role = ANY (ARRAY['swap'::text, 'bridge_deposit'::text, 'bridge_fill_expected'::text, 'bridge_fill_observed'::text, 'bridge_refund'::text]))),
-    CONSTRAINT activities_kind_check CHECK ((kind = ANY (ARRAY['swap'::text, 'bridge'::text]))),
+    CONSTRAINT activities_event_role_check CHECK ((event_role = ANY (ARRAY['swap'::text, 'bridge_deposit'::text, 'bridge_fill_expected'::text, 'bridge_fill_observed'::text, 'bridge_refund'::text, 'token_launch'::text]))),
+    CONSTRAINT activities_kind_check CHECK ((kind = ANY (ARRAY['swap'::text, 'bridge'::text, 'launch'::text]))),
     CONSTRAINT activities_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'definitively_failed'::text]))),
     CONSTRAINT activities_verification_state_check CHECK ((verification_state = ANY (ARRAY['none'::text, 'queued'::text, 'verified_full'::text, 'verified_basic'::text, 'mismatch'::text])))
 );
