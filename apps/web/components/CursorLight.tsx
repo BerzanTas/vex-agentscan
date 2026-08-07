@@ -12,11 +12,6 @@ function followCursor(event: MouseEvent<HTMLDivElement>): void {
   element.style.setProperty("--my", `${event.clientY - bounds.top}px`);
 }
 
-function releaseCursor(event: MouseEvent<HTMLDivElement>): void {
-  event.currentTarget.style.removeProperty("--mx");
-  event.currentTarget.style.removeProperty("--my");
-}
-
 export function CursorLight({
   className = "",
   children,
@@ -27,8 +22,8 @@ export function CursorLight({
   return (
     <div
       className={`glass cursor-light ${className}`.trim()}
+      onMouseEnter={followCursor}
       onMouseMove={followCursor}
-      onMouseLeave={releaseCursor}
     >
       {children}
     </div>

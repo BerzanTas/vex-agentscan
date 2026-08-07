@@ -35,7 +35,7 @@ export default async function DashboardPage() {
     <div className="flex flex-col gap-8">
       <AutoRefresh />
       <Hero />
-      <StatCards stats={stats} />
+      <StatCards stats={stats} series={chart} />
       <ChartPanel initialPoints={chart} initialRange={DEFAULT_CHART_RANGE} />
       <div className="section-enter grid grid-cols-1 items-start gap-8 lg:grid-cols-2">
         <section className="glass p-4">
