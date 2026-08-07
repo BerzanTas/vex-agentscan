@@ -14,11 +14,13 @@ import { tokensRoutes } from "./public/tokens.js";
 import { networksRoutes } from "./public/networks.js";
 import { bridgeRouteRoutes } from "./public/routes.js";
 import { verificationRoutes } from "./public/verification.js";
+import { tokenAttestationsRoutes } from "./token-attestations.js";
 
 export const routePlugins: FastifyPluginAsync<WiredDeps>[] = [
   healthRoutes,
   agentsRoutes,
   eventsRoutes,
+  tokenAttestationsRoutes,
   statsRoutes,
   chartRoutes,
   protocolsRoutes,

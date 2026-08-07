@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 const RPC_URLS_PREFIX = "RPC_URLS_";
+const ATTEST_FACTORY_ADDRESSES_PREFIX = "ATTEST_FACTORY_ADDRESSES_";
 const DEFAULT_AGENT_ALIAS_SALT = "agentscan-dev-salt";
 const DEFAULT_RATE_LIMIT_KEY_SALT = "agentscan-dev-rate-salt";
 
@@ -47,9 +48,16 @@ const envSchema = z.object({
   READ_CACHE_TTL_SEC: z.coerce.number().int().min(0).default(5),
   AGENT_ALIAS_SALT: z.string().min(1).default(DEFAULT_AGENT_ALIAS_SALT),
   RATE_LIMIT_KEY_SALT: z.string().min(1).default(DEFAULT_RATE_LIMIT_KEY_SALT),
+  ATTEST_RATE_LIMIT_PER_IP: z.coerce.number().int().default(20),
+  ATTEST_RATE_WINDOW_SEC: z.coerce.number().int().default(3600),
+  ATTEST_MAX_PENDING_PER_IP: z.coerce.number().int().default(100),
+  ATTEST_MAX_PENDING_GLOBAL: z.coerce.number().int().default(10000),
 });
 
-export type Config = z.infer<typeof envSchema> & { rpcUrlOverrides: Map<string, string[]> };
+export type Config = z.infer<typeof envSchema> & {
+  rpcUrlOverrides: Map<string, string[]>;
+  attestFactoryAddressesByChainId: Map<bigint, string[]>;
+};
 
 function rpcUrlOverridesFrom(env: NodeJS.ProcessEnv): Map<string, string[]> {
   const overrides = new Map<string, string[]>();
@@ -58,6 +66,15 @@ function rpcUrlOverridesFrom(env: NodeJS.ProcessEnv): Map<string, string[]> {
     overrides.set(key.slice(RPC_URLS_PREFIX.length).toLowerCase(), commaSeparated(value));
   }
   return overrides;
+}
+
+function attestFactoryAddressesByChainIdFrom(env: NodeJS.ProcessEnv): Map<bigint, string[]> {
+  const byChainId = new Map<bigint, string[]>();
+  for (const [key, value] of Object.entries(env)) {
+    if (!key.startsWith(ATTEST_FACTORY_ADDRESSES_PREFIX) || !value) continue;
+    byChainId.set(BigInt(key.slice(ATTEST_FACTORY_ADDRESSES_PREFIX.length)), commaSeparated(value));
+  }
+  return byChainId;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
@@ -71,5 +88,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   if (parsed.RATE_LIMIT_KEY_SALT === DEFAULT_RATE_LIMIT_KEY_SALT && env.NODE_ENV === "production") {
     throw new Error("RATE_LIMIT_KEY_SALT must be set to a random value when NODE_ENV=production");
   }
-  return { ...parsed, rpcUrlOverrides: rpcUrlOverridesFrom(env) };
+  return {
+    ...parsed,
+    rpcUrlOverrides: rpcUrlOverridesFrom(env),
+    attestFactoryAddressesByChainId: attestFactoryAddressesByChainIdFrom(env),
+  };
 }

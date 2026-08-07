@@ -169,6 +169,52 @@ ALTER SEQUENCE public.strikes_id_seq OWNED BY public.strikes.id;
 
 
 --
+-- Name: token_attestations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.token_attestations (
+    id bigint NOT NULL,
+    chain_id bigint NOT NULL,
+    token_address text NOT NULL,
+    recovered_signer text NOT NULL,
+    attest_signature text NOT NULL,
+    tx_hash_hint text,
+    derived_tx_hash text,
+    verify_status text DEFAULT 'unverified'::text NOT NULL,
+    verify_detail text,
+    verified_at timestamp with time zone,
+    revoked_at timestamp with time zone,
+    revoke_reason text,
+    submitter_ip_hash text,
+    first_seen_at timestamp with time zone DEFAULT now() NOT NULL,
+    attempt_count integer DEFAULT 0 NOT NULL,
+    next_attempt_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT token_attestations_recovered_signer_check CHECK ((recovered_signer ~ '^0x[0-9a-f]{40}$'::text)),
+    CONSTRAINT token_attestations_token_address_check CHECK ((token_address ~ '^0x[0-9a-f]{40}$'::text)),
+    CONSTRAINT token_attestations_verify_status_check CHECK ((verify_status = ANY (ARRAY['unverified'::text, 'verified'::text, 'mismatch'::text, 'unverifiable'::text])))
+);
+
+
+--
+-- Name: token_attestations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.token_attestations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: token_attestations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.token_attestations_id_seq OWNED BY public.token_attestations.id;
+
+
+--
 -- Name: verification_jobs; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -204,6 +250,13 @@ ALTER TABLE ONLY public.activities ALTER COLUMN id SET DEFAULT nextval('public.a
 --
 
 ALTER TABLE ONLY public.strikes ALTER COLUMN id SET DEFAULT nextval('public.strikes_id_seq'::regclass);
+
+
+--
+-- Name: token_attestations id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.token_attestations ALTER COLUMN id SET DEFAULT nextval('public.token_attestations_id_seq'::regclass);
 
 
 --
@@ -263,6 +316,22 @@ ALTER TABLE ONLY public.strikes
 
 
 --
+-- Name: token_attestations token_attestations_chain_id_token_address_recovered_signer_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.token_attestations
+    ADD CONSTRAINT token_attestations_chain_id_token_address_recovered_signer_key UNIQUE (chain_id, token_address, recovered_signer);
+
+
+--
+-- Name: token_attestations token_attestations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.token_attestations
+    ADD CONSTRAINT token_attestations_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: verification_jobs verification_jobs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -297,6 +366,20 @@ CREATE INDEX idx_activities_feed ON public.activities USING btree (received_at D
 --
 
 CREATE INDEX idx_activities_visibility ON public.activities USING btree (status, verification_state);
+
+
+--
+-- Name: idx_token_attestations_lookup; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_token_attestations_lookup ON public.token_attestations USING btree (chain_id, token_address);
+
+
+--
+-- Name: idx_token_attestations_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_token_attestations_pending ON public.token_attestations USING btree (next_attempt_at) WHERE ((verify_status = 'unverified'::text) AND (revoked_at IS NULL));
 
 
 --
@@ -342,4 +425,5 @@ ALTER TABLE ONLY public.verification_jobs
 --
 
 INSERT INTO public.schema_migrations (version) VALUES
-    ('0001');
+    ('0001'),
+    ('0008');

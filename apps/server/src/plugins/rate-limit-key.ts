@@ -1,6 +1,6 @@
 import { sha256Hex } from "./auth.js";
 
-export type RateLimitScope = "ingest" | "register";
+export type RateLimitScope = "ingest" | "register" | "attest" | "attest_submitter";
 
 export function rateLimitKeyHash(scope: RateLimitScope, value: string, salt: string): string {
   return sha256Hex(`${scope}:${salt}:${value}`);

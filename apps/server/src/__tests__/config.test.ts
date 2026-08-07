@@ -25,6 +25,26 @@ describe("loadConfig", () => {
     expect(config.rpcUrlOverrides.get("base")).toEqual(["https://a", "https://b"]);
   });
 
+  it("defaults the attest rate limit, pending caps, and window", () => {
+    const config = loadConfig(baseEnv);
+    expect(config.ATTEST_RATE_LIMIT_PER_IP).toBe(20);
+    expect(config.ATTEST_RATE_WINDOW_SEC).toBe(3600);
+    expect(config.ATTEST_MAX_PENDING_PER_IP).toBe(100);
+    expect(config.ATTEST_MAX_PENDING_GLOBAL).toBe(10000);
+  });
+
+  it("builds attestFactoryAddressesByChainId from ATTEST_FACTORY_ADDRESSES_<chainId> env vars", () => {
+    const config = loadConfig({
+      ...baseEnv,
+      ATTEST_FACTORY_ADDRESSES_4663: "0xfactory1,0xfactory2",
+    });
+    expect(config.attestFactoryAddressesByChainId.get(4663n)).toEqual(["0xfactory1", "0xfactory2"]);
+  });
+
+  it("leaves attestFactoryAddressesByChainId empty when no such env var is set", () => {
+    expect(loadConfig(baseEnv).attestFactoryAddressesByChainId.size).toBe(0);
+  });
+
   it("throws when VERIFY_FAKE_MODE=confirm_all runs in production", () => {
     expect(() =>
       loadConfig({ ...baseEnv, VERIFY_FAKE_MODE: "confirm_all", NODE_ENV: "production" }),

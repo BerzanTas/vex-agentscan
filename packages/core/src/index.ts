@@ -36,3 +36,18 @@ export {
   type ChainFamily,
   type ChainKeyForSlug,
 } from "./chain-registry/catalog.js";
+export {
+  ATTESTATION_CHAIN_IDS,
+  buildAttestationChainRegistry,
+  type AttestationChainEntry,
+  type AttestationChainRegistry,
+} from "./chain-registry/attestation-chain-registry.js";
+export {
+  attestationSignalsFor,
+  bestAttestationCandidate,
+  displayStatusOf,
+  type AttestationCandidate,
+  type AttestationDisplayStatus,
+  type AttestationSignal,
+  type AttestationVerifyStatus,
+} from "./attestation-precedence.js";
