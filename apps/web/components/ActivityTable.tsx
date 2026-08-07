@@ -17,6 +17,22 @@ function pairLabel(row: ActivityRowDto): string {
   return `${row.tokenInSymbol} → ${row.tokenOutSymbol}`;
 }
 
+function ChainCell({ row }: { row: ActivityRowDto }) {
+  if (row.fromChainSlug !== null && row.toChainSlug !== null) {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <ChainBadge slug={row.fromChainSlug} />
+        <span className="route-arrow" aria-hidden="true">
+          {DIRECTIONAL_GLYPH}
+        </span>
+        <ChainBadge slug={row.toChainSlug} />
+      </span>
+    );
+  }
+  if (row.chainSlug === null) return <>—</>;
+  return <ChainBadge slug={row.chainSlug} />;
+}
+
 function AmountCell({ row }: { row: ActivityRowDto }) {
   if (row.amountInRaw === null || row.tokenInDecimals === null) {
     return <span className="text-text-muted">—</span>;
@@ -72,7 +88,7 @@ export function ActivityTable({ rows, emptyMessage }: { rows: ActivityRowDto[]; 
                 <AmountCell row={row} />
               </td>
               <td className="px-4 py-3 font-mono text-xs text-text-secondary">
-                {row.chainSlug === null ? "—" : <ChainBadge slug={row.chainSlug} />}
+                <ChainCell row={row} />
               </td>
               <td className="px-4 py-3 font-mono text-xs text-text-muted">{formatAge(row.ageSeconds)}</td>
             </tr>

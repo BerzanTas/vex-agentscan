@@ -1,7 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { fetchActivityFromBrowser, type ActivityFeedDto, type ActivityRowDto } from "../lib/api";
+import {
+  fetchActivityFromBrowser,
+  type ActivityFeedDto,
+  type ActivityFilters,
+  type ActivityRowDto,
+} from "../lib/api";
 import { ActivityTable } from "./ActivityTable";
 
 export type AccumulatedActivity = { rows: ActivityRowDto[]; nextCursor: string | null };
@@ -16,9 +21,11 @@ export function appendActivityPage(
 export function LoadMoreActivity({
   initialItems,
   initialCursor,
+  filters = {},
 }: {
   initialItems: ActivityRowDto[];
   initialCursor: string | null;
+  filters?: ActivityFilters;
 }) {
   const [accumulated, setAccumulated] = useState<AccumulatedActivity>({
     rows: initialItems,
@@ -33,7 +40,7 @@ export function LoadMoreActivity({
     setLoading(true);
     setLoadFailed(false);
     try {
-      const page = await fetchActivityFromBrowser(cursor);
+      const page = await fetchActivityFromBrowser(cursor, filters);
       setAccumulated((current) => appendActivityPage(current, page));
     } catch (error) {
       console.error(error);
