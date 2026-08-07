@@ -6,6 +6,7 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { AttestationChainRegistry, ChainReader } from "@agentscan/core";
 import { buildApp } from "../../app.js";
+import { revokeTokenAttestations } from "../../cli/attestation-revoke.js";
 import { loadConfig } from "../../config.js";
 import { startTestDb } from "../../testing/pg-harness.js";
 import { runAttestationVerificationPass, type AttestationVerificationLoopDeps } from "../../worker/attestation-loop.js";
@@ -169,6 +170,36 @@ describe("attestation verification worker pass", () => {
     const row = await verifyStatusOf(tokenAddress);
     expect(row.verify_status).toBe("unverified");
     expect(row.next_attempt_at.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it("closes the full AC2 loop: POST, worker pass verifies, GET shows verified, CLI revoke, GET shows revoked", async () => {
+    const tokenAddress = randomTokenAddress();
+    const { account, attestSignature } = await signedAttestation(trenchChainId, tokenAddress);
+    const txHash = `0x${"6".repeat(64)}`;
+
+    const postResponse = await attest({ chainId: Number(trenchChainId), tokenAddress, attestSignature, txHash });
+    expect(postResponse.statusCode).toBe(200);
+
+    const reader: ChainReader = {
+      getReceipt: async () => ({
+        status: "success",
+        blockTimestamp: new Date(),
+        blockNumber: 100n,
+        erc20Transfers: [],
+        logs: [tokenCreatedLog(tokenAddress, account.address)],
+      }),
+      getHeadBlockNumber: async () => 105n,
+    };
+    await runAttestationVerificationPass(loopDeps({ chainReaderFor: () => reader }));
+
+    const verifiedResponse = await getAttestation(trenchChainId, tokenAddress);
+    expect(verifiedResponse.json()).toMatchObject({ status: "verified", recommended: true, txHash });
+
+    const revokeOutcome = await revokeTokenAttestations(db.pool, trenchChainId, tokenAddress, "creator requested removal");
+    expect(revokeOutcome).toEqual({ revokedCount: 1 });
+
+    const revokedResponse = await getAttestation(trenchChainId, tokenAddress);
+    expect(revokedResponse.json()).toMatchObject({ status: "revoked", recommended: false, signals: [] });
   });
 
   it("never claims a revoked row even though it is still nominally unverified", async () => {

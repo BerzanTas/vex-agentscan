@@ -62,7 +62,7 @@ function attestationReceiptViewFrom(receipt: ReceiptView): AttestationReceiptVie
   };
 }
 
-function scheduleOrGiveUp(job: ClaimedAttestation, deps: AttestationVerifyDeps): AttestationJobOutcome {
+export function scheduleOrGiveUp(job: ClaimedAttestation, deps: AttestationVerifyDeps): AttestationJobOutcome {
   const backoff = nextBackoff({
     attempts: job.attemptCount,
     schedule: deps.config.ATTEST_BACKOFF_SCHEDULE,

@@ -1,28 +1,36 @@
 import type pg from "pg";
 import type { Logger } from "pino";
-import type { AttestationChainRegistry, ChainEntry, ChainReader, ResolveChain } from "@agentscan/core";
-import type { Config } from "../config.js";
-import { resolveAttestationOutcome, type AttestationJobOutcome } from "../attestation/verify-job.js";
+import {
+  resolveAttestationOutcome,
+  scheduleOrGiveUp,
+  type AttestationJobOutcome,
+  type AttestationVerifyDeps,
+} from "../attestation/verify-job.js";
 import { claimDueAttestations, type ClaimedAttestation } from "../repos/token-attestations-verify-repo.js";
 import { applyAttestationOutcome } from "./attestation-apply-outcome.js";
-import type { ChainReaderContext } from "./verify-job.js";
 
-export type AttestationVerificationLoopDeps = {
-  pool: pg.Pool;
-  config: Config;
-  now: () => Date;
-  resolveChain: ResolveChain;
-  chainReaderFor: (entry: ChainEntry, context: ChainReaderContext) => ChainReader;
-  chainRegistry: AttestationChainRegistry;
-  logger: Logger;
-};
+export type AttestationResolverDeps = AttestationVerifyDeps & { logger: Logger };
+
+export type AttestationVerificationLoopDeps = AttestationResolverDeps & { pool: pg.Pool };
 
 type ResolvedAttestation = { job: ClaimedAttestation; outcome: AttestationJobOutcome };
 
-async function resolveWithConcurrency(
+async function resolveOutcomeSafely(
+  job: ClaimedAttestation,
+  deps: AttestationResolverDeps,
+): Promise<AttestationJobOutcome> {
+  try {
+    return await resolveAttestationOutcome(job, deps);
+  } catch (error) {
+    deps.logger.warn({ err: error, attestationId: job.id }, "attestation resolve threw unexpectedly; rescheduling");
+    return scheduleOrGiveUp(job, deps);
+  }
+}
+
+export async function resolveWithConcurrency(
   jobs: ClaimedAttestation[],
   concurrency: number,
-  deps: AttestationVerificationLoopDeps,
+  deps: AttestationResolverDeps,
 ): Promise<ResolvedAttestation[]> {
   const resolved: ResolvedAttestation[] = [];
   let nextIndex = 0;
@@ -30,7 +38,7 @@ async function resolveWithConcurrency(
     while (nextIndex < jobs.length) {
       const job = jobs[nextIndex++];
       if (job === undefined) return;
-      resolved.push({ job, outcome: await resolveAttestationOutcome(job, deps) });
+      resolved.push({ job, outcome: await resolveOutcomeSafely(job, deps) });
     }
   });
   await Promise.all(workers);
