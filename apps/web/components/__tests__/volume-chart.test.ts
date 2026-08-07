@@ -7,6 +7,7 @@ import {
   formatBucketValue,
   formatTickMark,
   priceScaleModeFor,
+  priceScaleOptionsFor,
   resolveBucketSpan,
   timeScaleOptionsFor,
   tooltipPosition,
@@ -36,33 +37,78 @@ describe("baseSeriesOptions", () => {
   });
 });
 
+const SEPTEMBER_FIRST = Date.UTC(2026, 8, 1) / 1000;
+const NEXT_YEAR_START = Date.UTC(2027, 0, 1) / 1000;
+
 describe("formatTickMark", () => {
-  it("labels an intraday tick with the viewer's local hour in Warsaw", () => {
-    expect(formatTickMark(MIDNIGHT + 13 * HOUR, "hour", "Europe/Warsaw")).toBe("15:00");
+  it("labels a time mark with the viewer's local hour in Warsaw", () => {
+    expect(formatTickMark(MIDNIGHT + 13 * HOUR, "hour", TickMarkType.Time, "Europe/Warsaw")).toBe(
+      "15:00",
+    );
   });
 
-  it("labels the same intraday tick with the viewer's local hour in New York", () => {
-    expect(formatTickMark(MIDNIGHT + 13 * HOUR, "hour", "America/New_York")).toBe("09:00");
+  it("labels the same time mark with the viewer's local hour in New York", () => {
+    expect(
+      formatTickMark(MIDNIGHT + 13 * HOUR, "hour", TickMarkType.Time, "America/New_York"),
+    ).toBe("09:00");
   });
 
-  it("labels a local midnight as 00:00 even when it falls before UTC midnight", () => {
-    expect(formatTickMark(MIDNIGHT + 22 * HOUR, "hour", "Europe/Warsaw")).toBe("00:00");
+  it("labels a local midnight time mark as 00:00 even when it falls before UTC midnight", () => {
+    expect(formatTickMark(MIDNIGHT + 22 * HOUR, "hour", TickMarkType.Time, "Europe/Warsaw")).toBe(
+      "00:00",
+    );
   });
 
-  it("labels an intraday tick with the plain hour for a UTC viewer", () => {
-    expect(formatTickMark(MIDNIGHT + 13 * HOUR, "hour", "UTC")).toBe("13:00");
+  it("labels a time mark with the plain hour for a UTC viewer", () => {
+    expect(formatTickMark(MIDNIGHT + 13 * HOUR, "hour", TickMarkType.Time, "UTC")).toBe("13:00");
   });
 
-  it("labels a daily tick with its UTC date regardless of the viewer zone", () => {
-    expect(formatTickMark(MIDNIGHT, "day", "America/New_York")).toBe("Aug 6");
+  it("labels a day mark on an intraday series with the local date after the viewer's midnight", () => {
+    expect(
+      formatTickMark(MIDNIGHT + 24 * HOUR, "hour", TickMarkType.DayOfMonth, "Europe/Warsaw"),
+    ).toBe("Aug 7");
   });
 
-  it("keeps the date of the last UTC hour before midnight", () => {
-    expect(formatTickMark(MIDNIGHT + 23 * HOUR, "day")).toBe("Aug 6");
+  it("labels a day mark on an intraday series with the local date before the viewer's midnight", () => {
+    expect(
+      formatTickMark(MIDNIGHT + 24 * HOUR, "hour", TickMarkType.DayOfMonth, "America/New_York"),
+    ).toBe("Aug 6");
   });
 
-  it("rolls the date over at the UTC midnight boundary", () => {
-    expect(formatTickMark(MIDNIGHT + 24 * HOUR, "day")).toBe("Aug 7");
+  it("labels a day mark on a daily series with the UTC date regardless of the viewer zone", () => {
+    expect(formatTickMark(MIDNIGHT, "day", TickMarkType.DayOfMonth, "America/New_York")).toBe(
+      "Aug 6",
+    );
+  });
+
+  it("rolls the daily UTC date over at the UTC midnight boundary", () => {
+    expect(formatTickMark(MIDNIGHT + 24 * HOUR, "day", TickMarkType.DayOfMonth, "UTC")).toBe(
+      "Aug 7",
+    );
+  });
+
+  it("labels a month mark on an intraday series with the local month", () => {
+    expect(
+      formatTickMark(SEPTEMBER_FIRST, "hour", TickMarkType.Month, "America/New_York"),
+    ).toBe("Aug");
+  });
+
+  it("labels a month mark on a daily series with the UTC month", () => {
+    expect(formatTickMark(SEPTEMBER_FIRST, "day", TickMarkType.Month, "America/New_York")).toBe(
+      "Sep",
+    );
+  });
+
+  it("labels a year mark on an intraday series with the local year", () => {
+    expect(formatTickMark(NEXT_YEAR_START, "hour", TickMarkType.Year, "America/New_York")).toBe(
+      "2026",
+    );
+  });
+
+  it("labels a year mark on a daily series with the UTC year", () => {
+    expect(formatTickMark(NEXT_YEAR_START, "day", TickMarkType.Year, "America/New_York")).toBe(
+      "2027",
+    );
   });
 });
 
@@ -97,6 +143,16 @@ describe("timeScaleOptionsFor", () => {
 
     expect(label).toBe("Aug 7");
   });
+
+  it("labels a day mark on an intraday series with a date instead of an hour", () => {
+    const label = timeScaleOptionsFor("hour", "Europe/Warsaw").tickMarkFormatter?.(
+      (MIDNIGHT + 24 * HOUR) as Time,
+      TickMarkType.DayOfMonth,
+      "en-US",
+    );
+
+    expect(label).toBe("Aug 7");
+  });
 });
 
 describe("crosshairTimeFormatter", () => {
@@ -120,6 +176,23 @@ describe("priceScaleModeFor", () => {
 
   it("maps the log choice to the logarithmic price scale mode", () => {
     expect(priceScaleModeFor("log")).toBe(PriceScaleMode.Logarithmic);
+  });
+});
+
+describe("priceScaleOptionsFor", () => {
+  it("keeps the same top headroom in both modes so toggling never jumps the layout", () => {
+    expect(priceScaleOptionsFor("linear").scaleMargins).toEqual({ top: 0.1, bottom: 0.1 });
+    expect(priceScaleOptionsFor("log").scaleMargins).toEqual({ top: 0.1, bottom: 0.1 });
+  });
+
+  it("hides edge labels that would render partially in both modes", () => {
+    expect(priceScaleOptionsFor("linear").entireTextOnly).toBe(true);
+    expect(priceScaleOptionsFor("log").entireTextOnly).toBe(true);
+  });
+
+  it("carries the chosen scale mode", () => {
+    expect(priceScaleOptionsFor("linear").mode).toBe(PriceScaleMode.Normal);
+    expect(priceScaleOptionsFor("log").mode).toBe(PriceScaleMode.Logarithmic);
   });
 });
 

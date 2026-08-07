@@ -5,11 +5,13 @@ import {
   createChart,
   LineStyle,
   PriceScaleMode,
+  TickMarkType,
   type DeepPartial,
   type ChartOptions,
   type IChartApi,
   type ISeriesApi,
   type MouseEventParams,
+  type PriceScaleOptions,
   type SeriesPartialOptions,
   type Time,
   type TimeScaleOptions,
@@ -121,20 +123,28 @@ export function formatBucketMoment(
   return DAILY_MOMENT_FORMAT.format(moment);
 }
 
-const TICK_DATE_FORMAT = new Intl.DateTimeFormat("en", {
-  timeZone: "UTC",
-  month: "short",
-  day: "numeric",
-});
+const tickDateFormat = zoneFormatFamily({ month: "short", day: "numeric" });
+
+const tickMonthFormat = zoneFormatFamily({ month: "short" });
+
+const tickYearFormat = zoneFormatFamily({ year: "numeric" });
+
+function tickZoneFor(span: BucketSpan, viewerZone: string): string {
+  return span === "hour" ? viewerZone : "UTC";
+}
 
 export function formatTickMark(
   bucketStart: number,
   span: BucketSpan,
+  tickMarkType: TickMarkType,
   timeZone: string = viewerTimeZone(),
 ): string {
+  const zone = tickZoneFor(span, timeZone);
   const moment = new Date(bucketStart * 1000);
-  if (span === "hour") return hourlyTickFormat(timeZone).format(moment);
-  return TICK_DATE_FORMAT.format(moment);
+  if (tickMarkType === TickMarkType.Year) return tickYearFormat(zone).format(moment);
+  if (tickMarkType === TickMarkType.Month) return tickMonthFormat(zone).format(moment);
+  if (tickMarkType === TickMarkType.DayOfMonth) return tickDateFormat(zone).format(moment);
+  return hourlyTickFormat(zone).format(moment);
 }
 
 type ChartTimeScaleOptions = Pick<
@@ -149,8 +159,8 @@ export function timeScaleOptionsFor(
   return {
     timeVisible: span === "hour",
     secondsVisible: false,
-    tickMarkFormatter: (time: Time) =>
-      typeof time === "number" ? formatTickMark(time, span, timeZone) : null,
+    tickMarkFormatter: (time: Time, tickMarkType: TickMarkType) =>
+      typeof time === "number" ? formatTickMark(time, span, tickMarkType, timeZone) : null,
   };
 }
 
@@ -163,6 +173,16 @@ export function crosshairTimeFormatter(
 
 export function priceScaleModeFor(scale: ChartScale): PriceScaleMode {
   return scale === "log" ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal;
+}
+
+const PRICE_SCALE_MARGINS = { top: 0.1, bottom: 0.1 };
+
+export function priceScaleOptionsFor(scale: ChartScale): DeepPartial<PriceScaleOptions> {
+  return {
+    mode: priceScaleModeFor(scale),
+    scaleMargins: PRICE_SCALE_MARGINS,
+    entireTextOnly: true,
+  };
 }
 
 export function formatBucketValue(point: ChartPointDto, metric: ChartMetric): string {
@@ -429,7 +449,7 @@ export function VolumeChart({
   useEffect(() => {
     const chart = chartRef.current;
     if (chart === null) return;
-    chart.applyOptions({ rightPriceScale: { mode: priceScaleModeFor(scale) } });
+    chart.applyOptions({ rightPriceScale: priceScaleOptionsFor(scale) });
     scheduleLiveDot();
   }, [scale, scheduleLiveDot]);
 
