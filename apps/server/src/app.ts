@@ -1,3 +1,4 @@
+import { resolveBridgeChain } from "@agentscan/core";
 import { fastify, type FastifyInstance } from "fastify";
 import type pg from "pg";
 import type { Config } from "./config.js";
@@ -19,7 +20,16 @@ export type ResolveChain = (key: {
   chainId: bigint;
 }) => ChainEntry | null;
 
-export type Deps = { pool: pg.Pool; config: Config; resolveChain: ResolveChain };
+export type ResolveBridgeChain = (protocol: string, chainId: bigint) => ChainEntry | null;
+
+export type Deps = {
+  pool: pg.Pool;
+  config: Config;
+  resolveChain: ResolveChain;
+  resolveBridgeChain?: ResolveBridgeChain;
+};
+
+export type WiredDeps = Deps & { resolveBridgeChain: ResolveBridgeChain };
 
 export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   const app = fastify({
@@ -31,6 +41,10 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   await app.register(errorEnvelope, {
     poolTimeoutRetryAfterSec: deps.config.POOL_TIMEOUT_RETRY_AFTER_SEC,
   });
-  for (const plugin of routePlugins) await app.register(plugin, deps);
+  const wiredDeps: WiredDeps = {
+    ...deps,
+    resolveBridgeChain: deps.resolveBridgeChain ?? resolveBridgeChain,
+  };
+  for (const plugin of routePlugins) await app.register(plugin, wiredDeps);
   return app;
 }

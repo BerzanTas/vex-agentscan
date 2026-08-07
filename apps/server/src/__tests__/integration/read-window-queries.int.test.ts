@@ -50,8 +50,15 @@ describe("zapytania okienkowe", () => {
       confirmedDaysAgo: 2,
     });
 
-    expect(await agentLeaderboard(pool)).toEqual([
-      { agentHash: "c".repeat(64), volumeUsd: "100.00", txCount: 1 },
+    expect(await agentLeaderboard(pool, 30 * 86_400)).toEqual([
+      {
+        agentHash: "c".repeat(64),
+        volumeUsd: "100.00",
+        txCount: 1,
+        protocolCount: 1,
+        chainCount: 1,
+        lastSeenSeconds: expect.any(Number),
+      },
     ]);
   });
 });

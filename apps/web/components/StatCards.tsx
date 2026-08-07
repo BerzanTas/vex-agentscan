@@ -1,57 +1,104 @@
-import type { StatsDto } from "../lib/api";
-import { formatUsdEstimate } from "../lib/format";
+import type { ChartPointDto, StatsDto } from "../lib/api";
+import { formatUsdCompact, formatUsdEstimate } from "../lib/format";
+import { cumulativeSeriesEndingAt, txValues, volumeValues } from "../lib/stat-series";
 import { CountUpValue, type CountUpKind } from "./CountUpValue";
+import { CursorLight } from "./CursorLight";
+import { StatSparkline } from "./StatSparkline";
 
-type StatCard = {
+const TREND_WINDOW = "30D";
+const AGENT_WINDOW = "7D";
+
+type StatFooter = { trend: number[] } | { window: string };
+
+type StatCell = {
   label: string;
   target: number;
   finalText: string;
-  kind: CountUpKind;
-  estimate: boolean;
+  exactText: string;
+  countUp: CountUpKind;
+  unit?: string;
+  footer: StatFooter;
 };
 
-function usdCard(label: string, usdEstimate: string): StatCard {
+function usdCell(label: string, usdEstimate: string, trend: number[]): StatCell {
   return {
     label,
     target: Number(usdEstimate),
-    finalText: `$${formatUsdEstimate(usdEstimate)}`,
-    kind: "usd",
-    estimate: true,
+    finalText: `$${formatUsdCompact(usdEstimate)}`,
+    exactText: `$${formatUsdEstimate(usdEstimate)}`,
+    countUp: "usdCompact",
+    unit: "est.",
+    footer: { trend },
   };
 }
 
-function countCard(label: string, count: number): StatCard {
+function countCell(label: string, count: number, footer: StatFooter): StatCell {
   return {
     label,
     target: count,
     finalText: count.toLocaleString("en-US"),
-    kind: "count",
-    estimate: false,
+    exactText: count.toLocaleString("en-US"),
+    countUp: "count",
+    footer,
   };
 }
 
-function cardsFrom(stats: StatsDto): StatCard[] {
+function cellsFrom(stats: StatsDto, series: ChartPointDto[]): StatCell[] {
+  const volume = volumeValues(series);
+  const tx = txValues(series);
   return [
-    usdCard("Daily volume", stats.dailyVolumeUsd),
-    usdCard("Total volume", stats.totalVolumeUsd),
-    countCard("Daily txns", stats.dailyTx),
-    countCard("Total txns", stats.totalTx),
-    countCard("Active agents (7d)", stats.activeAgents7d),
+    usdCell("Daily volume", stats.dailyVolumeUsd, volume),
+    usdCell(
+      "Total volume",
+      stats.totalVolumeUsd,
+      cumulativeSeriesEndingAt(volume, Number(stats.totalVolumeUsd)),
+    ),
+    countCell("Daily txns", stats.dailyTx, { trend: tx }),
+    countCell("Total txns", stats.totalTx, {
+      trend: cumulativeSeriesEndingAt(tx, stats.totalTx),
+    }),
+    countCell("Active agents", stats.activeAgents7d, { window: AGENT_WINDOW }),
   ];
 }
 
-export function StatCards({ stats }: { stats: StatsDto }) {
+function StatCellFooter({ label, footer }: { label: string; footer: StatFooter }) {
+  if ("window" in footer) {
+    return (
+      <div className="stat-cell-footer">
+        <span className="live-dot" />
+        <span className="stat-cell-window">{footer.window} window</span>
+      </div>
+    );
+  }
   return (
-    <section className="section-enter grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-      {cardsFrom(stats).map((card) => (
-        <div key={card.label} className="card card-hover stat-card p-4">
-          <p className="text-xs text-text-muted">{card.label}</p>
-          <p className="mt-2 font-mono text-xl text-text-primary">
-            <CountUpValue target={card.target} finalText={card.finalText} kind={card.kind} />
-            {card.estimate && <span className="ml-1 text-xs text-text-muted">est.</span>}
-          </p>
+    <div className="stat-cell-footer">
+      <StatSparkline values={footer.trend} label={`${label} over ${TREND_WINDOW}`} />
+      <span className="stat-cell-window">{TREND_WINDOW}</span>
+    </div>
+  );
+}
+
+export function StatCards({ stats, series }: { stats: StatsDto; series: ChartPointDto[] }) {
+  return (
+    <section className="section-enter">
+      <CursorLight className="stat-console">
+        <div className="stat-console-grid">
+          {cellsFrom(stats, series).map((cell) => (
+            <div key={cell.label} className="stat-cell">
+              <span className="stat-cell-label">{cell.label}</span>
+              <p className="stat-cell-value" title={cell.exactText}>
+                <CountUpValue
+                  target={cell.target}
+                  finalText={cell.finalText}
+                  kind={cell.countUp}
+                />
+                {cell.unit !== undefined && <span className="stat-cell-unit">{cell.unit}</span>}
+              </p>
+              <StatCellFooter label={cell.label} footer={cell.footer} />
+            </div>
+          ))}
         </div>
-      ))}
+      </CursorLight>
     </section>
   );
 }

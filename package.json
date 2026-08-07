@@ -7,6 +7,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "dev": "docker compose -f deploy/compose.yml --env-file deploy/.env.smoke up -d && pnpm --filter @agentscan/web dev",
     "lint": "pnpm -r exec tsc --noEmit && eslint .",
     "test": "vitest run --project unit",
     "test:int": "vitest run --project integration",

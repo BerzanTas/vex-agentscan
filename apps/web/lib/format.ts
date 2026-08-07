@@ -23,11 +23,25 @@ function fractionDigitsFor(whole: string, fraction: string): number {
   return leadingZeroCount + 4;
 }
 
+const COMPACT_USD_THRESHOLD = 1000;
+
+const compactUsdFormatter = new Intl.NumberFormat("en", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
 export function formatUsdEstimate(usd: string): string {
   const [whole = "0", fraction = ""] = usd.split(".");
   const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  const cents = fraction.slice(0, 2).replace(/0+$/, "");
-  return cents === "" ? grouped : `${grouped}.${cents}`;
+  return `${grouped}.${fraction.slice(0, 2).padEnd(2, "0")}`;
+}
+
+export function formatUsdCompact(usd: string): string {
+  const value = Number(usd);
+  if (!Number.isFinite(value) || Math.abs(value) < COMPACT_USD_THRESHOLD) {
+    return formatUsdEstimate(usd);
+  }
+  return compactUsdFormatter.format(value);
 }
 
 export function formatAge(ageSeconds: number): string {
@@ -35,4 +49,15 @@ export function formatAge(ageSeconds: number): string {
   if (ageSeconds < 3600) return `${Math.floor(ageSeconds / 60)}m`;
   if (ageSeconds < 86400) return `${Math.floor(ageSeconds / 3600)}h`;
   return `${Math.floor(ageSeconds / 86400)}d`;
+}
+
+export function formatLatency(seconds: number): string {
+  if (seconds < 1) return `${seconds.toFixed(2)}s`;
+  if (seconds < 60) return `${seconds.toFixed(1)}s`;
+  const wholeMinutes = Math.floor(seconds / 60);
+  const remainder = Math.round(seconds - wholeMinutes * 60);
+  if (wholeMinutes < 60) return remainder === 0 ? `${wholeMinutes}m` : `${wholeMinutes}m ${remainder}s`;
+  const wholeHours = Math.floor(wholeMinutes / 60);
+  const leftoverMinutes = wholeMinutes - wholeHours * 60;
+  return leftoverMinutes === 0 ? `${wholeHours}h` : `${wholeHours}h ${leftoverMinutes}m`;
 }

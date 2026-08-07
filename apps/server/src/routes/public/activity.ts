@@ -1,7 +1,15 @@
 import type { FastifyPluginAsync } from "fastify";
-import type { Deps } from "../../app.js";
+import { chainKeysForSlug } from "@agentscan/core";
+import type { WiredDeps } from "../../app.js";
 import { toActivityRowDto, type ActivityFeedDto } from "../../public-dto.js";
-import { visibleActivityPage, type ActivityDbRow, type FeedCursor } from "../../repos/read-repo.js";
+import {
+  parseActivityFilters,
+  visibleActivityPage,
+  type ActivityDbRow,
+  type ChainFilterPairs,
+  type FeedCursor,
+  type RawActivityFilters,
+} from "../../repos/read-repo.js";
 
 function decodeCursor(value: string): FeedCursor | null {
   try {
@@ -22,8 +30,18 @@ function encodeCursor(row: ActivityDbRow): string {
   return Buffer.from(payload, "utf8").toString("base64url");
 }
 
-export const activityRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
-  app.get<{ Querystring: { cursor?: string } }>("/api/activity", async (request, reply) => {
+function chainFilterPairsOf(canonicalSlug: string): ChainFilterPairs | null {
+  const [first, ...rest] = chainKeysForSlug(canonicalSlug).map(({ chainFamily, chainId }) => ({
+    chainFamily,
+    chainId,
+  }));
+  return first === undefined ? null : [first, ...rest];
+}
+
+type ActivityQuerystring = RawActivityFilters & { cursor?: string };
+
+export const activityRoutes: FastifyPluginAsync<WiredDeps> = async (app, deps) => {
+  app.get<{ Querystring: ActivityQuerystring }>("/api/activity", async (request, reply) => {
     let cursor: FeedCursor | null = null;
     if (request.query.cursor !== undefined) {
       cursor = decodeCursor(request.query.cursor);
@@ -31,12 +49,22 @@ export const activityRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
         return reply.status(400).send({ error: { code: "invalid_cursor", message: "malformed cursor" } });
       }
     }
+    const filters = parseActivityFilters(request.query);
+    const chainPairs = filters.chain === null ? null : chainFilterPairsOf(filters.chain);
     const pageSize = deps.config.PUBLIC_FEED_PAGE_SIZE;
-    const rows = await visibleActivityPage(deps.pool, cursor, pageSize + 1);
+    const rows = await visibleActivityPage(deps.pool, {
+      cursor,
+      limit: pageSize + 1,
+      kind: filters.kind,
+      protocol: filters.protocol,
+      chainPairs,
+      status: filters.status,
+      verification: filters.verification,
+    });
     const pageRows = rows.slice(0, pageSize);
     const lastRow = pageRows.at(-1);
     const feed: ActivityFeedDto = {
-      items: pageRows.map((row) => toActivityRowDto(row, deps.resolveChain)),
+      items: pageRows.map((row) => toActivityRowDto(row, deps.resolveChain, deps.resolveBridgeChain)),
       nextCursor: rows.length > pageSize && lastRow !== undefined ? encodeCursor(lastRow) : null,
     };
     return feed;

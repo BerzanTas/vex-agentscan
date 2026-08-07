@@ -1,4 +1,5 @@
 import type pg from "pg";
+import type { ChainFamily, ChartRangePlan } from "@agentscan/core";
 
 export type ActivityDbRow = {
   id: bigint;
@@ -117,20 +118,119 @@ function singleRow<T extends pg.QueryResultRow>(result: pg.QueryResult<T>): T {
   return row;
 }
 
+export type ActivityKindFilter = "swap" | "bridge";
+export type ActivityStatusFilter = "pending" | "confirmed" | "definitively_failed";
+export type ActivityVerificationFilter = "verified_full" | "verified_basic" | "pending";
+
+export type ActivityFilters = {
+  kind: ActivityKindFilter | null;
+  protocol: string | null;
+  chain: string | null;
+  status: ActivityStatusFilter | null;
+  verification: ActivityVerificationFilter | null;
+};
+
+export type RawActivityFilters = { [Dimension in keyof ActivityFilters]?: unknown };
+
+const ACTIVITY_KIND_FILTERS: readonly ActivityKindFilter[] = ["swap", "bridge"];
+const ACTIVITY_STATUS_FILTERS: readonly ActivityStatusFilter[] = [
+  "pending",
+  "confirmed",
+  "definitively_failed",
+];
+const ACTIVITY_VERIFICATION_FILTERS: readonly ActivityVerificationFilter[] = [
+  "verified_full",
+  "verified_basic",
+  "pending",
+];
+
+const VERIFICATION_FILTER_STATES: Record<ActivityVerificationFilter, string[]> = {
+  verified_full: ["verified_full"],
+  verified_basic: ["verified_basic"],
+  pending: ["none", "queued"],
+};
+
+function trimmedText(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+function offeredValue<Value extends string>(offered: readonly Value[], raw: unknown): Value | null {
+  const text = trimmedText(raw);
+  return offered.find((value) => value === text) ?? null;
+}
+
+export function parseActivityFilters(raw: RawActivityFilters): ActivityFilters {
+  return {
+    kind: offeredValue(ACTIVITY_KIND_FILTERS, raw.kind),
+    protocol: trimmedText(raw.protocol),
+    chain: trimmedText(raw.chain),
+    status: offeredValue(ACTIVITY_STATUS_FILTERS, raw.status),
+    verification: offeredValue(ACTIVITY_VERIFICATION_FILTERS, raw.verification),
+  };
+}
+
+export type ChainFilterPair = { chainFamily: ChainFamily; chainId: bigint };
+
+export type ChainFilterPairs = [ChainFilterPair, ...ChainFilterPair[]];
+
+export type ActivityFeedQuery = {
+  cursor: FeedCursor | null;
+  limit: number;
+  kind: ActivityKindFilter | null;
+  protocol: string | null;
+  chainPairs: ChainFilterPairs | null;
+  status: ActivityStatusFilter | null;
+  verification: ActivityVerificationFilter | null;
+};
+
+type BindParam = (value: unknown) => string;
+
+function chainPairsPredicate(pairs: ChainFilterPairs, bind: BindParam): string {
+  const matches = pairs.map(
+    (pair) => `(a.chain_family = ${bind(pair.chainFamily)} AND a.chain_id = ${bind(pair.chainId.toString())}::bigint)`,
+  );
+  return `(${matches.join(" OR ")})`;
+}
+
+function feedFilterPredicates(query: ActivityFeedQuery, bind: BindParam): string[] {
+  const predicates: string[] = [];
+  if (query.kind !== null) predicates.push(`a.kind = ${bind(query.kind)}`);
+  if (query.protocol !== null) predicates.push(`a.protocol = ${bind(query.protocol)}`);
+  if (query.status !== null) predicates.push(`a.status = ${bind(query.status)}`);
+  if (query.verification !== null) {
+    predicates.push(
+      `a.verification_state = ANY(${bind(VERIFICATION_FILTER_STATES[query.verification])}::text[])`,
+    );
+  }
+  if (query.chainPairs !== null) predicates.push(chainPairsPredicate(query.chainPairs, bind));
+  return predicates;
+}
+
 export async function visibleActivityPage(
   pool: pg.Pool,
-  cursor: FeedCursor | null,
-  limit: number,
+  query: ActivityFeedQuery,
 ): Promise<ActivityDbRow[]> {
+  const params: unknown[] = [
+    query.cursor?.receivedAt ?? null,
+    query.cursor?.id.toString() ?? null,
+    query.limit,
+  ];
+  const bind: BindParam = (value) => `$${params.push(value)}`;
+  const filterSql = feedFilterPredicates(query, bind)
+    .map((predicate) => `AND ${predicate}`)
+    .join("\n       ");
   const result = await pool.query<ActivityQueryRow>(
     `SELECT ${ACTIVITY_COLUMNS}
      FROM activities a
      JOIN agents ag ON ag.agent_hash = a.agent_hash
      WHERE ${VISIBILITY_PREDICATE}
        AND ($1::timestamptz IS NULL OR (a.received_at, a.id) < ($1::timestamptz, $2::bigint))
+       ${filterSql}
      ORDER BY a.received_at DESC, a.id DESC
      LIMIT $3`,
-    [cursor?.receivedAt ?? null, cursor?.id.toString() ?? null, limit],
+    params,
   );
   return result.rows.map(activityDbRowFrom);
 }
@@ -209,48 +309,207 @@ export async function countActiveAgents7d(pool: pg.Pool): Promise<number> {
   return singleRow(result).active_agents;
 }
 
-export type ChartDayRead = { day: string; volumeUsd: string; txCount: number };
+export type ChartBucketRead = { bucketStart: number; volumeUsd: string; txCount: number };
 
-export async function chartByDay(pool: pg.Pool, days: number): Promise<ChartDayRead[]> {
-  const result = await pool.query<{ day: string; volume_usd: string; tx_count: number }>(
-    `SELECT day::text AS day, SUM(volume_usd)::text AS volume_usd, SUM(tx_count)::int AS tx_count
-     FROM daily_aggregates
-     WHERE day > (now() AT TIME ZONE 'utc')::date - $1::int
-     GROUP BY day
-     ORDER BY day`,
-    [days],
-  );
-  return result.rows.map((row) => ({ day: row.day, volumeUsd: row.volume_usd, txCount: row.tx_count }));
+type ChartBucketQueryRow = { bucket_start: string; volume_usd: string; tx_count: number };
+
+const VERIFIED_VOLUME_ROLES = "('swap','bridge_deposit')";
+
+function chartBucketFrom(row: ChartBucketQueryRow): ChartBucketRead {
+  return {
+    bucketStart: Number(row.bucket_start),
+    volumeUsd: row.volume_usd,
+    txCount: row.tx_count,
+  };
 }
 
-export type AgentVolumeRead = { agentHash: string; volumeUsd: string; txCount: number };
+async function bucketsFromActivities(
+  pool: pg.Pool,
+  bucketSeconds: number,
+  bucketCount: number,
+): Promise<ChartBucketRead[]> {
+  const result = await pool.query<ChartBucketQueryRow>(
+    `WITH latest AS (
+       SELECT (floor(extract(epoch FROM now()) / $1::bigint) * $1::bigint)::bigint AS bucket_start
+     ),
+     span AS (
+       SELECT bucket_start AS last_start,
+              bucket_start - $1::bigint * ($2::int - 1) AS first_start
+       FROM latest
+     ),
+     series AS (
+       SELECT generate_series(first_start, last_start, $1::bigint) AS bucket_start FROM span
+     ),
+     bucketed AS (
+       SELECT (floor(extract(epoch FROM COALESCE(a.client_confirmed_at, a.verified_at)) / $1::bigint)
+                 * $1::bigint)::bigint AS bucket_start,
+              SUM(CASE WHEN a.event_role IN ${VERIFIED_VOLUME_ROLES}
+                       THEN COALESCE(a.usd_in_est, 0) ELSE 0 END) AS volume_usd,
+              COUNT(*)::int AS tx_count
+       FROM activities a
+       WHERE a.verification_state IN ('verified_full','verified_basic')
+         AND COALESCE(a.client_confirmed_at, a.verified_at) >= to_timestamp((SELECT first_start FROM span))
+       GROUP BY 1
+     )
+     SELECT s.bucket_start::text AS bucket_start,
+            COALESCE(b.volume_usd, 0)::text AS volume_usd,
+            COALESCE(b.tx_count, 0)::int AS tx_count
+     FROM series s
+     LEFT JOIN bucketed b ON b.bucket_start = s.bucket_start
+     ORDER BY s.bucket_start`,
+    [bucketSeconds, bucketCount],
+  );
+  return result.rows.map(chartBucketFrom);
+}
 
-export async function agentLeaderboard(pool: pg.Pool): Promise<AgentVolumeRead[]> {
-  const result = await pool.query<{ agent_hash: string; volume_usd: string; tx_count: number }>(
-    `SELECT agent_hash, COALESCE(SUM(usd_in_est), 0)::text AS volume_usd, COUNT(*)::int AS tx_count
-     FROM activities
-     WHERE verification_state IN ('verified_full','verified_basic')
-       AND event_role IN ('swap','bridge_deposit')
-       AND client_confirmed_at > now() - interval '30 days'
-     GROUP BY agent_hash
-     ORDER BY COALESCE(SUM(usd_in_est), 0) DESC
+async function bucketsFromAggregates(pool: pg.Pool, days: number | null): Promise<ChartBucketRead[]> {
+  const result = await pool.query<ChartBucketQueryRow>(
+    `WITH bounds AS (
+       SELECT COALESCE(
+                CASE WHEN $1::int IS NULL THEN (SELECT MIN(day) FROM daily_aggregates)
+                     ELSE (now() AT TIME ZONE 'utc')::date - ($1::int - 1) END,
+                (now() AT TIME ZONE 'utc')::date
+              ) AS first_day
+     ),
+     series AS (
+       SELECT generate_series((SELECT first_day FROM bounds)::timestamp,
+                              (now() AT TIME ZONE 'utc')::date::timestamp,
+                              interval '1 day')::date AS day
+     ),
+     summed AS (
+       SELECT day, SUM(volume_usd) AS volume_usd, SUM(tx_count)::int AS tx_count
+       FROM daily_aggregates
+       GROUP BY day
+     )
+     SELECT extract(epoch FROM s.day::timestamp AT TIME ZONE 'utc')::bigint::text AS bucket_start,
+            COALESCE(d.volume_usd, 0)::text AS volume_usd,
+            COALESCE(d.tx_count, 0)::int AS tx_count
+     FROM series s
+     LEFT JOIN summed d ON d.day = s.day
+     ORDER BY s.day`,
+    [days],
+  );
+  return result.rows.map(chartBucketFrom);
+}
+
+export async function chartBuckets(pool: pg.Pool, plan: ChartRangePlan): Promise<ChartBucketRead[]> {
+  if (plan.source === "activities") {
+    return bucketsFromActivities(pool, plan.bucketSeconds, plan.bucketCount);
+  }
+  return bucketsFromAggregates(pool, plan.days);
+}
+
+const ACTIVITY_TIME_ANCHOR = "COALESCE(a.client_confirmed_at, a.verified_at)";
+const VERIFIED_STATES_PREDICATE = "a.verification_state IN ('verified_full','verified_basic')";
+const USD_IN_SUM = "COALESCE(SUM(a.usd_in_est), 0)";
+const VOLUME_LEG_USD_SUM = `COALESCE(SUM(a.usd_in_est) FILTER (WHERE a.event_role IN ${VERIFIED_VOLUME_ROLES}), 0)`;
+const DISTINCT_CHAIN_COUNT = "COUNT(DISTINCT (a.chain_family, a.chain_id))::int";
+
+function windowPredicate(paramIndex: number): string {
+  const seconds = `$${paramIndex}::int`;
+  return `(${seconds} IS NULL OR ${ACTIVITY_TIME_ANCHOR} > now() - make_interval(secs => ${seconds}))`;
+}
+
+export type AgentVolumeRead = {
+  agentHash: string;
+  volumeUsd: string;
+  txCount: number;
+  protocolCount: number;
+  chainCount: number;
+  lastSeenSeconds: number;
+};
+
+export async function agentLeaderboard(
+  pool: pg.Pool,
+  windowSeconds: number | null,
+): Promise<AgentVolumeRead[]> {
+  const result = await pool.query<{
+    agent_hash: string;
+    volume_usd: string;
+    tx_count: number;
+    protocol_count: number;
+    chain_count: number;
+    last_seen_seconds: number;
+  }>(
+    `SELECT a.agent_hash,
+            ${USD_IN_SUM}::text AS volume_usd,
+            COUNT(*)::int AS tx_count,
+            COUNT(DISTINCT a.protocol)::int AS protocol_count,
+            ${DISTINCT_CHAIN_COUNT} AS chain_count,
+            GREATEST(0, floor(extract(epoch FROM
+              now() - COALESCE(MAX(${ACTIVITY_TIME_ANCHOR}), MAX(a.received_at)))))::int AS last_seen_seconds
+     FROM activities a
+     WHERE ${VERIFIED_STATES_PREDICATE}
+       AND a.event_role IN ${VERIFIED_VOLUME_ROLES}
+       AND ${windowPredicate(1)}
+     GROUP BY a.agent_hash
+     ORDER BY ${USD_IN_SUM} DESC, a.agent_hash
      LIMIT 10`,
+    [windowSeconds],
   );
   return result.rows.map((row) => ({
     agentHash: row.agent_hash,
     volumeUsd: row.volume_usd,
     txCount: row.tx_count,
+    protocolCount: row.protocol_count,
+    chainCount: row.chain_count,
+    lastSeenSeconds: row.last_seen_seconds,
   }));
 }
 
 export type ProtocolRead = { protocol: string; volumeUsd: string; txCount: number };
 
-export async function protocolRanking(pool: pg.Pool): Promise<ProtocolRead[]> {
+export type ProtocolRankingRead = ProtocolRead & {
+  chainCount: number;
+  swapTxCount: number;
+  bridgeTxCount: number;
+};
+
+export async function protocolTotals(pool: pg.Pool): Promise<ProtocolRead[]> {
   const result = await pool.query<{ protocol: string; volume_usd: string; tx_count: number }>(
     `SELECT protocol, SUM(volume_usd)::text AS volume_usd, SUM(tx_count)::int AS tx_count
      FROM daily_aggregates
      GROUP BY protocol
      ORDER BY SUM(volume_usd) DESC`,
   );
-  return result.rows.map((row) => ({ protocol: row.protocol, volumeUsd: row.volume_usd, txCount: row.tx_count }));
+  return result.rows.map((row) => ({
+    protocol: row.protocol,
+    volumeUsd: row.volume_usd,
+    txCount: row.tx_count,
+  }));
+}
+
+export async function protocolRanking(
+  pool: pg.Pool,
+  windowSeconds: number | null,
+): Promise<ProtocolRankingRead[]> {
+  const result = await pool.query<{
+    protocol: string;
+    volume_usd: string;
+    tx_count: number;
+    chain_count: number;
+    swap_tx_count: number;
+    bridge_tx_count: number;
+  }>(
+    `SELECT a.protocol,
+            ${VOLUME_LEG_USD_SUM}::text AS volume_usd,
+            COUNT(*)::int AS tx_count,
+            ${DISTINCT_CHAIN_COUNT} AS chain_count,
+            (COUNT(*) FILTER (WHERE a.kind = 'swap'))::int AS swap_tx_count,
+            (COUNT(*) FILTER (WHERE a.kind = 'bridge'))::int AS bridge_tx_count
+     FROM activities a
+     WHERE ${VERIFIED_STATES_PREDICATE}
+       AND ${windowPredicate(1)}
+     GROUP BY a.protocol
+     ORDER BY ${VOLUME_LEG_USD_SUM} DESC, a.protocol`,
+    [windowSeconds],
+  );
+  return result.rows.map((row) => ({
+    protocol: row.protocol,
+    volumeUsd: row.volume_usd,
+    txCount: row.tx_count,
+    chainCount: row.chain_count,
+    swapTxCount: row.swap_tx_count,
+    bridgeTxCount: row.bridge_tx_count,
+  }));
 }

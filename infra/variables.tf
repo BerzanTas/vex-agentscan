@@ -61,7 +61,7 @@ variable "backup_retention_days" {
 
   validation {
     condition     = var.backup_retention_days <= 30
-    error_message = "Strona /methodology deklaruje retencję kopii co najwyżej 30 dni."
+    error_message = "Polityka retencji kopii zapasowych: co najwyzej 30 dni."
   }
 }
 
@@ -71,6 +71,6 @@ variable "log_retention_days" {
 
   validation {
     condition     = var.log_retention_days <= 30
-    error_message = "Strona /methodology deklaruje retencję logów dostępowych co najwyżej 30 dni."
+    error_message = "Polityka retencji logow dostepowych: co najwyzej 30 dni."
   }
 }

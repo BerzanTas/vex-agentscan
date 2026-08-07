@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChainBadge } from "../../../components/ChainBadge";
 import { LegsTable } from "../../../components/LegsTable";
+import { PageHeading } from "../../../components/PageHeading";
+import { PanelHeading } from "../../../components/PanelHeading";
 import { StatusPill } from "../../../components/StatusPill";
 import { StatusTimeline } from "../../../components/StatusTimeline";
 import { TxHashChip } from "../../../components/TxHashChip";
@@ -44,12 +46,12 @@ function networkLabel(detail: TxDetailDto): string {
 export async function generateMetadata({ params }: TxPageProps): Promise<Metadata> {
   const { publicId } = await params;
   const detail = await fetchTxDetail(publicId);
-  if (detail === null) return { title: "Transaction not found — AgentScan" };
+  if (detail === null) return { title: "Transaction not found - AgentScan" };
   const description = [amountSummary(detail), statusLabel(detail.status), networkLabel(detail)]
     .filter((part) => part !== null)
     .join(" · ");
   return {
-    title: `${pairLabel(detail)} via ${detail.protocol} — AgentScan`,
+    title: `${pairLabel(detail)} via ${detail.protocol} - AgentScan`,
     openGraph: { description },
   };
 }
@@ -62,11 +64,11 @@ export default async function TxDetailPage({ params }: TxPageProps) {
   return (
     <div className="flex flex-col gap-8">
       <div className="section-enter flex flex-col gap-4">
-        <Link href="/" className="text-sm text-text-secondary hover:text-text-primary">
+        <Link href="/activity" className="text-sm text-text-secondary hover:text-text-primary">
           ← Activity
         </Link>
-        <header className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl text-text-primary">{pairLabel(detail)}</h1>
+        <PageHeading kicker="VERIFIED RECORD // ACTIVITY" title={pairLabel(detail)} />
+        <div className="flex flex-wrap items-center gap-3">
           <span className="rounded bg-bg-overlay px-2 py-0.5 text-xs text-text-secondary">
             {detail.kind}
           </span>
@@ -80,20 +82,20 @@ export default async function TxDetailPage({ params }: TxPageProps) {
           )}
           <StatusPill status={detail.status} />
           <VerificationBadge state={detail.verificationState} />
-        </header>
+        </div>
       </div>
       <div className="section-enter grid grid-cols-1 gap-8 lg:grid-cols-3">
         <section className="lg:col-span-2">
-          <h2 className="mb-4 text-sm text-text-secondary">Amounts</h2>
+          <PanelHeading title="Amounts" />
           <LegsTable detail={detail} />
         </section>
         <section>
-          <h2 className="mb-4 text-sm text-text-secondary">Timeline</h2>
+          <PanelHeading title="Timeline" />
           <StatusTimeline source={detail} />
         </section>
       </div>
-      <section className="section-enter card card-hover p-4">
-        <h2 className="mb-4 text-sm text-text-secondary">Details</h2>
+      <section className="section-enter glass p-4">
+        <PanelHeading title="Details" />
         <dl className="grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-[auto_1fr]">
           <dt className="text-text-muted">Network</dt>
           <dd className="font-mono text-text-secondary">
