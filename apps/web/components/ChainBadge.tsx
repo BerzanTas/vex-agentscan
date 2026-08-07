@@ -4,6 +4,7 @@ const CHAIN_ICON_SRC: Record<string, string> = {
   ethereum: "/chains/ethereum.svg",
   optimism: "/chains/optimism.svg",
   polygon: "/chains/polygon.svg",
+  robinhood: "/chains/robinhood.svg",
   solana: "/chains/solana.svg",
 };
 

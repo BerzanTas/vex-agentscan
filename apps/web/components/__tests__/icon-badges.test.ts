@@ -54,7 +54,7 @@ describe("ChainBadge", () => {
   });
 
   it("renders icons for all newly added chains", () => {
-    for (const slug of ["ethereum", "optimism", "polygon", "solana"]) {
+    for (const slug of ["ethereum", "optimism", "polygon", "robinhood", "solana"]) {
       const markup = render(ChainBadge, { slug });
 
       expect(markup).toContain(`src="/chains/${slug}.svg"`);
@@ -63,10 +63,10 @@ describe("ChainBadge", () => {
   });
 
   it("renders slug-only for a chain without an icon", () => {
-    const markup = render(ChainBadge, { slug: "robinhood" });
+    const markup = render(ChainBadge, { slug: "unlisted" });
 
     expect(markup).not.toContain("<img");
-    expect(markup).toContain("robinhood");
+    expect(markup).toContain("unlisted");
   });
 });
 
