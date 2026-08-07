@@ -8,6 +8,7 @@ import {
   type ActivityFilters as SelectedActivityFilters,
 } from "../lib/api";
 import {
+  activeActivityFilterCount,
   activityFiltersToQuery,
   withActivityFilter,
   type ActivityFilterName,
@@ -15,11 +16,15 @@ import {
 
 const ANY_VALUE = "";
 
+export function hasActiveActivityFilter(filters: SelectedActivityFilters): boolean {
+  return activeActivityFilterCount(filters) > 0;
+}
+
 function optionLabel(value: string): string {
   return value.replace(/_/g, " ");
 }
 
-function FilterSelect({
+function FilterField({
   name,
   label,
   anyLabel,
@@ -34,20 +39,28 @@ function FilterSelect({
   value: string | undefined;
   onSelect: (name: ActivityFilterName, value: string) => void;
 }) {
+  const active = value !== undefined && value !== ANY_VALUE;
   return (
-    <select
-      className="filter-select"
-      aria-label={label}
-      value={value ?? ANY_VALUE}
-      onChange={(event) => onSelect(name, event.target.value)}
-    >
-      <option value={ANY_VALUE}>{anyLabel}</option>
-      {options.map((option) => (
-        <option key={option} value={option}>
-          {optionLabel(option)}
-        </option>
-      ))}
-    </select>
+    <div className="filter-field" data-active={active ? "true" : undefined}>
+      <span className="filter-field-label" aria-hidden="true">
+        {label}
+      </span>
+      <span className="filter-field-control">
+        <select
+          className="filter-field-select"
+          aria-label={label}
+          value={value ?? ANY_VALUE}
+          onChange={(event) => onSelect(name, event.target.value)}
+        >
+          <option value={ANY_VALUE}>{anyLabel}</option>
+          {options.map((option) => (
+            <option key={option} value={option}>
+              {optionLabel(option)}
+            </option>
+          ))}
+        </select>
+      </span>
+    </div>
   );
 }
 
@@ -62,6 +75,7 @@ export function ActivityFilters({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const activeFilterCount = activeActivityFilterCount(filters);
 
   const show = (next: SelectedActivityFilters) => {
     const query = activityFiltersToQuery(next);
@@ -73,8 +87,8 @@ export function ActivityFilters({
   };
 
   return (
-    <div className="glass filter-bar" role="group" aria-label="Activity filters">
-      <FilterSelect
+    <div className="glass filter-console" role="group" aria-label="Activity filters">
+      <FilterField
         name="kind"
         label="Kind"
         anyLabel="All kinds"
@@ -82,7 +96,7 @@ export function ActivityFilters({
         value={filters.kind}
         onSelect={selectFilter}
       />
-      <FilterSelect
+      <FilterField
         name="protocol"
         label="Protocol"
         anyLabel="All protocols"
@@ -90,7 +104,7 @@ export function ActivityFilters({
         value={filters.protocol}
         onSelect={selectFilter}
       />
-      <FilterSelect
+      <FilterField
         name="chain"
         label="Chain"
         anyLabel="All chains"
@@ -98,7 +112,7 @@ export function ActivityFilters({
         value={filters.chain}
         onSelect={selectFilter}
       />
-      <FilterSelect
+      <FilterField
         name="status"
         label="Status"
         anyLabel="All statuses"
@@ -106,7 +120,7 @@ export function ActivityFilters({
         value={filters.status}
         onSelect={selectFilter}
       />
-      <FilterSelect
+      <FilterField
         name="verification"
         label="Verification"
         anyLabel="All verification states"
@@ -114,8 +128,13 @@ export function ActivityFilters({
         value={filters.verification}
         onSelect={selectFilter}
       />
-      <button type="button" className="filter-clear" onClick={() => show({})}>
-        Clear filters
+      <button
+        type="button"
+        className="filter-clear-chip"
+        disabled={activeFilterCount === 0}
+        onClick={() => show({})}
+      >
+        {activeFilterCount === 0 ? "Clear filters" : `Clear filters (${activeFilterCount})`}
       </button>
     </div>
   );
