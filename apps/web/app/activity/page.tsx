@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ActivityFilters } from "../../components/ActivityFilters";
 import { LoadMoreActivity } from "../../components/LoadMoreActivity";
+import { PageHeading } from "../../components/PageHeading";
 import {
   activeActivityFilterCount,
   activityFiltersToQuery,
@@ -14,7 +15,7 @@ import { fetchActivity, fetchNetworks, fetchProtocols } from "../../lib/api";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Activity — AgentScan",
+  title: "Activity - AgentScan",
   description: "Every verified Vex agent activity, newest first",
 };
 
@@ -37,12 +38,15 @@ export default async function ActivityPage({
 
   return (
     <section className="section-enter flex flex-col gap-6">
-      <div className="flex flex-wrap items-baseline gap-3">
-        <h1 className="text-2xl text-text-primary">Activity</h1>
-        {activeCount > 0 && (
-          <span className="text-xs text-text-muted">{activeFilterLabel(activeCount)}</span>
-        )}
-      </div>
+      <PageHeading
+        kicker="LIVE FEED // ACTIVITY"
+        title="Activity"
+        actions={
+          activeCount > 0 ? (
+            <span className="text-xs text-text-muted">{activeFilterLabel(activeCount)}</span>
+          ) : undefined
+        }
+      />
       <ActivityFilters
         filters={filters}
         protocols={protocolFilterOptions(protocols, filters.protocol)}

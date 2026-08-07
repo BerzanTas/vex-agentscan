@@ -53,7 +53,7 @@ export function TokensTable({ rows, emptyMessage }: { rows: TokenStatDto[]; empt
     return <EmptyPanel message={emptyMessage} />;
   }
   return (
-    <div className="glass overflow-x-auto">
+    <div className="glass overflow-x-auto overflow-y-clip">
       <table className="dimension-table">
         <thead>
           <tr>

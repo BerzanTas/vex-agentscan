@@ -3,6 +3,7 @@ import { parseChartRange } from "../../../../lib/range";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChainBadge } from "../../../../components/ChainBadge";
+import { PageHeading } from "../../../../components/PageHeading";
 import { PanelHeading } from "../../../../components/PanelHeading";
 import { ProtocolRanking } from "../../../../components/ProtocolRanking";
 import { RangeChips } from "../../../../components/RangeChips";
@@ -37,9 +38,9 @@ function pairKey(pair: TokenPairStatDto): string {
 export async function generateMetadata({ params, searchParams }: TokenPageProps): Promise<Metadata> {
   const { chainSlug, address } = await params;
   const detail = await fetchTokenDetail(chainSlug, address, parseChartRange((await searchParams).range));
-  if (detail === null) return { title: "Token not found — AgentScan" };
+  if (detail === null) return { title: "Token not found - AgentScan" };
   return {
-    title: `${tokenTitle(detail)} on ${detail.chainSlug} — AgentScan`,
+    title: `${tokenTitle(detail)} on ${detail.chainSlug} - AgentScan`,
     description: `Vex agent activity observed for ${tokenTitle(detail)} on ${detail.chainSlug}`,
   };
 }
@@ -58,23 +59,20 @@ export default async function TokenDetailPage({ params, searchParams }: TokenPag
         <Link href="/tokens" className="text-sm text-text-secondary hover:text-text-primary">
           ← Tokens
         </Link>
-        <header className="flex flex-wrap items-end justify-between gap-4">
-          <div className="flex flex-col gap-3">
-            <h1 className="font-serif text-3xl text-text-primary sm:text-4xl">
-              {tokenTitle(detail)}
-            </h1>
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="rounded bg-bg-overlay px-2 py-0.5 text-xs text-text-secondary">
-                <ChainBadge slug={detail.chainSlug} />
-              </span>
-              <span className="token-address">{detail.address}</span>
-              {detail.decimals !== null && (
-                <span className="text-xs text-text-muted">{detail.decimals} decimals</span>
-              )}
-            </div>
-          </div>
-          <RangeChips current={range} label="Token window" />
-        </header>
+        <PageHeading
+          kicker="TOKEN // DETAIL"
+          title={tokenTitle(detail)}
+          actions={<RangeChips current={range} label="Token window" />}
+        />
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="rounded bg-bg-overlay px-2 py-0.5 text-xs text-text-secondary">
+            <ChainBadge slug={detail.chainSlug} />
+          </span>
+          <span className="token-address">{detail.address}</span>
+          {detail.decimals !== null && (
+            <span className="text-xs text-text-muted">{detail.decimals} decimals</span>
+          )}
+        </div>
       </div>
       <div className="section-enter grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="glass stat-card">

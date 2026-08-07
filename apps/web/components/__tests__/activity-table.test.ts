@@ -67,6 +67,12 @@ describe("ActivityTable", () => {
     expect(markup).toContain("⇄");
   });
 
+  it("clips vertical overflow while keeping the wrapper horizontally scrollable", () => {
+    const markup = markupFor([row]);
+
+    expect(markup).toContain('class="glass overflow-x-auto overflow-y-clip"');
+  });
+
   it("shows the empty message instead of a table when there are no rows", () => {
     const markup = markupFor([]);
 

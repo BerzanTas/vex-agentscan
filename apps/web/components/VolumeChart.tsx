@@ -1,22 +1,28 @@
 "use client";
 
 import {
-  AreaSeries,
   ColorType,
   createChart,
   LineStyle,
-  LineType,
-  type AreaSeriesPartialOptions,
+  PriceScaleMode,
   type DeepPartial,
   type ChartOptions,
   type IChartApi,
   type ISeriesApi,
   type MouseEventParams,
+  type SeriesPartialOptions,
   type Time,
+  type TimeScaleOptions,
   type UTCTimestamp,
+  type WhitespaceData,
 } from "lightweight-charts";
 import { useCallback, useEffect, useRef } from "react";
 import type { ChartPointDto } from "../lib/api";
+import {
+  MonotoneAreaSeries,
+  type MonotoneAreaData,
+  type MonotoneAreaSeriesOptions,
+} from "./MonotoneAreaSeries";
 import { chartPalette, type ChartPalette } from "../lib/chart-theme";
 import { formatUsdEstimate } from "../lib/format";
 import { resolveTheme } from "../lib/theme";
@@ -24,6 +30,8 @@ import { resolveTheme } from "../lib/theme";
 export type ChartMetric = "volume" | "txns";
 
 export type BucketSpan = "hour" | "day";
+
+export type ChartScale = "linear" | "log";
 
 const CHART_FONT_FAMILY = "JetBrains Mono, ui-monospace, monospace";
 const LINE_WIDTH = 2;
@@ -37,15 +45,37 @@ const DAILY_MOMENT_FORMAT = new Intl.DateTimeFormat("en", {
   year: "numeric",
 });
 
-const HOURLY_MOMENT_FORMAT = new Intl.DateTimeFormat("en", {
-  timeZone: "UTC",
+function zoneFormatFamily(
+  options: Intl.DateTimeFormatOptions,
+): (timeZone: string) => Intl.DateTimeFormat {
+  const formats = new Map<string, Intl.DateTimeFormat>();
+  return (timeZone) => {
+    const cached = formats.get(timeZone);
+    if (cached !== undefined) return cached;
+    const format = new Intl.DateTimeFormat("en", { ...options, timeZone });
+    formats.set(timeZone, format);
+    return format;
+  };
+}
+
+const hourlyMomentFormat = zoneFormatFamily({
   month: "short",
   day: "numeric",
   hour: "2-digit",
   minute: "2-digit",
-  hour12: false,
+  hourCycle: "h23",
   timeZoneName: "short",
 });
+
+const hourlyTickFormat = zoneFormatFamily({
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+function viewerTimeZone(): string {
+  return new Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
 
 function metricValue(point: ChartPointDto, metric: ChartMetric): number {
   return metric === "volume" ? Number(point.volumeUsd) : point.txCount;
@@ -81,10 +111,58 @@ export function resolveBucketSpan(points: ChartPointDto[]): BucketSpan {
   return smallestBucketGap(points) < DAY_SECONDS ? "hour" : "day";
 }
 
-export function formatBucketMoment(bucketStart: number, span: BucketSpan): string {
+export function formatBucketMoment(
+  bucketStart: number,
+  span: BucketSpan,
+  timeZone: string = viewerTimeZone(),
+): string {
   const moment = new Date(bucketStart * 1000);
-  if (span === "hour") return HOURLY_MOMENT_FORMAT.format(moment);
+  if (span === "hour") return hourlyMomentFormat(timeZone).format(moment);
   return DAILY_MOMENT_FORMAT.format(moment);
+}
+
+const TICK_DATE_FORMAT = new Intl.DateTimeFormat("en", {
+  timeZone: "UTC",
+  month: "short",
+  day: "numeric",
+});
+
+export function formatTickMark(
+  bucketStart: number,
+  span: BucketSpan,
+  timeZone: string = viewerTimeZone(),
+): string {
+  const moment = new Date(bucketStart * 1000);
+  if (span === "hour") return hourlyTickFormat(timeZone).format(moment);
+  return TICK_DATE_FORMAT.format(moment);
+}
+
+type ChartTimeScaleOptions = Pick<
+  TimeScaleOptions,
+  "timeVisible" | "secondsVisible" | "tickMarkFormatter"
+>;
+
+export function timeScaleOptionsFor(
+  span: BucketSpan,
+  timeZone: string = viewerTimeZone(),
+): ChartTimeScaleOptions {
+  return {
+    timeVisible: span === "hour",
+    secondsVisible: false,
+    tickMarkFormatter: (time: Time) =>
+      typeof time === "number" ? formatTickMark(time, span, timeZone) : null,
+  };
+}
+
+export function crosshairTimeFormatter(
+  span: BucketSpan,
+  timeZone: string = viewerTimeZone(),
+): (time: Time) => string {
+  return (time) => (typeof time === "number" ? formatBucketMoment(time, span, timeZone) : "");
+}
+
+export function priceScaleModeFor(scale: ChartScale): PriceScaleMode {
+  return scale === "log" ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal;
 }
 
 export function formatBucketValue(point: ChartPointDto, metric: ChartMetric): string {
@@ -116,12 +194,14 @@ export function tooltipPosition(
   };
 }
 
+type MonotoneAreaPartialOptions = SeriesPartialOptions<MonotoneAreaSeriesOptions>;
+
 const AXIS_VOLUME_FORMAT = new Intl.NumberFormat("en", {
   notation: "compact",
   maximumFractionDigits: 2,
 });
 
-function priceFormatFor(metric: ChartMetric): AreaSeriesPartialOptions["priceFormat"] {
+function priceFormatFor(metric: ChartMetric): MonotoneAreaPartialOptions["priceFormat"] {
   if (metric === "volume") {
     return { type: "custom", formatter: (value: number) => AXIS_VOLUME_FORMAT.format(value) };
   }
@@ -152,7 +232,15 @@ function themedChartOptions(palette: ChartPalette): DeepPartial<ChartOptions> {
   };
 }
 
-function themedSeriesOptions(palette: ChartPalette): AreaSeriesPartialOptions {
+export function baseSeriesOptions(): MonotoneAreaPartialOptions {
+  return {
+    lineWidth: LINE_WIDTH,
+    priceLineVisible: true,
+    priceLineStyle: LineStyle.Dashed,
+  };
+}
+
+function themedSeriesOptions(palette: ChartPalette): MonotoneAreaPartialOptions {
   return {
     lineColor: palette.lineColor,
     topColor: palette.topColor,
@@ -186,7 +274,15 @@ function hoveredPoint(view: ChartView, time: Time | undefined): ChartPointDto | 
   return view.pointsByBucketStart.get(time);
 }
 
-export function VolumeChart({ points, metric }: { points: ChartPointDto[]; metric: ChartMetric }) {
+export function VolumeChart({
+  points,
+  metric,
+  scale,
+}: {
+  points: ChartPointDto[];
+  metric: ChartMetric;
+  scale: ChartScale;
+}) {
   const frameRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -194,7 +290,12 @@ export function VolumeChart({ points, metric }: { points: ChartPointDto[]; metri
   const tooltipValueRef = useRef<HTMLSpanElement>(null);
   const liveDotRef = useRef<HTMLSpanElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<"Area"> | null>(null);
+  const seriesRef = useRef<ISeriesApi<
+    "Custom",
+    Time,
+    MonotoneAreaData | WhitespaceData<Time>,
+    MonotoneAreaSeriesOptions
+  > | null>(null);
   const viewRef = useRef<ChartView | null>(null);
   const liveDotFrameRef = useRef<number | null>(null);
 
@@ -270,14 +371,7 @@ export function VolumeChart({ points, metric }: { points: ChartPointDto[]; metri
       localization: { locale: "en-US" },
       handleScale: { axisPressedMouseMove: { price: false } },
     });
-    const series = chart.addSeries(AreaSeries, {
-      lineWidth: LINE_WIDTH,
-      lineType: LineType.Curved,
-      priceLineVisible: true,
-      priceLineStyle: LineStyle.Dashed,
-      crosshairMarkerBorderWidth: 0,
-      crosshairMarkerRadius: 4,
-    });
+    const series = chart.addCustomSeries(new MonotoneAreaSeries(), baseSeriesOptions());
     chartRef.current = chart;
     seriesRef.current = series;
 
@@ -320,12 +414,24 @@ export function VolumeChart({ points, metric }: { points: ChartPointDto[]; metri
     const tooltip = tooltipRef.current;
     if (chart === null || series === null) return;
     if (tooltip !== null) tooltip.dataset.visible = "false";
-    viewRef.current = chartView(points, metric);
+    const view = chartView(points, metric);
+    viewRef.current = view;
+    chart.applyOptions({
+      timeScale: timeScaleOptionsFor(view.bucketSpan),
+      localization: { timeFormatter: crosshairTimeFormatter(view.bucketSpan) },
+    });
     series.applyOptions({ priceFormat: priceFormatFor(metric) });
     series.setData(seriesData(points, metric));
     chart.timeScale().fitContent();
     scheduleLiveDot();
   }, [points, metric, scheduleLiveDot]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (chart === null) return;
+    chart.applyOptions({ rightPriceScale: { mode: priceScaleModeFor(scale) } });
+    scheduleLiveDot();
+  }, [scale, scheduleLiveDot]);
 
   return (
     <div ref={frameRef} className="chart-frame">

@@ -4,6 +4,11 @@ import { AmbientBackdrop } from "../components/AmbientBackdrop";
 import { SiteFooter } from "../components/SiteFooter";
 import { TopBar } from "../components/TopBar";
 import "../styles/theme.css";
+import "../styles/backdrop.css";
+import "../styles/navbar.css";
+import "../styles/search.css";
+import "../styles/headings.css";
+import "../styles/filters.css";
 
 export const metadata: Metadata = {
   title: "AgentScan",

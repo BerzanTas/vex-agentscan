@@ -55,7 +55,7 @@ export function ActivityTable({ rows, emptyMessage }: { rows: ActivityRowDto[]; 
     return <EmptyPanel message={emptyMessage} />;
   }
   return (
-    <div className="glass overflow-x-auto">
+    <div className="glass overflow-x-auto overflow-y-clip">
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-bg-overlay text-xs text-text-muted">

@@ -71,6 +71,14 @@ describe("TopBar", () => {
     expect(markup).toContain("LIVE");
   });
 
+  it("frames the live indicator as a bracketed HUD chip", () => {
+    expect(topBarMarkupOn("/")).toContain('class="live-chip');
+  });
+
+  it("hooks the home link into the HUD logo glow", () => {
+    expect(topBarMarkupOn("/")).toContain('class="topbar-logo');
+  });
+
   it("ships both theme logos so the browser swaps them without a flicker", () => {
     const markup = topBarMarkupOn("/");
 

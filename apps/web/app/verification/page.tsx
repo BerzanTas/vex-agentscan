@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
+import { PageHeading } from "../../components/PageHeading";
 import { VerificationPanels } from "../../components/VerificationPanels";
 import { fetchVerificationStats } from "../../lib/api";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Verification — AgentScan",
+  title: "Verification - AgentScan",
   description: "How Vex agent activity is checked on chain, and on which networks",
 };
 
@@ -14,7 +15,7 @@ export default async function VerificationPage() {
 
   return (
     <section className="section-enter flex flex-col gap-6">
-      <h1 className="text-2xl text-text-primary">Verification</h1>
+      <PageHeading kicker="PIPELINE // VERIFICATION" title="Verification" />
       <VerificationPanels stats={stats} />
     </section>
   );

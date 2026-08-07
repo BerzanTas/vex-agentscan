@@ -37,13 +37,13 @@
   --live-dot-glow: rgba(31, 68, 255, 0.7);
   --live-dot-ring: rgba(31, 68, 255, 0.55);
   --cursor-light-color: rgba(31, 68, 255, 0.16);
-  --ambient-fog-near: rgba(31, 68, 255, 0.44);
-  --ambient-fog-far: rgba(56, 92, 255, 0.32);
-  --ambient-fog-deep: rgba(10, 35, 184, 0.3);
+  --ambient-fog-near: rgba(31, 68, 255, 0.26);
+  --ambient-fog-far: rgba(92, 74, 255, 0.18);
+  --ambient-fog-deep: rgba(88, 48, 208, 0.14);
   --ambient-grid-color: rgba(31, 68, 255, 0.34);
   --ambient-dot-color: rgba(31, 68, 255, 0.32);
   --ambient-beam-color: rgba(140, 168, 255, 0.16);
-  --ambient-vignette: rgba(4, 6, 14, 0.92);
+  --ambient-vignette: rgba(4, 6, 14, 0.95);
   --ambient-grain-opacity: 0.05;
   --panel-radius: 1rem;
   --footer-bg: rgba(8, 11, 20, 0.72);
@@ -227,30 +227,30 @@
   }
 
   .ambient-aurora-near {
-    width: 62vw;
-    height: 62vw;
-    left: -12vw;
-    top: -24vw;
+    width: 56vw;
+    height: 56vw;
+    left: -20vw;
+    top: -26vw;
     background: radial-gradient(circle at 50% 50%, var(--ambient-fog-near), transparent 68%);
-    animation: ambient-drift-near 44s ease-in-out infinite alternate;
+    animation: ambient-drift-near 70s ease-in-out infinite alternate;
   }
 
   .ambient-aurora-far {
-    width: 54vw;
-    height: 54vw;
-    right: -14vw;
-    top: -12vw;
+    width: 50vw;
+    height: 50vw;
+    right: -20vw;
+    top: -16vw;
     background: radial-gradient(circle at 50% 50%, var(--ambient-fog-far), transparent 70%);
-    animation: ambient-drift-far 58s ease-in-out infinite alternate;
+    animation: ambient-drift-far 90s ease-in-out infinite alternate;
   }
 
   .ambient-aurora-deep {
-    width: 70vw;
-    height: 40vw;
-    left: 18vw;
-    top: 46vh;
+    width: 56vw;
+    height: 34vw;
+    left: 66vw;
+    top: 62vh;
     background: radial-gradient(ellipse at 50% 50%, var(--ambient-fog-deep), transparent 72%);
-    animation: ambient-drift-deep 72s ease-in-out infinite alternate;
+    animation: ambient-drift-deep 110s ease-in-out infinite alternate;
   }
 
   .ambient-horizon {
@@ -264,7 +264,7 @@
       repeating-linear-gradient(0deg, var(--ambient-grid-color) 0 1px, transparent 1px 96px);
     transform: perspective(900px) rotateX(64deg);
     transform-origin: 50% 100%;
-    opacity: 0.55;
+    opacity: 0.45;
     -webkit-mask-image: radial-gradient(58% 78% at 50% 100%, #000 0, transparent 76%);
     mask-image: radial-gradient(58% 78% at 50% 100%, #000 0, transparent 76%);
     animation: ambient-horizon-flow 38s linear infinite;
@@ -307,7 +307,7 @@
   .ambient-vignette {
     position: absolute;
     inset: 0;
-    background: radial-gradient(128% 92% at 50% 6%, transparent 38%, var(--ambient-vignette) 100%);
+    background: radial-gradient(118% 86% at 50% 6%, transparent 30%, var(--ambient-vignette) 100%);
   }
 
   .cursor-light {
@@ -835,28 +835,28 @@
 
 @keyframes ambient-drift-near {
   from {
-    transform: translate3d(-3%, -2%, 0) scale(1);
+    transform: translate3d(-2%, -1%, 0) scale(1);
   }
   to {
-    transform: translate3d(7%, 5%, 0) scale(1.14);
+    transform: translate3d(4%, 3%, 0) scale(1.08);
   }
 }
 
 @keyframes ambient-drift-far {
   from {
-    transform: translate3d(2%, 0, 0) scale(1.1);
+    transform: translate3d(1%, 0, 0) scale(1.06);
   }
   to {
-    transform: translate3d(-6%, 6%, 0) scale(0.92);
+    transform: translate3d(-4%, 4%, 0) scale(0.96);
   }
 }
 
 @keyframes ambient-drift-deep {
   from {
-    transform: translate3d(0, 2%, 0) scale(1);
+    transform: translate3d(0, 1%, 0) scale(1);
   }
   to {
-    transform: translate3d(-8%, -4%, 0) scale(1.18);
+    transform: translate3d(-5%, -3%, 0) scale(1.1);
   }
 }
 
@@ -1013,9 +1013,9 @@
   --live-dot-glow: rgba(31, 68, 255, 0.32);
   --live-dot-ring: rgba(31, 68, 255, 0.45);
   --cursor-light-color: rgba(31, 68, 255, 0.1);
-  --ambient-fog-near: rgba(31, 68, 255, 0.2);
-  --ambient-fog-far: rgba(96, 128, 255, 0.16);
-  --ambient-fog-deep: rgba(31, 68, 255, 0.1);
+  --ambient-fog-near: rgba(31, 68, 255, 0.1);
+  --ambient-fog-far: rgba(104, 92, 255, 0.08);
+  --ambient-fog-deep: rgba(96, 64, 220, 0.06);
   --ambient-grid-color: rgba(31, 68, 255, 0.16);
   --ambient-dot-color: rgba(31, 68, 255, 0.18);
   --ambient-beam-color: rgba(255, 255, 255, 0.6);
@@ -1025,8 +1025,6 @@
   --chart-glow-color: rgba(31, 68, 255, 0.2);
   --accent-bar-end: #0a23b8;
   --ranking-bar-glow: none;
-  --ambient-fog-near: rgba(31, 68, 255, 0.16);
-  --ambient-fog-far: rgba(31, 68, 255, 0.11);
   --ambient-grid-color: rgba(31, 68, 255, 0.3);
   --ambient-beam-color: rgba(31, 68, 255, 0.07);
   --stat-scanline: rgba(31, 68, 255, 0.12);
@@ -1186,15 +1184,6 @@
     outline: none;
     border-color: var(--focus-ring);
     box-shadow: 0 0 0 3px var(--chip-active-bg);
-  }
-
-  .search-compact-note {
-    position: absolute;
-    top: calc(100% + 0.3rem);
-    right: 0;
-    white-space: nowrap;
-    font-size: 0.6875rem;
-    color: var(--color-warning);
   }
 
   .site-footer {
@@ -1382,50 +1371,6 @@
     height: 2px;
     border-radius: 9999px;
     background: var(--color-accent);
-  }
-
-  .filter-bar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.6rem;
-    padding: 0.85rem 1rem;
-  }
-
-  .filter-select {
-    border-radius: 0.5rem;
-    border: 1px solid var(--panel-hairline);
-    background: var(--input-bg);
-    padding: 0.35rem 0.5rem;
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: var(--color-text-primary);
-    transition: border-color 160ms ease;
-  }
-
-  .filter-select:hover {
-    border-color: var(--panel-hairline-bright);
-  }
-
-  .filter-select:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
-  }
-
-  .filter-clear {
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    transition: color 160ms ease;
-  }
-
-  .filter-clear:hover {
-    color: var(--color-text-primary);
-  }
-
-  .filter-clear:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 3px;
-    border-radius: 0.25rem;
   }
 
   .dimension-table {

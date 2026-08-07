@@ -38,11 +38,15 @@ describe("Sparkline", () => {
   });
 
   it("draws the area closed to the baseline of the box", () => {
-    expect(markup()).toContain('class="sparkline-area" d="M 0 24 L 48 18.96 L 96 0 L 96 24 L 0 24 Z"');
+    expect(markup()).toContain(
+      'class="sparkline-area" d="M 0 24 C 16 23.16 32 22.32 48 18.96 C 64 15.59 80 7.8 96 0 L 96 24 L 0 24 Z"',
+    );
   });
 
   it("draws a rising series ending above where it started", () => {
-    expect(markup()).toContain('class="sparkline-line" d="M 0 24 L 48 18.96 L 96 0"');
+    expect(markup()).toContain(
+      'class="sparkline-line" d="M 0 24 C 16 23.16 32 22.32 48 18.96 C 64 15.59 80 7.8 96 0"',
+    );
   });
 
   it("draws a flat baseline for an empty series", () => {
