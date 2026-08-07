@@ -466,6 +466,58 @@ describe("verification worker", () => {
     expect((await agentRowOf(agent)).strike_count).toBe(1);
   });
 
+  it("still increments strikes for a bridge verification mismatch (regression guard)", async () => {
+    const agent = "c5".repeat(32);
+    await seedAgent(agent);
+    const activityId = await seedQueuedActivity({
+      agentHash: agent,
+      protocol: "p-bridge-mismatch",
+      kind: "bridge",
+      eventRole: "bridge_deposit",
+    });
+    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [] };
+
+    await runVerificationPass(depsWithReader(readerReturning(reverted)));
+
+    expect((await activityStateOf(activityId)).verification_state).toBe("mismatch");
+    expect(await strikesOf(agent)).toHaveLength(1);
+    expect((await agentRowOf(agent)).strike_count).toBe(1);
+  });
+
+  it("strikes a launch-kind activity declaring a non-launch event role, closing the shape-mismatch exemption", async () => {
+    const agent = "c6".repeat(32);
+    await seedAgent(agent);
+    const activityId = await seedQueuedActivity({
+      agentHash: agent,
+      protocol: "p-launch-spoofed-role",
+      kind: "launch",
+      eventRole: "swap",
+    });
+    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [] };
+
+    await runVerificationPass(depsWithReader(readerReturning(reverted)));
+
+    expect((await activityStateOf(activityId)).verification_state).toBe("mismatch");
+    expect(await strikesOf(agent)).toEqual([{ activity_id: activityId.toString(), reason: "tx_reverted" }]);
+    expect((await agentRowOf(agent)).strike_count).toBe(1);
+  });
+
+  it("quarantines an agent after three mismatches from launch-kind activities declaring a spoofed swap role", async () => {
+    const agent = "c7".repeat(32);
+    await seedAgent(agent);
+    await seedQueuedActivity({ agentHash: agent, protocol: "p-launch-spoofed-quarantine", kind: "launch", eventRole: "swap" });
+    await seedQueuedActivity({ agentHash: agent, protocol: "p-launch-spoofed-quarantine", kind: "launch", eventRole: "swap" });
+    await seedQueuedActivity({ agentHash: agent, protocol: "p-launch-spoofed-quarantine", kind: "launch", eventRole: "swap" });
+    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [] };
+
+    await runVerificationPass(depsWithReader(readerReturning(reverted)));
+
+    const agentRow = await agentRowOf(agent);
+    expect(agentRow.strike_count).toBe(3);
+    expect(agentRow.status).toBe("quarantined");
+    expect(agentRow.quarantined_at).not.toBeNull();
+  });
+
   it("books a verified launch under its own kind aggregate with zero volume but a counted transaction", async () => {
     const agent = "c4".repeat(32);
     await seedAgent(agent);

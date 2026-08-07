@@ -1,5 +1,5 @@
 import type pg from "pg";
-import { isStrikeEligibleKind, type Verdict, type VerificationKind } from "@agentscan/core";
+import { isLaunchShaped, type Verdict, type VerificationKind } from "@agentscan/core";
 import type { Config } from "../config.js";
 
 export type SqlExecutor = Pick<pg.PoolClient, "query">;
@@ -132,7 +132,7 @@ export async function finalizeVerification(
   );
   const activity = finalized.rows[0];
   if (activity === undefined) return;
-  if (verdict.result === "strike" && isStrikeEligibleKind(activity.kind)) {
+  if (verdict.result === "strike" && !isLaunchShaped(activity.kind, activity.event_role)) {
     await recordStrike(client, activityId, activity.agent_hash, verdict.reason, config);
   } else if (verdict.result !== "strike") {
     await recordVerifiedSuccess(client, activity, verdict.blockTimestamp);

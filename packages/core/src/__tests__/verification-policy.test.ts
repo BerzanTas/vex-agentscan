@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isStrikeEligibleKind, resolveVerificationTier } from "../verification/verification-policy.js";
+import { isLaunchShaped, resolveVerificationTier } from "../verification/verification-policy.js";
 
 describe("resolveVerificationTier", () => {
   it("caps a launch activity at basic even on a full-tier chain", () => {
@@ -18,14 +18,17 @@ describe("resolveVerificationTier", () => {
   });
 });
 
-describe("isStrikeEligibleKind", () => {
-  it("excludes launch from strike eligibility", () => {
-    expect(isStrikeEligibleKind("launch")).toBe(false);
+describe("isLaunchShaped", () => {
+  it("matches a genuine launch event declaring the token_launch role", () => {
+    expect(isLaunchShaped("launch", "token_launch")).toBe(true);
   });
-  it("keeps swap strike-eligible", () => {
-    expect(isStrikeEligibleKind("swap")).toBe(true);
+  it("rejects a launch kind paired with a non-launch role", () => {
+    expect(isLaunchShaped("launch", "swap")).toBe(false);
   });
-  it("keeps bridge strike-eligible", () => {
-    expect(isStrikeEligibleKind("bridge")).toBe(true);
+  it("rejects a swap kind even when paired with the token_launch role", () => {
+    expect(isLaunchShaped("swap", "token_launch")).toBe(false);
+  });
+  it("rejects a bridge kind paired with its own role", () => {
+    expect(isLaunchShaped("bridge", "bridge_deposit")).toBe(false);
   });
 });

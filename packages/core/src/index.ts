@@ -9,7 +9,7 @@ export { resolveChain, type ChainKey, type ResolveChain } from "./chain-registry
 export type { ChainReader, ReceiptView } from "./verification/chain-reader.js";
 export { evaluateVerification, type Verdict, type VerificationInput } from "./verification/evaluate.js";
 export {
-  isStrikeEligibleKind,
+  isLaunchShaped,
   resolveVerificationTier,
   type VerificationKind,
 } from "./verification/verification-policy.js";

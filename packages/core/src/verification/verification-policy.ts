@@ -9,6 +9,6 @@ export function resolveVerificationTier(
   return kind === "launch" ? "basic" : chainTier;
 }
 
-export function isStrikeEligibleKind(kind: VerificationKind): boolean {
-  return kind !== "launch";
+export function isLaunchShaped(kind: VerificationKind, eventRole: string): boolean {
+  return kind === "launch" && eventRole === "token_launch";
 }
