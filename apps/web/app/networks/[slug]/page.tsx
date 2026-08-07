@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChainBadge } from "../../../components/ChainBadge";
 import { TierBadge } from "../../../components/NetworksTable";
+import { PageHeading } from "../../../components/PageHeading";
 import { PanelHeading } from "../../../components/PanelHeading";
 import { ProtocolRanking } from "../../../components/ProtocolRanking";
 import { RangeChips } from "../../../components/RangeChips";
@@ -78,9 +79,9 @@ export async function generateMetadata({
 }: NetworkDetailPageProps): Promise<Metadata> {
   const { slug } = await params;
   const detail = await fetchNetworkDetail(slug, parseChartRange((await searchParams).range));
-  if (detail === null) return { title: "Network not found — AgentScan" };
+  if (detail === null) return { title: "Network not found - AgentScan" };
   return {
-    title: `${detail.displayName} — AgentScan`,
+    title: `${detail.displayName} - AgentScan`,
     description: `Agent activity AgentScan observed on ${detail.displayName}`,
   };
 }
@@ -97,16 +98,15 @@ export default async function NetworkDetailPage({ params, searchParams }: Networ
         <Link href="/networks" className="text-sm text-text-secondary hover:text-text-primary">
           ← Networks
         </Link>
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <ChainBadge slug={detail.chainSlug} />
-            <h1 className="font-serif text-3xl text-text-primary sm:text-4xl">
-              {detail.displayName}
-            </h1>
-            <TierBadge tier={detail.verificationTier} />
-          </div>
-          <RangeChips current={range} label="Network activity range" />
-        </header>
+        <PageHeading
+          kicker="NETWORK // DETAIL"
+          title={detail.displayName}
+          actions={<RangeChips current={range} label="Network activity range" />}
+        />
+        <div className="flex flex-wrap items-center gap-3">
+          <ChainBadge slug={detail.chainSlug} />
+          <TierBadge tier={detail.verificationTier} />
+        </div>
       </div>
       <div className="section-enter grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="glass verification-stat">
