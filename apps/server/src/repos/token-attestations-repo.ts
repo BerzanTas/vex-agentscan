@@ -36,15 +36,16 @@ async function existingRow(
 
 async function refreshExistingRow(
   client: pg.PoolClient,
-  id: string,
+  existing: { id: string; verifyStatus: AttestationVerifyStatus },
   submission: AttestSubmission,
 ): Promise<AttestationVerifyStatus> {
+  if (existing.verifyStatus !== "unverified") return existing.verifyStatus;
   const result = await client.query<{ verify_status: AttestationVerifyStatus }>(
     `UPDATE token_attestations SET
        tx_hash_hint = COALESCE(tx_hash_hint, $2)
-     WHERE id = $1
+     WHERE id = $1 AND verify_status = 'unverified'
      RETURNING verify_status`,
-    [id, submission.txHashHint],
+    [existing.id, submission.txHashHint],
   );
   const row = result.rows[0];
   if (row === undefined) throw new Error("token attestation row vanished under lock");
@@ -90,7 +91,7 @@ export async function submitAttestation(
   await client.query("SELECT pg_advisory_xact_lock(hashtext($1)::bigint)", [SUBMIT_LOCK_KEY]);
   const existing = await existingRow(client, submission);
   if (existing !== null) {
-    return { kind: "accepted", verifyStatus: await refreshExistingRow(client, existing.id, submission) };
+    return { kind: "accepted", verifyStatus: await refreshExistingRow(client, existing, submission) };
   }
   const perIpPending = await pendingCountFor(client, submission.submitterIpHash);
   if (perIpPending >= limits.maxPendingPerIp) return { kind: "per_ip_cap_exceeded" };
@@ -109,10 +110,18 @@ export type AttestationCandidateRow = {
   attestSignature: string;
 };
 
+const DISPLAY_STATUS_RANK_SQL = `CASE
+       WHEN revoked_at IS NOT NULL THEN 3
+       WHEN verify_status = 'verified' THEN 0
+       WHEN verify_status = 'unverified' THEN 1
+       ELSE 2
+     END`;
+
 export async function attestationCandidatesFor(
   pool: pg.Pool,
   chainId: bigint,
   tokenAddress: string,
+  maxCandidates: number,
 ): Promise<AttestationCandidateRow[]> {
   const result = await pool.query<{
     recovered_signer: string;
@@ -125,8 +134,10 @@ export async function attestationCandidatesFor(
   }>(
     `SELECT recovered_signer, verify_status, revoked_at, first_seen_at, verified_at, derived_tx_hash, attest_signature
      FROM token_attestations
-     WHERE chain_id = $1 AND token_address = $2`,
-    [chainId.toString(), tokenAddress],
+     WHERE chain_id = $1 AND token_address = $2
+     ORDER BY ${DISPLAY_STATUS_RANK_SQL} ASC, first_seen_at ASC
+     LIMIT $3`,
+    [chainId.toString(), tokenAddress, maxCandidates],
   );
   return result.rows.map((row) => ({
     recoveredSigner: row.recovered_signer,

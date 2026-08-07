@@ -19,10 +19,11 @@ function factoryAddressesFor(
 export function buildAttestationChainRegistry(
   factoryAddressesByChainId: ReadonlyMap<bigint, readonly string[]>,
 ): AttestationChainRegistry {
-  return new Map(
-    ATTESTATION_CHAIN_IDS.map((chainId) => [
-      chainId,
-      { factoryAddresses: [...factoryAddressesFor(chainId, factoryAddressesByChainId)] },
-    ]),
-  );
+  const registry = new Map<bigint, AttestationChainEntry>();
+  for (const chainId of ATTESTATION_CHAIN_IDS) {
+    const factoryAddresses = [...factoryAddressesFor(chainId, factoryAddressesByChainId)];
+    if (factoryAddresses.length === 0) continue;
+    registry.set(chainId, { factoryAddresses });
+  }
+  return registry;
 }

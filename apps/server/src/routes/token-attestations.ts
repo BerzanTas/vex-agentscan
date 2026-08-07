@@ -23,9 +23,12 @@ const sendError = (reply: FastifyReply, status: number, code: string, message: s
 const sendRateLimited = (reply: FastifyReply, retryAfterSec: number, message: string) =>
   reply.status(429).header("retry-after", String(retryAfterSec)).send({ error: { code: "rate_limited", message } });
 
+const INT8_MAX = 9223372036854775807n;
+
 function chainIdFromParam(raw: string): bigint | null {
   if (!/^[1-9][0-9]*$/.test(raw)) return null;
-  return BigInt(raw);
+  const chainId = BigInt(raw);
+  return chainId > INT8_MAX ? null : chainId;
 }
 
 function tokenAddressFromParam(raw: string): string | null {
@@ -126,7 +129,12 @@ export const tokenAttestationsRoutes: FastifyPluginAsync<Deps> = async (app, dep
         reply.header("cache-control", "no-store");
         return reply.status(404).send({ error: { code: "not_found", message: "token attestation not found" } });
       }
-      const candidates = await attestationCandidatesFor(deps.pool, chainId, tokenAddress);
+      const candidates = await attestationCandidatesFor(
+        deps.pool,
+        chainId,
+        tokenAddress,
+        deps.config.ATTEST_CANDIDATES_MAX,
+      );
       const best = bestAttestationCandidate(candidates);
       if (best === null) {
         reply.header("cache-control", "no-store");

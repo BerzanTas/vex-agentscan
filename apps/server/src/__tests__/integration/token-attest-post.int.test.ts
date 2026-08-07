@@ -179,6 +179,42 @@ describe("POST /v1/tokens/attest", () => {
     expect(rows.rows[0].tx_hash_hint).toBe(laterTxHash);
   });
 
+  it("keeps the hint pinned once verified: a replayed signature after verification never touches tx_hash_hint", async () => {
+    const tokenAddress = randomTokenAddress();
+    const account = privateKeyToAccount(generatePrivateKey());
+    const message = canonicalAttestMessage(trenchChainId, tokenAddress);
+    const attestSignature = await account.signMessage({ message });
+    const pinnedTxHash = `0x${"4".repeat(64)}`;
+
+    const first = await attest({
+      chainId: Number(trenchChainId),
+      tokenAddress,
+      attestSignature,
+      txHash: pinnedTxHash,
+    });
+    expect(first.statusCode).toBe(200);
+
+    await db.pool.query(
+      "UPDATE token_attestations SET verify_status = 'verified', derived_tx_hash = tx_hash_hint, verified_at = now() WHERE token_address = $1",
+      [tokenAddress],
+    );
+
+    const replayedTxHash = `0x${"9".repeat(64)}`;
+    const replay = await attest({
+      chainId: Number(trenchChainId),
+      tokenAddress,
+      attestSignature,
+      txHash: replayedTxHash,
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual({ status: "accepted", verifyStatus: "verified" });
+
+    const rows = await attestationRows(tokenAddress);
+    expect(rows.rows).toHaveLength(1);
+    expect(rows.rows[0].tx_hash_hint).toBe(pinnedTxHash);
+    expect(rows.rows[0].verify_status).toBe("verified");
+  });
+
   it("gives a different signer for the same token its own row (anti-squatting)", async () => {
     const tokenAddress = randomTokenAddress();
     const first = await signedAttestation(trenchChainId, tokenAddress);

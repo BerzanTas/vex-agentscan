@@ -23,7 +23,7 @@ export type AttestationMismatchDetail = "tx_reverted" | "wrong_token" | "creator
 export type AttestationVerdict =
   | { result: "verified" }
   | { result: "mismatch"; detail: AttestationMismatchDetail }
-  | { result: "retry"; error: "receipt_not_found" | "confirmations_pending" };
+  | { result: "retry"; error: "receipt_not_found" | "confirmations_pending" | "allowlist_unconfigured" };
 
 export function evaluateAttestationVerification(
   receipt: AttestationReceiptView | null,
@@ -43,7 +43,10 @@ export function evaluateAttestationVerification(
   const eventsFromAllowlistedFactory = eventsNamingClaimedToken.filter((event) =>
     input.allowlistedFactoryAddresses.some((factoryAddress) => sameAddress(factoryAddress, event.emitterAddress)),
   );
-  if (eventsFromAllowlistedFactory.length === 0) return { result: "mismatch", detail: "emitter_not_allowlisted" };
+  if (eventsFromAllowlistedFactory.length === 0) {
+    if (input.allowlistedFactoryAddresses.length === 0) return { result: "retry", error: "allowlist_unconfigured" };
+    return { result: "mismatch", detail: "emitter_not_allowlisted" };
+  }
 
   const matchesRecoveredSigner = eventsFromAllowlistedFactory.some((event) =>
     sameAddress(event.creatorAddress, input.recoveredSigner),

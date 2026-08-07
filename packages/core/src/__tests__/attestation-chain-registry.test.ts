@@ -19,4 +19,9 @@ describe("buildAttestationChainRegistry", () => {
     const registry = buildAttestationChainRegistry(new Map([[1n, ["0xfactory1"]]]));
     expect(registry.has(1n)).toBe(false);
   });
+
+  it("excludes a seeded chain id from the registry when it resolves to zero factory addresses", () => {
+    const registry = buildAttestationChainRegistry(new Map([[4663n, []]]));
+    expect(registry.has(4663n)).toBe(false);
+  });
 });

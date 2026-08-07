@@ -97,6 +97,16 @@ describe("evaluateAttestationVerification", () => {
     });
   });
 
+  it("retries allowlist_unconfigured instead of terminalizing when the allowlist is empty", () => {
+    const receipt = receiptFixture();
+    const input = inputFixture({ allowlistedFactoryAddresses: [] });
+
+    expect(evaluateAttestationVerification(receipt, input)).toEqual({
+      result: "retry",
+      error: "allowlist_unconfigured",
+    });
+  });
+
   it("mismatches creator_mismatch when the allowlisted event's creator differs from the recovered signer", () => {
     const receipt = receiptFixture({ creationEvents: [creationEvent({ creatorAddress: otherSigner })] });
 

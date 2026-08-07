@@ -153,6 +153,14 @@ describe("GET /v1/tokens/:chainId/:address", () => {
     expect(response.headers["cache-control"]).toBe("no-store");
   });
 
+  it("responds 404 not_found, not a 500, for a chainId digit string that overflows int8", async () => {
+    const response = await getAttestation("99999999999999999999999", randomTokenAddress());
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.code).toBe("not_found");
+    expect(response.headers["cache-control"]).toBe("no-store");
+  });
+
   it("answers OPTIONS with CORS headers scoped to GET and OPTIONS", async () => {
     const response = await app.inject({
       method: "OPTIONS",
@@ -162,5 +170,36 @@ describe("GET /v1/tokens/:chainId/:address", () => {
     expect(response.statusCode).toBe(204);
     expect(response.headers["access-control-allow-origin"]).toBe("*");
     expect(response.headers["access-control-allow-methods"]).toBe("GET, OPTIONS");
+  });
+});
+
+describe("GET /v1/tokens/:chainId/:address candidate row bound", () => {
+  let boundedApp: FastifyInstance;
+
+  beforeAll(async () => {
+    const config = loadConfig({ DATABASE_URL: "postgres://unused-in-tests", ATTEST_CANDIDATES_MAX: "2" });
+    boundedApp = await buildApp({ pool: db.pool, config, resolveChain: () => null });
+  });
+
+  afterAll(async () => {
+    await boundedApp.close();
+  });
+
+  it("still answers verified when a verified row is outranked out of a query bounded below the seeded row count", async () => {
+    const tokenAddress = randomTokenAddress();
+    await insertAttestation(tokenAddress, { verify_status: "mismatch", verify_detail: "wrong_token" });
+    await insertAttestation(tokenAddress, { verify_status: "mismatch", verify_detail: "wrong_token" });
+    const { account: verifiedAccount } = await insertAttestation(tokenAddress, { verify_status: "verified" });
+
+    const response = await boundedApp.inject({
+      method: "GET",
+      url: `/v1/tokens/${trenchChainId}/${tokenAddress}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      status: "verified",
+      creatorAddress: verifiedAccount.address.toLowerCase(),
+    });
   });
 });
