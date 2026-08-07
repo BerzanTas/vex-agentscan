@@ -4,6 +4,7 @@ import {
   formatRawAmount,
   formatRawAmountDisplay,
   formatUsdCompact,
+  formatLatency,
   formatUsdEstimate,
 } from "../format";
 
@@ -98,5 +99,26 @@ describe("formatAge", () => {
 
   it("renders days from a day up", () => {
     expect(formatAge(180000)).toBe("2d");
+  });
+});
+
+describe("formatLatency", () => {
+  it("keeps a tenth of a second below a minute, where verification latency actually varies", () => {
+    expect(formatLatency(12.44)).toBe("12.4s");
+    expect(formatLatency(59.9)).toBe("59.9s");
+  });
+
+  it("keeps two digits for sub-second latency instead of rounding it away", () => {
+    expect(formatLatency(0.42)).toBe("0.42s");
+  });
+
+  it("shows the seconds that formatAge would have hidden", () => {
+    expect(formatLatency(90)).toBe("1m 30s");
+    expect(formatLatency(120)).toBe("2m");
+  });
+
+  it("falls back to hours and minutes for a stalled verification", () => {
+    expect(formatLatency(3600)).toBe("1h");
+    expect(formatLatency(5400)).toBe("1h 30m");
   });
 });
