@@ -1,0 +1,273 @@
+:root {
+  --navbar-bg: rgba(6, 9, 18, 0.74);
+  --navbar-blur: 20px;
+  --navbar-edge-sweep: rgba(140, 168, 255, 0.85);
+  --navbar-glow: rgba(31, 68, 255, 0.55);
+  --navbar-underline-fade: rgba(140, 168, 255, 0.55);
+  --navbar-chip-bg: rgba(10, 13, 24, 0.55);
+  --navbar-menu-bg: rgba(12, 16, 30, 0.85);
+  --navbar-item-sweep: rgba(31, 68, 255, 0.2);
+  --navbar-notch: rgba(31, 68, 255, 0.65);
+}
+
+[data-theme="light"] {
+  --navbar-bg: rgba(238, 241, 249, 0.85);
+  --navbar-edge-sweep: rgba(31, 68, 255, 0.6);
+  --navbar-glow: rgba(31, 68, 255, 0.25);
+  --navbar-underline-fade: rgba(31, 68, 255, 0.4);
+  --navbar-chip-bg: rgba(255, 255, 255, 0.7);
+  --navbar-menu-bg: rgba(250, 251, 255, 0.92);
+  --navbar-item-sweep: rgba(31, 68, 255, 0.12);
+  --navbar-notch: rgba(31, 68, 255, 0.55);
+}
+
+.topbar {
+  border-bottom: 1px solid var(--panel-hairline);
+  background: var(--navbar-bg);
+  backdrop-filter: blur(var(--navbar-blur)) saturate(1.35);
+  -webkit-backdrop-filter: blur(var(--navbar-blur)) saturate(1.35);
+}
+
+.topbar::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 1px;
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    var(--navbar-edge-sweep),
+    transparent
+  );
+  background-size: 32% 100%;
+  background-repeat: no-repeat;
+  background-position: -60% 0;
+  animation: navbar-edge-sweep 11s linear infinite;
+  pointer-events: none;
+}
+
+.topbar-logo img {
+  transition: filter 220ms ease;
+}
+
+.topbar-logo:hover img {
+  filter: drop-shadow(0 0 9px var(--navbar-glow));
+}
+
+.topbar-logo:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 4px;
+  border-radius: 0.25rem;
+}
+
+.topbar-nav-link,
+.nav-menu-trigger {
+  position: relative;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  transition: color 160ms ease, text-shadow 160ms ease;
+}
+
+.topbar-nav-link::after,
+.nav-menu-trigger::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -0.45rem;
+  left: 0;
+  height: 1px;
+  border-radius: 0;
+  background: linear-gradient(
+    90deg,
+    var(--color-accent),
+    var(--navbar-underline-fade)
+  );
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 240ms ease;
+  pointer-events: none;
+}
+
+.topbar-nav-link:hover,
+.nav-menu-trigger:hover,
+.nav-menu-trigger[aria-expanded="true"] {
+  color: var(--color-text-primary);
+  text-shadow: 0 0 12px var(--navbar-glow);
+}
+
+.topbar-nav-link:hover::after,
+.nav-menu-trigger:hover::after {
+  transform: scaleX(1);
+}
+
+.topbar-nav-link-active {
+  color: var(--color-text-primary);
+  text-shadow: 0 0 12px var(--navbar-glow);
+}
+
+.topbar-nav-link-active::before {
+  content: "";
+  position: absolute;
+  top: -0.3rem;
+  left: -0.45rem;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-top: 1px solid var(--color-accent);
+  border-left: 1px solid var(--color-accent);
+  pointer-events: none;
+}
+
+.topbar-nav-link-active::after {
+  height: 2px;
+  transform: scaleX(1);
+  box-shadow: 0 0 10px var(--navbar-glow);
+}
+
+.live-chip {
+  position: relative;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--panel-hairline);
+  background: var(--navbar-chip-bg);
+  font-size: 0.6875rem;
+}
+
+.live-chip::before,
+.live-chip::after {
+  content: "";
+  position: absolute;
+  width: 0.4rem;
+  height: 0.4rem;
+  pointer-events: none;
+}
+
+.live-chip::before {
+  top: -1px;
+  left: -1px;
+  border-top: 1px solid var(--navbar-notch);
+  border-left: 1px solid var(--navbar-notch);
+}
+
+.live-chip::after {
+  right: -1px;
+  bottom: -1px;
+  border-right: 1px solid var(--navbar-notch);
+  border-bottom: 1px solid var(--navbar-notch);
+}
+
+.theme-toggle {
+  border: 1px solid var(--panel-hairline);
+  border-radius: 0.375rem;
+  background: var(--navbar-chip-bg);
+  color: var(--color-text-secondary);
+  transition: color 150ms ease, border-color 150ms ease, box-shadow 150ms ease,
+    background-color 150ms ease;
+}
+
+.theme-toggle:hover {
+  color: var(--color-text-primary);
+  border-color: var(--panel-hairline-bright);
+  background: var(--feed-row-tint);
+  box-shadow: 0 0 14px var(--navbar-glow);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.nav-menu-panel {
+  border-radius: 0.375rem;
+  background: var(--navbar-menu-bg);
+  backdrop-filter: blur(var(--navbar-blur)) saturate(1.35);
+  -webkit-backdrop-filter: blur(var(--navbar-blur)) saturate(1.35);
+  outline: 1px solid var(--panel-hairline);
+  outline-offset: -1px;
+}
+
+.nav-menu-panel::before,
+.nav-menu-panel::after {
+  content: "";
+  position: absolute;
+  width: 0.5rem;
+  height: 0.5rem;
+  pointer-events: none;
+}
+
+.nav-menu-panel::before {
+  top: -1px;
+  left: -1px;
+  border-top: 1px solid var(--navbar-notch);
+  border-left: 1px solid var(--navbar-notch);
+}
+
+.nav-menu-panel::after {
+  right: -1px;
+  bottom: -1px;
+  border-right: 1px solid var(--navbar-notch);
+  border-bottom: 1px solid var(--navbar-notch);
+}
+
+.nav-menu-item {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.nav-menu-item::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 25%,
+    var(--navbar-item-sweep) 50%,
+    transparent 75%
+  );
+  transform: translateX(-101%);
+  pointer-events: none;
+}
+
+.nav-menu-item:hover::before,
+.nav-menu-item:focus-visible::before {
+  animation: navbar-item-sweep 560ms ease-out forwards;
+}
+
+@keyframes navbar-edge-sweep {
+  from {
+    background-position: -60% 0;
+  }
+  to {
+    background-position: 160% 0;
+  }
+}
+
+@keyframes navbar-item-sweep {
+  to {
+    transform: translateX(101%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar::after {
+    content: none;
+  }
+
+  .topbar-nav-link::after,
+  .nav-menu-trigger::after {
+    transition: none;
+  }
+
+  .nav-menu-item::before {
+    content: none;
+  }
+}

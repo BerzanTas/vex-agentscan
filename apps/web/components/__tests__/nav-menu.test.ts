@@ -40,6 +40,10 @@ describe("NavMenu", () => {
     expect(markup).toMatch(/<div id="nav-menu-rankings"[^>]*hidden=""/);
   });
 
+  it("exposes the panel under the nav-menu-panel hook the HUD glass targets", () => {
+    expect(navMenuMarkupOn("/")).toMatch(/<div id="nav-menu-rankings" class="nav-menu-panel"/);
+  });
+
   it("opens with a button rather than a link to nowhere", () => {
     expect(navMenuMarkupOn("/")).toContain('<button type="button"');
   });
