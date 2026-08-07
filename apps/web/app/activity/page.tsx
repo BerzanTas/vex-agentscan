@@ -3,6 +3,7 @@ import { ActivityFilters } from "../../components/ActivityFilters";
 import { LoadMoreActivity } from "../../components/LoadMoreActivity";
 import {
   activeActivityFilterCount,
+  activityFiltersToQuery,
   chainFilterOptions,
   parseActivityFilters,
   protocolFilterOptions,
@@ -48,6 +49,7 @@ export default async function ActivityPage({
         chains={chainFilterOptions(networks, filters.chain)}
       />
       <LoadMoreActivity
+        key={activityFiltersToQuery(filters).toString()}
         initialItems={feed.items}
         initialCursor={feed.nextCursor}
         filters={filters}
