@@ -2,7 +2,7 @@ import type pg from "pg";
 import type { Logger } from "pino";
 import type { ChainEntry, ChainReader, ResolveChain } from "@agentscan/core";
 import type { Config } from "../config.js";
-import { claimDueJobs, type ClaimedJob } from "../repos/activities-verify-repo.js";
+import { claimDueJobs, queueDepth, type ClaimedJob } from "../repos/activities-verify-repo.js";
 import { applyJobOutcome } from "./apply-outcome.js";
 import { resolveJobOutcome, type ChainReaderContext, type JobOutcome } from "./verify-job.js";
 
@@ -49,7 +49,21 @@ async function persistOutcome(deps: VerificationLoopDeps, resolved: ResolvedJob)
   }
 }
 
+async function logQueueDepth(deps: VerificationLoopDeps): Promise<void> {
+  const depth = await queueDepth(deps.pool);
+  if (depth.totalPending === 0) return;
+  deps.logger.info(
+    {
+      dueJobs: depth.dueJobs,
+      totalPending: depth.totalPending,
+      oldestDueAgeSec: depth.oldestDueAgeSec,
+    },
+    "verification queue depth",
+  );
+}
+
 export async function runVerificationPass(deps: VerificationLoopDeps): Promise<number> {
+  await logQueueDepth(deps);
   const jobs = await claimDueJobs(deps.pool, deps.config.WORKER_BATCH, deps.config.WORKER_LEASE_SEC);
   if (jobs.length === 0) return 0;
   const resolved = await resolveWithConcurrency(jobs, deps.config.WORKER_RPC_CONCURRENCY, deps);

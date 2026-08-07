@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import type pg from "pg";
 import type { Deps } from "../app.js";
+import { queueDepth } from "../repos/activities-verify-repo.js";
 
 const unhealthy = { error: { code: "unhealthy", message: "service unhealthy" } };
 
@@ -9,6 +10,13 @@ async function latestWorkerAgeSec(pool: pg.Pool): Promise<number | null> {
     "SELECT EXTRACT(EPOCH FROM (now() - max(beat_at)))::float8 AS age_sec FROM worker_heartbeat",
   );
   return result.rows[0]?.age_sec ?? null;
+}
+
+async function verificationQueueRead(
+  pool: pg.Pool,
+): Promise<{ depth: number; oldestDueAgeSec: number | null }> {
+  const depth = await queueDepth(pool);
+  return { depth: depth.dueJobs, oldestDueAgeSec: depth.oldestDueAgeSec };
 }
 
 export const healthRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
@@ -25,6 +33,7 @@ export const healthRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
     const heartbeatStale =
       workerAgeSec === null || workerAgeSec > deps.config.WORKER_HEARTBEAT_MAX_AGE_SEC;
     if (strict && heartbeatStale) return reply.status(503).send(unhealthy);
-    return { db: "ok", workerAgeSec };
+    if (!strict) return { db: "ok", workerAgeSec };
+    return { db: "ok", workerAgeSec, verificationQueue: await verificationQueueRead(deps.pool) };
   });
 };
