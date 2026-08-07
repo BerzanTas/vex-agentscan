@@ -3,6 +3,11 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from "@
 const agentHash = "c0dec0de".repeat(8);
 const ingestToken = `smoke_${"A".repeat(37)}`;
 const goldenSwapLinkName = "kyberswap ETH → VEX";
+const goldenTokenSymbol = "ETH";
+const goldenTokenChainSlug = "robinhood";
+const goldenTokenAddress = "0xabc";
+const goldenTokenLinkName = `${goldenTokenSymbol} on ${goldenTokenChainSlug}`;
+const goldenTokenPath = `/tokens/${goldenTokenChainSlug}/${goldenTokenAddress}`;
 
 const goldenSwap = (nowIso: string) => ({
   sourceRowId: "44210",
@@ -79,12 +84,21 @@ async function fetchGoldenSwapPublicId(request: APIRequestContext): Promise<stri
 
 type ActivityPage = { items: { publicId: string }[]; nextCursor: string | null };
 
-async function fetchActivityPage(request: APIRequestContext, cursor?: string): Promise<ActivityPage> {
-  const path = cursor === undefined ? "/api/activity" : `/api/activity?cursor=${encodeURIComponent(cursor)}`;
-  const response = await request.get(path);
+async function fetchActivityPage(
+  request: APIRequestContext,
+  query: URLSearchParams = new URLSearchParams(),
+): Promise<ActivityPage> {
+  const search = query.toString();
+  const response = await request.get(search === "" ? "/api/activity" : `/api/activity?${search}`);
   expect(response.status()).toBe(200);
   return (await response.json()) as ActivityPage;
 }
+
+function swapFilterQuery(): URLSearchParams {
+  return new URLSearchParams({ kind: "swap", protocol: "kyberswap" });
+}
+
+const swapFilterPath = `/activity?${swapFilterQuery().toString()}`;
 
 function goldenSwapLink(page: Page): Locator {
   return page.getByRole("link", { name: goldenSwapLinkName, exact: true });
@@ -97,15 +111,49 @@ function goldenSwapRow(page: Page): Locator {
     .filter({ has: page.getByRole("img", { name: "kyberswap" }) });
 }
 
-async function openFeedShowingGoldenSwap(page: Page, path: string): Promise<void> {
+function goldenTokenLink(page: Page): Locator {
+  return page.getByRole("link", { name: goldenTokenLinkName, exact: true });
+}
+
+function navbarLink(page: Page, name: string): Locator {
+  return page.getByRole("banner").getByRole("link", { name, exact: true });
+}
+
+function rankingsTrigger(page: Page): Locator {
+  return page.getByRole("banner").getByRole("button", { name: "Rankings" });
+}
+
+async function openRankingsMenu(page: Page): Promise<void> {
+  await rankingsTrigger(page).click();
+  await expect(rankingsTrigger(page)).toHaveAttribute("aria-expanded", "true");
+}
+
+async function feedRowHrefs(page: Page): Promise<string[]> {
+  return page
+    .locator('tbody a[href^="/tx/"]')
+    .evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? ""));
+}
+
+async function openPageShowing(page: Page, path: string, expected: Locator): Promise<void> {
   await expect(async () => {
     await page.goto(path, { waitUntil: "domcontentloaded" });
-    await expect(goldenSwapLink(page)).toBeVisible({ timeout: 2_000 });
+    await expect(expected).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 120_000, intervals: [5_000] });
 }
 
-test("dashboard feed shows the verified golden swap", async ({ page, request }) => {
+async function openFeedShowingGoldenSwap(page: Page, path: string): Promise<void> {
+  await openPageShowing(page, path, goldenSwapLink(page));
+}
+
+test.beforeAll(async ({ playwright }) => {
+  const request = await playwright.request.newContext({
+    baseURL: process.env.SMOKE_BASE_URL ?? "http://localhost",
+  });
   await seedGoldenSwap(request);
+  await request.dispose();
+});
+
+test("dashboard feed shows the verified golden swap", async ({ page, request }) => {
   const publicId = await fetchGoldenSwapPublicId(request);
   await openFeedShowingGoldenSwap(page, "/");
   const feedRow = goldenSwapRow(page);
@@ -118,7 +166,6 @@ test("dashboard feed shows the verified golden swap", async ({ page, request }) 
 });
 
 test("tx detail page renders amounts and og meta", async ({ page, request }) => {
-  await seedGoldenSwap(request);
   const publicId = await fetchGoldenSwapPublicId(request);
 
   await page.goto(`/tx/${publicId}`, { waitUntil: "domcontentloaded" });
@@ -144,7 +191,6 @@ test("a feed row opens the transaction detail when the age column is clicked", a
   page,
   request,
 }) => {
-  await seedGoldenSwap(request);
   const publicId = await fetchGoldenSwapPublicId(request);
   await openFeedShowingGoldenSwap(page, "/");
 
@@ -207,7 +253,6 @@ test("a chart range chip loads its range without a page navigation", async ({ pa
 });
 
 test("the activity page lists the verified golden swap", async ({ page, request }) => {
-  await seedGoldenSwap(request);
   await fetchGoldenSwapPublicId(request);
   await openFeedShowingGoldenSwap(page, "/activity");
 
@@ -216,7 +261,6 @@ test("the activity page lists the verified golden swap", async ({ page, request 
 });
 
 test("the activity page appends the next page of rows on demand", async ({ page, request }) => {
-  await seedGoldenSwap(request);
   await fetchGoldenSwapPublicId(request);
   const rows = page.locator("tbody tr");
   const loadMore = page.getByRole("button", { name: "Load more" });
@@ -233,9 +277,181 @@ test("the activity page appends the next page of rows on demand", async ({ page,
     return;
   }
 
-  const nextPage = await fetchActivityPage(request, feedPage.nextCursor);
+  const nextPage = await fetchActivityPage(
+    request,
+    new URLSearchParams({ cursor: feedPage.nextCursor }),
+  );
   await loadMore.click();
   await expect(rows).toHaveCount(feedPage.items.length + nextPage.items.length);
+});
+
+test("the navbar reaches the tokens and networks pages", async ({ page }) => {
+  await page.goto("/", { waitUntil: "load" });
+
+  await navbarLink(page, "Tokens").click();
+
+  await expect(page).toHaveURL("/tokens");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Tokens");
+
+  await navbarLink(page, "Networks").click();
+
+  await expect(page).toHaveURL("/networks");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Networks");
+});
+
+test("the rankings menu reaches every ranking page", async ({ page }) => {
+  await page.goto("/", { waitUntil: "load" });
+
+  await openRankingsMenu(page);
+  await navbarLink(page, "Agents").click();
+
+  await expect(page).toHaveURL("/agents");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Top agents");
+
+  await openRankingsMenu(page);
+  await navbarLink(page, "Protocols").click();
+
+  await expect(page).toHaveURL("/protocols");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Protocols");
+
+  await openRankingsMenu(page);
+  await navbarLink(page, "Verification").click();
+
+  await expect(page).toHaveURL("/verification");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Verification");
+});
+
+test("the rankings menu opens with the keyboard and closes with Escape", async ({ page }) => {
+  await page.goto("/", { waitUntil: "load" });
+  const trigger = rankingsTrigger(page);
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+  await expect(async () => {
+    await trigger.press("ArrowDown");
+    await expect(navbarLink(page, "Agents")).toBeFocused({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000, intervals: [1_000] });
+
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+
+  await page.keyboard.press("Escape");
+
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await expect(trigger).toBeFocused();
+  await expect(navbarLink(page, "Agents")).toHaveCount(0);
+});
+
+test("the navbar marks the tokens section on the list and on a token page", async ({
+  page,
+  request,
+}) => {
+  await fetchGoldenSwapPublicId(request);
+  await openPageShowing(page, "/tokens", goldenTokenLink(page));
+
+  await expect(navbarLink(page, "Tokens")).toHaveClass(/topbar-nav-link-active/);
+  await expect(navbarLink(page, "Networks")).not.toHaveClass(/topbar-nav-link-active/);
+
+  await page.goto(goldenTokenPath, { waitUntil: "domcontentloaded" });
+
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(goldenTokenSymbol);
+  await expect(navbarLink(page, "Tokens")).toHaveClass(/topbar-nav-link-active/);
+  await expect(navbarLink(page, "Networks")).not.toHaveClass(/topbar-nav-link-active/);
+});
+
+test("a token row opens the token page for that symbol on that chain", async ({ page, request }) => {
+  await fetchGoldenSwapPublicId(request);
+  await openPageShowing(page, "/tokens", goldenTokenLink(page));
+
+  const tokenRow = page.locator("tbody tr").filter({ has: goldenTokenLink(page) });
+  await tokenRow.locator("td").last().click({ force: true });
+
+  await expect(page).toHaveURL(goldenTokenPath);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(goldenTokenSymbol);
+  await expect(page.locator("main header")).toContainText(goldenTokenChainSlug);
+  await expect(page).toHaveTitle(`${goldenTokenSymbol} on ${goldenTokenChainSlug} — AgentScan`);
+});
+
+test("two activity filters land in the url and survive a reload", async ({ page, request }) => {
+  await fetchGoldenSwapPublicId(request);
+  await openFeedShowingGoldenSwap(page, "/activity");
+
+  await page.getByLabel("Kind").selectOption("swap");
+  await expect(page).toHaveURL("/activity?kind=swap");
+  await expect(page.getByText("1 filter active")).toBeVisible();
+
+  await page.getByLabel("Protocol").selectOption("kyberswap");
+  await expect(page).toHaveURL(swapFilterPath);
+  await expect(page.getByText("2 filters active")).toBeVisible();
+  await expect(goldenSwapLink(page)).toBeVisible();
+  const filteredHrefs = await feedRowHrefs(page);
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+
+  await expect(page.getByLabel("Kind")).toHaveValue("swap");
+  await expect(page.getByLabel("Protocol")).toHaveValue("kyberswap");
+  await expect(goldenSwapLink(page)).toBeVisible();
+  expect(await feedRowHrefs(page)).toEqual(filteredHrefs);
+});
+
+test("clearing the filters restores the unfiltered feed", async ({ page, request }) => {
+  await fetchGoldenSwapPublicId(request);
+  await openFeedShowingGoldenSwap(page, "/activity");
+  const unfilteredHrefs = await feedRowHrefs(page);
+
+  await page.getByLabel("Kind").selectOption("swap");
+  await expect(page).toHaveURL("/activity?kind=swap");
+  await expect(page.getByText("1 filter active")).toBeVisible();
+
+  await page.getByRole("button", { name: "Clear filters" }).click();
+
+  await expect(page).toHaveURL("/activity");
+  await expect(page.getByText("1 filter active")).toHaveCount(0);
+  await expect(page.getByLabel("Kind")).toHaveValue("");
+  await expect(goldenSwapLink(page)).toBeVisible();
+  expect(await feedRowHrefs(page)).toEqual(unfilteredHrefs);
+});
+
+test("a filter the swap does not match drops it from the feed", async ({ page, request }) => {
+  await fetchGoldenSwapPublicId(request);
+  await openFeedShowingGoldenSwap(page, "/activity");
+
+  await page.getByLabel("Kind").selectOption("bridge");
+
+  await expect(page).toHaveURL("/activity?kind=bridge");
+  await expect(page.getByText("1 filter active")).toBeVisible();
+  await expect(goldenSwapLink(page)).toHaveCount(0);
+});
+
+test("load more asks for the next page with the active filters", async ({ page, request }) => {
+  await fetchGoldenSwapPublicId(request);
+  const rows = page.locator("tbody tr");
+  const loadMore = page.getByRole("button", { name: "Load more" });
+
+  let filteredPage: ActivityPage = { items: [], nextCursor: null };
+  await expect(async () => {
+    filteredPage = await fetchActivityPage(request, swapFilterQuery());
+    await page.goto(swapFilterPath, { waitUntil: "load" });
+    await expect(rows).toHaveCount(filteredPage.items.length, { timeout: 2_000 });
+  }).toPass({ timeout: 120_000, intervals: [5_000] });
+
+  if (filteredPage.nextCursor === null) {
+    await expect(loadMore).toHaveCount(0);
+    await expect(goldenSwapLink(page)).toBeVisible();
+    return;
+  }
+
+  const nextQuery = swapFilterQuery();
+  nextQuery.set("cursor", filteredPage.nextCursor);
+  const nextPage = await fetchActivityPage(request, nextQuery);
+  const nextRequest = page.waitForRequest(
+    (candidate) => candidate.url().includes("/api/activity?"),
+    { timeout: 15_000 },
+  );
+  await loadMore.click();
+  const requested = new URL((await nextRequest).url());
+
+  expect(requested.searchParams.get("kind")).toBe("swap");
+  expect(requested.searchParams.get("protocol")).toBe("kyberswap");
+  await expect(rows).toHaveCount(filteredPage.items.length + nextPage.items.length);
 });
 
 test.describe("with reduced motion", () => {

@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
-import type { ResolveChain } from "./app.js";
+import type { ChainEntry, ResolveChain } from "./app.js";
 import type { ActivityDbRow, AgentVolumeRead } from "./repos/read-repo.js";
+
+export type ResolveBridgeChain = (protocol: string, chainId: bigint) => ChainEntry | null;
+
+export type VerificationTier = ChainEntry["verificationTier"];
 
 export type StatsDto = {
   dailyVolumeUsd: string;
@@ -16,7 +20,20 @@ export type LookupDto = { publicId: string };
 
 export type ProtocolStatDto = { protocol: string; volumeUsd: string; txCount: number };
 
-export type AgentStatDto = { alias: string; volumeUsd: string; txCount: number };
+export type ProtocolRankingDto = ProtocolStatDto & {
+  chainCount: number;
+  swapTxCount: number;
+  bridgeTxCount: number;
+};
+
+export type AgentStatDto = {
+  alias: string;
+  volumeUsd: string;
+  txCount: number;
+  protocolCount: number;
+  chainCount: number;
+  lastSeenSeconds: number;
+};
 
 export function agentAlias(salt: string, agentHash: string): string {
   const digest = createHash("sha256").update(salt + agentHash).digest("hex");
@@ -28,6 +45,9 @@ export function toAgentStatDto(salt: string, read: AgentVolumeRead): AgentStatDt
     alias: agentAlias(salt, read.agentHash),
     volumeUsd: read.volumeUsd,
     txCount: read.txCount,
+    protocolCount: read.protocolCount,
+    chainCount: read.chainCount,
+    lastSeenSeconds: read.lastSeenSeconds,
   };
 }
 
@@ -39,6 +59,8 @@ export type ActivityRowDto = {
   status: string;
   verificationState: string;
   chainSlug: string | null;
+  fromChainSlug: string | null;
+  toChainSlug: string | null;
   explorerUrl: string | null;
   tokenInSymbol: string | null;
   tokenOutSymbol: string | null;
@@ -75,13 +97,41 @@ function chainPresentationFor(row: ActivityDbRow, resolveChain: ResolveChain): C
   };
 }
 
+type BridgeRoutePresentation = { fromChainSlug: string | null; toChainSlug: string | null };
+
+const noBridgeRoute: BridgeRoutePresentation = { fromChainSlug: null, toChainSlug: null };
+
+const bridgeChainUnresolved: ResolveBridgeChain = () => null;
+
+function bridgeLegSlug(
+  protocol: string,
+  chainId: bigint | null,
+  resolveBridgeChain: ResolveBridgeChain,
+): string | null {
+  if (chainId === null) return null;
+  return resolveBridgeChain(protocol, chainId)?.canonicalSlug ?? null;
+}
+
+function bridgeRouteFor(row: ActivityDbRow, resolveBridgeChain: ResolveBridgeChain): BridgeRoutePresentation {
+  if (row.kind !== "bridge") return noBridgeRoute;
+  return {
+    fromChainSlug: bridgeLegSlug(row.protocol, row.from_chain_id, resolveBridgeChain),
+    toChainSlug: bridgeLegSlug(row.protocol, row.to_chain_id, resolveBridgeChain),
+  };
+}
+
 function ageSecondsOf(row: ActivityDbRow): number {
   const anchor = row.client_confirmed_at ?? row.client_created_at;
   return Math.max(0, Math.floor((Date.now() - anchor.getTime()) / 1000));
 }
 
-export function toActivityRowDto(row: ActivityDbRow, resolveChain: ResolveChain): ActivityRowDto {
+export function toActivityRowDto(
+  row: ActivityDbRow,
+  resolveChain: ResolveChain,
+  resolveBridgeChain: ResolveBridgeChain = bridgeChainUnresolved,
+): ActivityRowDto {
   const chain = chainPresentationFor(row, resolveChain);
+  const route = bridgeRouteFor(row, resolveBridgeChain);
   return {
     publicId: row.public_id,
     kind: row.kind,
@@ -90,6 +140,8 @@ export function toActivityRowDto(row: ActivityDbRow, resolveChain: ResolveChain)
     status: row.status,
     verificationState: row.verification_state,
     chainSlug: chain.chainSlug,
+    fromChainSlug: route.fromChainSlug,
+    toChainSlug: route.toChainSlug,
     explorerUrl: chain.explorerUrl,
     tokenInSymbol: row.token_in_symbol,
     tokenOutSymbol: row.token_out_symbol,
@@ -101,8 +153,13 @@ export function toActivityRowDto(row: ActivityDbRow, resolveChain: ResolveChain)
   };
 }
 
-export function toTxDetailDto(row: ActivityDbRow, resolveChain: ResolveChain): TxDetailDto {
+export function toTxDetailDto(
+  row: ActivityDbRow,
+  resolveChain: ResolveChain,
+  resolveBridgeChain: ResolveBridgeChain = bridgeChainUnresolved,
+): TxDetailDto {
   const chain = chainPresentationFor(row, resolveChain);
+  const route = bridgeRouteFor(row, resolveBridgeChain);
   return {
     publicId: row.public_id,
     kind: row.kind,
@@ -111,6 +168,8 @@ export function toTxDetailDto(row: ActivityDbRow, resolveChain: ResolveChain): T
     status: row.status,
     verificationState: row.verification_state,
     chainSlug: chain.chainSlug,
+    fromChainSlug: route.fromChainSlug,
+    toChainSlug: route.toChainSlug,
     explorerUrl: chain.explorerUrl,
     tokenInSymbol: row.token_in_symbol,
     tokenOutSymbol: row.token_out_symbol,
@@ -130,3 +189,87 @@ export function toTxDetailDto(row: ActivityDbRow, resolveChain: ResolveChain): T
     failureCode: row.failure_code,
   };
 }
+
+export type TokenStatDto = {
+  chainSlug: string;
+  address: string;
+  symbol: string | null;
+  volumeUsd: string;
+  txCount: number;
+  agentCount: number;
+  protocols: string[];
+  lastSeenSeconds: number;
+  series: ChartPointDto[];
+};
+
+export type TokenPairDto = {
+  tokenInSymbol: string | null;
+  tokenOutSymbol: string | null;
+  txCount: number;
+};
+
+export type TokenDetailDto = {
+  chainSlug: string;
+  address: string;
+  symbol: string | null;
+  decimals: number | null;
+  volumeUsd: string;
+  txCount: number;
+  agentCount: number;
+  protocols: ProtocolStatDto[];
+  pairs: TokenPairDto[];
+  series: ChartPointDto[];
+};
+
+export type NetworkStatDto = {
+  chainSlug: string;
+  displayName: string;
+  verificationTier: VerificationTier;
+  volumeUsd: string;
+  txCount: number;
+  bridgeInCount: number;
+  bridgeOutCount: number;
+  lastSeenSeconds: number | null;
+};
+
+export type NetworkTokenDto = {
+  address: string;
+  symbol: string | null;
+  volumeUsd: string;
+  txCount: number;
+};
+
+export type BridgeRouteDto = {
+  fromChainSlug: string;
+  toChainSlug: string;
+  legCount: number;
+  volumeUsd: string;
+};
+
+export type NetworkDetailDto = {
+  chainSlug: string;
+  displayName: string;
+  verificationTier: VerificationTier;
+  volumeUsd: string;
+  txCount: number;
+  protocols: ProtocolStatDto[];
+  tokens: NetworkTokenDto[];
+  routes: BridgeRouteDto[];
+  series: ChartPointDto[];
+};
+
+export type ChainTierDto = {
+  chainSlug: string;
+  displayName: string;
+  verificationTier: VerificationTier;
+};
+
+export type VerificationLatencyDto = { median: number | null; p90: number | null };
+
+export type VerificationStatsDto = {
+  verifiedFull: number;
+  verifiedBasic: number;
+  queued: number;
+  latencySeconds: VerificationLatencyDto;
+  chains: ChainTierDto[];
+};

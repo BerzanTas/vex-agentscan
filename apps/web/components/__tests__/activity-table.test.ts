@@ -12,6 +12,8 @@ const row: ActivityRowDto = {
   status: "confirmed",
   verificationState: "verified_full",
   chainSlug: "base",
+  fromChainSlug: null,
+  toChainSlug: null,
   explorerUrl: "https://basescan.org/tx/0xabc",
   tokenInSymbol: "USDC",
   tokenOutSymbol: "WETH",
@@ -70,6 +72,56 @@ describe("ActivityTable", () => {
 
     expect(markup).toContain("Waiting for the first verified activity");
     expect(markup).not.toContain("<table");
+  });
+});
+
+const bridgeRow: ActivityRowDto = {
+  ...row,
+  publicId: "pub-2",
+  kind: "bridge",
+  eventRole: "bridge_send",
+  protocol: "relay",
+  chainSlug: "arbitrum",
+  fromChainSlug: "arbitrum",
+  toChainSlug: "base",
+};
+
+describe("ActivityTable chain column", () => {
+  it("renders both legs of a bridge with an arrow between them", () => {
+    const markup = markupFor([bridgeRow]);
+
+    expect(markup).toContain('class="route-arrow"');
+    expect(markup).toContain("/chains/arbitrum.svg");
+    expect(markup).toContain("/chains/base.svg");
+  });
+
+  it("renders the origin chain alone when the destination leg is unresolved", () => {
+    const markup = markupFor([{ ...bridgeRow, toChainSlug: null }]);
+
+    expect(markup).not.toContain("route-arrow");
+    expect(markup).toContain("/chains/arbitrum.svg");
+    expect(markup).not.toContain("/chains/base.svg");
+  });
+
+  it("shows a dash rather than putting a lone destination leg in the chain column", () => {
+    const markup = markupFor([{ ...bridgeRow, chainSlug: null, fromChainSlug: null }]);
+
+    expect(markup).not.toContain("route-arrow");
+    expect(markup).not.toContain("/chains/arbitrum.svg");
+    expect(markup).toContain("—");
+  });
+
+  it("renders a swap without a route arrow", () => {
+    const markup = markupFor([row]);
+
+    expect(markup).not.toContain("route-arrow");
+    expect(markup).toContain("/chains/base.svg");
+  });
+
+  it("keeps a bridge row at exactly five cells", () => {
+    const markup = markupFor([bridgeRow]);
+
+    expect(markup.match(/<td[\s>]/g)).toHaveLength(5);
   });
 });
 

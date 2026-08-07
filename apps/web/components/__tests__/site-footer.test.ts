@@ -42,3 +42,13 @@ describe("SiteFooter", () => {
     expect(markup()).not.toContain("style=");
   });
 });
+
+describe("SiteFooter navigation", () => {
+  it("links to every page the navbar offers, so the footer cannot fall behind it", () => {
+    const rendered = markup();
+
+    for (const href of ["/tokens", "/networks", "/agents", "/protocols", "/verification"]) {
+      expect(rendered).toContain(`href="${href}"`);
+    }
+  });
+});

@@ -50,3 +50,14 @@ export function formatAge(ageSeconds: number): string {
   if (ageSeconds < 86400) return `${Math.floor(ageSeconds / 3600)}h`;
   return `${Math.floor(ageSeconds / 86400)}d`;
 }
+
+export function formatLatency(seconds: number): string {
+  if (seconds < 1) return `${seconds.toFixed(2)}s`;
+  if (seconds < 60) return `${seconds.toFixed(1)}s`;
+  const wholeMinutes = Math.floor(seconds / 60);
+  const remainder = Math.round(seconds - wholeMinutes * 60);
+  if (wholeMinutes < 60) return remainder === 0 ? `${wholeMinutes}m` : `${wholeMinutes}m ${remainder}s`;
+  const wholeHours = Math.floor(wholeMinutes / 60);
+  const leftoverMinutes = wholeMinutes - wholeHours * 60;
+  return leftoverMinutes === 0 ? `${wholeHours}h` : `${wholeHours}h ${leftoverMinutes}m`;
+}

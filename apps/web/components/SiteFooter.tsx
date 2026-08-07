@@ -26,6 +26,24 @@ export function SiteFooter() {
             <Link href="/activity" className="footer-link">
               Activity
             </Link>
+            <Link href="/tokens" className="footer-link">
+              Tokens
+            </Link>
+            <Link href="/networks" className="footer-link">
+              Networks
+            </Link>
+          </nav>
+          <nav className="footer-col" aria-label="Rankings">
+            <span className="footer-col-title">Rankings</span>
+            <Link href="/agents" className="footer-link">
+              Top agents
+            </Link>
+            <Link href="/protocols" className="footer-link">
+              Protocols
+            </Link>
+            <Link href="/verification" className="footer-link">
+              Verification
+            </Link>
           </nav>
           <nav className="footer-col" aria-label="Vex">
             <span className="footer-col-title">Vex</span>

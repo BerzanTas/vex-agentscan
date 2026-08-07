@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { NavLink } from "./NavLink";
+import { NavMenu } from "./NavMenu";
 import { ThemeToggle } from "./ThemeToggle";
 import { TopBarSearch } from "./TopBarSearch";
 
@@ -11,9 +13,10 @@ export function TopBar() {
           <img src="/logo-light.svg" alt="AgentScan" className="logo-light h-11 w-auto" />
         </Link>
         <nav className="flex shrink-0 items-center gap-6">
-          <Link href="/activity" className="topbar-nav-link">
-            Activity
-          </Link>
+          <NavLink href="/activity">Activity</NavLink>
+          <NavLink href="/tokens">Tokens</NavLink>
+          <NavLink href="/networks">Networks</NavLink>
+          <NavMenu />
         </nav>
         <div className="ml-auto flex items-center gap-6">
           <TopBarSearch />

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { NavLink } from "../NavLink";
 import { TopBar } from "../TopBar";
 import { TopBarSearch } from "../TopBarSearch";
 
@@ -17,6 +18,15 @@ function topBarMarkupOn(pathname: string): string {
   return renderToStaticMarkup(createElement(TopBar));
 }
 
+function anchorWithHref(markup: string, href: string): string {
+  return markup.match(new RegExp(`<a[^>]*href="${href}"[^>]*>`))?.[0] ?? "";
+}
+
+function navLinkMarkupOn(pathname: string, href: string): string {
+  routing.pathname = pathname;
+  return renderToStaticMarkup(createElement(NavLink, { href, children: "Tokens" }));
+}
+
 function topBarSearchMarkupOn(pathname: string): string {
   routing.pathname = pathname;
   return renderToStaticMarkup(createElement(TopBarSearch));
@@ -25,6 +35,29 @@ function topBarSearchMarkupOn(pathname: string): string {
 describe("TopBar", () => {
   it("links to the activity page", () => {
     expect(topBarMarkupOn("/")).toContain('href="/activity"');
+  });
+
+  it("links to the tokens page", () => {
+    expect(topBarMarkupOn("/")).toContain('href="/tokens"');
+  });
+
+  it("links to the networks page", () => {
+    expect(topBarMarkupOn("/")).toContain('href="/networks"');
+  });
+
+  it("groups the three rankings destinations behind one menu", () => {
+    const markup = topBarMarkupOn("/");
+
+    expect(markup).toContain('href="/agents"');
+    expect(markup).toContain('href="/protocols"');
+    expect(markup).toContain('href="/verification"');
+  });
+
+  it("marks the section the visitor is in", () => {
+    const markup = topBarMarkupOn("/networks/base");
+
+    expect(anchorWithHref(markup, "/networks")).toContain("topbar-nav-link-active");
+    expect(anchorWithHref(markup, "/tokens")).not.toContain("topbar-nav-link-active");
   });
 
   it("no longer links to the retired methodology page", () => {
@@ -51,6 +84,25 @@ describe("TopBar", () => {
 
   it("carries no inline style attribute the production CSP would block", () => {
     expect(topBarMarkupOn("/activity")).not.toContain("style=");
+  });
+});
+
+describe("NavLink", () => {
+  it("stays lit on a detail page below its section", () => {
+    expect(navLinkMarkupOn("/tokens/base/0xabc", "/tokens")).toContain("topbar-nav-link-active");
+  });
+
+  it("treats a route that merely shares a prefix as another section", () => {
+    expect(navLinkMarkupOn("/tokensale", "/tokens")).not.toContain("topbar-nav-link-active");
+  });
+
+  it("keeps the root link dark on every other route", () => {
+    expect(navLinkMarkupOn("/activity", "/")).not.toContain("topbar-nav-link-active");
+  });
+
+  it("announces the exact page, not the whole section", () => {
+    expect(navLinkMarkupOn("/tokens", "/tokens")).toContain('aria-current="page"');
+    expect(navLinkMarkupOn("/tokens/base/0xabc", "/tokens")).not.toContain("aria-current");
   });
 });
 

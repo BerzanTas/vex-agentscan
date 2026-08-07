@@ -42,6 +42,8 @@ const envSchema = z.object({
     .default("true")
     .transform((value) => value === "true"),
   PUBLIC_FEED_PAGE_SIZE: z.coerce.number().int().default(25),
+  PUBLIC_TOKEN_ROWS_MAX: z.coerce.number().int().min(1).default(100),
+  PUBLIC_PANEL_ROWS: z.coerce.number().int().min(1).default(10),
   READ_CACHE_TTL_SEC: z.coerce.number().int().min(0).default(5),
   AGENT_ALIAS_SALT: z.string().min(1).default(DEFAULT_AGENT_ALIAS_SALT),
   RATE_LIMIT_KEY_SALT: z.string().min(1).default(DEFAULT_RATE_LIMIT_KEY_SALT),

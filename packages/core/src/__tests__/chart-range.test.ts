@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveChartRange } from "../chart-range.js";
+import { rangeWindowSeconds, resolveChartRange } from "../chart-range.js";
 
 describe("resolveChartRange", () => {
   it("maps 24h to twenty four hourly buckets from raw activities", () => {
@@ -32,5 +32,23 @@ describe("resolveChartRange", () => {
 
   it("falls back to 30d for a missing range", () => {
     expect(resolveChartRange(undefined)).toEqual({ source: "aggregates", days: 30 });
+  });
+});
+
+describe("rangeWindowSeconds", () => {
+  it("derives a day from the hourly bucket plan", () => {
+    expect(rangeWindowSeconds(resolveChartRange("24h"))).toBe(86_400);
+  });
+
+  it("derives a week from the six-hourly bucket plan", () => {
+    expect(rangeWindowSeconds(resolveChartRange("7d"))).toBe(604_800);
+  });
+
+  it("derives thirty days from the aggregate plan", () => {
+    expect(rangeWindowSeconds(resolveChartRange("30d"))).toBe(2_592_000);
+  });
+
+  it("leaves the all-time range unbounded", () => {
+    expect(rangeWindowSeconds(resolveChartRange("all"))).toBeNull();
   });
 });
