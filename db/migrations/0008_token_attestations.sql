@@ -27,5 +27,9 @@ CREATE INDEX idx_token_attestations_pending
 CREATE INDEX idx_token_attestations_lookup
   ON token_attestations (chain_id, token_address);
 
+CREATE INDEX idx_token_attestations_pending_by_ip
+  ON token_attestations (submitter_ip_hash)
+  WHERE verify_status = 'unverified' AND revoked_at IS NULL;
+
 -- migrate:down
 DROP TABLE token_attestations;

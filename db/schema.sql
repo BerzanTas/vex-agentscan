@@ -383,6 +383,13 @@ CREATE INDEX idx_token_attestations_pending ON public.token_attestations USING b
 
 
 --
+-- Name: idx_token_attestations_pending_by_ip; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_token_attestations_pending_by_ip ON public.token_attestations USING btree (submitter_ip_hash) WHERE ((verify_status = 'unverified'::text) AND (revoked_at IS NULL));
+
+
+--
 -- Name: idx_verification_jobs_due; Type: INDEX; Schema: public; Owner: -
 --
 

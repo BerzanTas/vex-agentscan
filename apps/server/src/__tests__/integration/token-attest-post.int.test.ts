@@ -108,13 +108,30 @@ describe("POST /v1/tokens/attest", () => {
     expect(rows.rows[0].derived_tx_hash).toBeNull();
   });
 
-  it("is idempotent for a repeat submission from the same signer: single row, refreshed hint", async () => {
+  it("is idempotent for a repeat submission from the same signer: single row, 200", async () => {
+    const tokenAddress = randomTokenAddress();
+    const account = privateKeyToAccount(generatePrivateKey());
+    const message = canonicalAttestMessage(trenchChainId, tokenAddress);
+    const attestSignature = await account.signMessage({ message });
+
+    const first = await attest({ chainId: Number(trenchChainId), tokenAddress, attestSignature });
+    expect(first.statusCode).toBe(200);
+
+    const second = await attest({ chainId: Number(trenchChainId), tokenAddress, attestSignature });
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toEqual({ status: "accepted", verifyStatus: "unverified" });
+
+    const rows = await attestationRows(tokenAddress);
+    expect(rows.rows).toHaveLength(1);
+  });
+
+  it("keeps tx_hash_hint write-once: a replayed signature with a different txHash never overwrites it", async () => {
     const tokenAddress = randomTokenAddress();
     const account = privateKeyToAccount(generatePrivateKey());
     const message = canonicalAttestMessage(trenchChainId, tokenAddress);
     const attestSignature = await account.signMessage({ message });
     const firstTxHash = `0x${"1".repeat(64)}`;
-    const secondTxHash = `0x${"2".repeat(64)}`;
+    const replayedTxHash = `0x${"2".repeat(64)}`;
 
     const first = await attest({
       chainId: Number(trenchChainId),
@@ -124,18 +141,42 @@ describe("POST /v1/tokens/attest", () => {
     });
     expect(first.statusCode).toBe(200);
 
+    const replay = await attest({
+      chainId: Number(trenchChainId),
+      tokenAddress,
+      attestSignature,
+      txHash: replayedTxHash,
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual({ status: "accepted", verifyStatus: "unverified" });
+
+    const rows = await attestationRows(tokenAddress);
+    expect(rows.rows).toHaveLength(1);
+    expect(rows.rows[0].tx_hash_hint).toBe(firstTxHash);
+  });
+
+  it("fills a null tx_hash_hint on a later submission that does carry one", async () => {
+    const tokenAddress = randomTokenAddress();
+    const account = privateKeyToAccount(generatePrivateKey());
+    const message = canonicalAttestMessage(trenchChainId, tokenAddress);
+    const attestSignature = await account.signMessage({ message });
+    const laterTxHash = `0x${"3".repeat(64)}`;
+
+    const first = await attest({ chainId: Number(trenchChainId), tokenAddress, attestSignature });
+    expect(first.statusCode).toBe(200);
+    expect((await attestationRows(tokenAddress)).rows[0].tx_hash_hint).toBeNull();
+
     const second = await attest({
       chainId: Number(trenchChainId),
       tokenAddress,
       attestSignature,
-      txHash: secondTxHash,
+      txHash: laterTxHash,
     });
     expect(second.statusCode).toBe(200);
-    expect(second.json()).toEqual({ status: "accepted", verifyStatus: "unverified" });
 
     const rows = await attestationRows(tokenAddress);
     expect(rows.rows).toHaveLength(1);
-    expect(rows.rows[0].tx_hash_hint).toBe(secondTxHash);
+    expect(rows.rows[0].tx_hash_hint).toBe(laterTxHash);
   });
 
   it("gives a different signer for the same token its own row (anti-squatting)", async () => {
@@ -312,6 +353,52 @@ describe("POST /v1/tokens/attest anti-abuse limits", () => {
       method: "POST",
       url: "/v1/tokens/attest",
       remoteAddress: cappedIp,
+      payload: { chainId: Number(trenchChainId), tokenAddress, attestSignature },
+    });
+
+    expect(third.statusCode).toBe(429);
+    expect(third.json().error.code).toBe("rate_limited");
+    expect(Number(third.headers["retry-after"])).toBeGreaterThanOrEqual(1);
+    const rows = await attestationRows(tokenAddress);
+    expect(rows.rows).toHaveLength(0);
+
+    await cappedApp.close();
+  });
+
+  it("caps outstanding-unverified rows globally with 429 rate_limited, independent of any single IP's cap", async () => {
+    const baseline = await db.pool.query<{ pending_count: string }>(
+      "SELECT COUNT(*)::text AS pending_count FROM token_attestations WHERE verify_status = 'unverified' AND revoked_at IS NULL",
+    );
+    const globalCap = Number(baseline.rows[0]?.pending_count ?? "0") + 2;
+    const config = loadConfig({
+      DATABASE_URL: "postgres://unused-in-tests",
+      ATTEST_RATE_LIMIT_PER_IP: "1000",
+      ATTEST_RATE_WINDOW_SEC: "3600",
+      ATTEST_MAX_PENDING_PER_IP: "1000",
+      ATTEST_MAX_PENDING_GLOBAL: String(globalCap),
+    });
+    const cappedApp = await buildApp({ pool: db.pool, config, resolveChain: () => null });
+    const contributingIps = ["203.0.113.40", "203.0.113.41"];
+
+    for (const ip of contributingIps) {
+      const tokenAddress = randomTokenAddress();
+      const { attestSignature } = await signedAttestation(trenchChainId, tokenAddress);
+      const response = await cappedApp.inject({
+        method: "POST",
+        url: "/v1/tokens/attest",
+        remoteAddress: ip,
+        payload: { chainId: Number(trenchChainId), tokenAddress, attestSignature },
+      });
+      expect(response.statusCode).toBe(200);
+    }
+
+    const thirdIp = "203.0.113.42";
+    const tokenAddress = randomTokenAddress();
+    const { attestSignature } = await signedAttestation(trenchChainId, tokenAddress);
+    const third = await cappedApp.inject({
+      method: "POST",
+      url: "/v1/tokens/attest",
+      remoteAddress: thirdIp,
       payload: { chainId: Number(trenchChainId), tokenAddress, attestSignature },
     });
 

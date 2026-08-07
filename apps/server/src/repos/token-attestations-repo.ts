@@ -18,6 +18,7 @@ export type AttestSubmissionOutcome =
   | { kind: "global_cap_exceeded" };
 
 const PENDING_PREDICATE = "verify_status = 'unverified' AND revoked_at IS NULL";
+const SUBMIT_LOCK_KEY = "token_attestations:submit";
 
 async function existingRow(
   client: pg.PoolClient,
@@ -40,7 +41,7 @@ async function refreshExistingRow(
 ): Promise<AttestationVerifyStatus> {
   const result = await client.query<{ verify_status: AttestationVerifyStatus }>(
     `UPDATE token_attestations SET
-       tx_hash_hint = CASE WHEN verify_status = 'unverified' THEN $2 ELSE tx_hash_hint END
+       tx_hash_hint = COALESCE(tx_hash_hint, $2)
      WHERE id = $1
      RETURNING verify_status`,
     [id, submission.txHashHint],
@@ -86,6 +87,7 @@ export async function submitAttestation(
   submission: AttestSubmission,
   limits: AttestSubmissionLimits,
 ): Promise<AttestSubmissionOutcome> {
+  await client.query("SELECT pg_advisory_xact_lock(hashtext($1)::bigint)", [SUBMIT_LOCK_KEY]);
   const existing = await existingRow(client, submission);
   if (existing !== null) {
     return { kind: "accepted", verifyStatus: await refreshExistingRow(client, existing.id, submission) };
