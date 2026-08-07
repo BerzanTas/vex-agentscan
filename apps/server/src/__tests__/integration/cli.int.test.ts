@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { revokeTokenAttestations } from "../../cli/attestation-revoke.js";
 import { listAgentsAwaitingPurge } from "../../cli/purge-status.js";
 import { liftQuarantine, listQuarantinedAgents } from "../../cli/quarantine.js";
 import { retryVerification } from "../../cli/verify-retry.js";
@@ -160,4 +161,56 @@ describe("operator cli actions", () => {
     expect(listed[0]?.ageSeconds).toBeGreaterThan(3 * 3600 - 60);
     expect(listed[0]?.ageSeconds).toBeLessThan(3 * 3600 + 60);
   });
+
+  it("attestation revoke stamps revoked_at and revoke_reason on every row for the token, across signers", async () => {
+    const chainId = 4663n;
+    const tokenAddress = `0x${"7".repeat(40)}`;
+    await insertAttestationRow(chainId, tokenAddress, `0x${"1".repeat(40)}`);
+    await insertAttestationRow(chainId, tokenAddress, `0x${"2".repeat(40)}`);
+    const otherTokenAddress = `0x${"8".repeat(40)}`;
+    await insertAttestationRow(chainId, otherTokenAddress, `0x${"3".repeat(40)}`);
+
+    const outcome = await revokeTokenAttestations(db.pool, chainId, tokenAddress, "creator requested removal");
+
+    expect(outcome).toEqual({ revokedCount: 2 });
+    const revoked = await attestationRowsFor(chainId, tokenAddress);
+    expect(revoked).toHaveLength(2);
+    expect(revoked.every((row) => row.revoked_at !== null)).toBe(true);
+    expect(revoked.every((row) => row.revoke_reason === "creator requested removal")).toBe(true);
+    const untouched = await attestationRowsFor(chainId, otherTokenAddress);
+    expect(untouched[0]?.revoked_at).toBeNull();
+  });
+
+  it("attestation revoke is idempotent: a second call revokes zero further rows", async () => {
+    const chainId = 4663n;
+    const tokenAddress = `0x${"9".repeat(40)}`;
+    await insertAttestationRow(chainId, tokenAddress, `0x${"4".repeat(40)}`);
+
+    const first = await revokeTokenAttestations(db.pool, chainId, tokenAddress, "first reason");
+    const second = await revokeTokenAttestations(db.pool, chainId, tokenAddress, "second reason");
+
+    expect(first).toEqual({ revokedCount: 1 });
+    expect(second).toEqual({ revokedCount: 0 });
+    const rows = await attestationRowsFor(chainId, tokenAddress);
+    expect(rows[0]?.revoke_reason).toBe("first reason");
+  });
 });
+
+async function insertAttestationRow(chainId: bigint, tokenAddress: string, recoveredSigner: string): Promise<void> {
+  await db.pool.query(
+    `INSERT INTO token_attestations (chain_id, token_address, recovered_signer, attest_signature)
+     VALUES ($1, $2, $3, 'sig')`,
+    [chainId.toString(), tokenAddress, recoveredSigner],
+  );
+}
+
+async function attestationRowsFor(
+  chainId: bigint,
+  tokenAddress: string,
+): Promise<{ revoked_at: Date | null; revoke_reason: string | null }[]> {
+  const result = await db.pool.query<{ revoked_at: Date | null; revoke_reason: string | null }>(
+    "SELECT revoked_at, revoke_reason FROM token_attestations WHERE chain_id = $1 AND token_address = $2 ORDER BY id",
+    [chainId.toString(), tokenAddress],
+  );
+  return result.rows;
+}

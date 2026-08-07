@@ -54,4 +54,19 @@ describe("loadConfig", () => {
   it("throws when the default AGENT_ALIAS_SALT runs in production", () => {
     expect(() => loadConfig({ ...baseEnv, NODE_ENV: "production" })).toThrow();
   });
+
+  it("defaults the attestation worker's confirmation depth, age cap, batch, lease, and backoff schedule", () => {
+    const config = loadConfig(baseEnv);
+    expect(config.ATTEST_MIN_CONFIRMATIONS).toBe(5);
+    expect(config.ATTEST_MAX_AGE_DAYS).toBe(14);
+    expect(config.ATTEST_WORKER_BATCH).toBe(20);
+    expect(config.ATTEST_WORKER_LEASE_SEC).toBe(120);
+    expect(config.ATTEST_BACKOFF_SCHEDULE).toEqual(["1m", "5m", "30m", "2h", "12h"]);
+  });
+
+  it("overrides ATTEST_MIN_CONFIRMATIONS and ATTEST_MAX_AGE_DAYS from env", () => {
+    const config = loadConfig({ ...baseEnv, ATTEST_MIN_CONFIRMATIONS: "12", ATTEST_MAX_AGE_DAYS: "30" });
+    expect(config.ATTEST_MIN_CONFIRMATIONS).toBe(12);
+    expect(config.ATTEST_MAX_AGE_DAYS).toBe(30);
+  });
 });

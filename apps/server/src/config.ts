@@ -52,6 +52,11 @@ const envSchema = z.object({
   ATTEST_RATE_WINDOW_SEC: z.coerce.number().int().default(3600),
   ATTEST_MAX_PENDING_PER_IP: z.coerce.number().int().default(100),
   ATTEST_MAX_PENDING_GLOBAL: z.coerce.number().int().default(10000),
+  ATTEST_MIN_CONFIRMATIONS: z.coerce.number().int().min(0).default(5),
+  ATTEST_MAX_AGE_DAYS: z.coerce.number().int().default(14),
+  ATTEST_WORKER_BATCH: z.coerce.number().int().default(20),
+  ATTEST_WORKER_LEASE_SEC: z.coerce.number().int().min(1).default(120),
+  ATTEST_BACKOFF_SCHEDULE: z.string().default("1m,5m,30m,2h,12h").transform(commaSeparated),
 });
 
 export type Config = z.infer<typeof envSchema> & {
