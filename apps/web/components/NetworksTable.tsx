@@ -25,7 +25,7 @@ function bridgeLegLabel(network: NetworkStatDto): string {
 
 export function NetworksTable({ networks }: { networks: NetworkStatDto[] }) {
   return (
-    <div className="glass overflow-x-auto">
+    <div className="glass overflow-x-auto overflow-y-clip">
       <table className="dimension-table">
         <thead>
           <tr>
