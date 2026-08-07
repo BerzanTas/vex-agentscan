@@ -148,6 +148,7 @@ const tokenStat: TokenStatDto = {
   agentCount: 1,
   protocols: ["kyberswap"],
   lastSeenSeconds: 42,
+  series: [{ bucketStart: 1754438400, volumeUsd: "3312.44", txCount: 2 }],
 };
 
 const tokenDetail: TokenDetailDto = {

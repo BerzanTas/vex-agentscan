@@ -4,6 +4,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { TokensTable } from "../TokensTable";
 import type { TokenStatDto } from "../../lib/api";
 
+const SEVEN_DAY_SERIES = Array.from({ length: 7 }, (_, index) => ({
+  bucketStart: 1_754_438_400 + index * 86_400,
+  volumeUsd: index === 6 ? "3312.44" : "0",
+  txCount: index === 6 ? 2 : 0,
+}));
+
 const usdc: TokenStatDto = {
   chainSlug: "base",
   address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -13,6 +19,7 @@ const usdc: TokenStatDto = {
   agentCount: 3,
   protocols: ["kyberswap"],
   lastSeenSeconds: 42,
+  series: SEVEN_DAY_SERIES,
 };
 
 const unnamed: TokenStatDto = {
@@ -24,6 +31,7 @@ const unnamed: TokenStatDto = {
   agentCount: 1,
   protocols: ["uniswap"],
   lastSeenSeconds: 3600,
+  series: SEVEN_DAY_SERIES,
 };
 
 const manyProtocols: TokenStatDto = {
@@ -133,5 +141,14 @@ describe("TokensTable", () => {
     const markup = markupFor([usdc, unnamed, manyProtocols]);
 
     expect(markup).not.toContain("style=");
+  });
+});
+
+describe("TokensTable seven day column", () => {
+  it("draws a sparkline from the row series instead of an em dash placeholder", () => {
+    const markup = markupFor([usdc]);
+
+    expect(markup).toContain("sparkline-line");
+    expect(markup).toContain("Seven day observed volume");
   });
 });

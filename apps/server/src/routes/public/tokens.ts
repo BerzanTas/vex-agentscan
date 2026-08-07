@@ -51,6 +51,7 @@ function listedTokens(reads: TokenStatRead[], resolveChain: ResolveChain): Token
       agentCount: read.agentCount,
       protocols: read.protocols,
       lastSeenSeconds: read.lastSeenSeconds,
+      series: read.series,
     });
   }
   return listed;

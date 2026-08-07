@@ -199,6 +199,7 @@ export type TokenStatDto = {
   agentCount: number;
   protocols: string[];
   lastSeenSeconds: number;
+  series: ChartPointDto[];
 };
 
 export type TokenPairDto = {

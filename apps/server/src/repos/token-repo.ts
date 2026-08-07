@@ -66,6 +66,8 @@ const TOKEN_LEGS_CTE = `
       AND ${IN_WINDOW}
   )`;
 
+export type TokenSeriesPointRead = { bucketStart: number; volumeUsd: string; txCount: number };
+
 export type TokenStatRead = {
   chainFamily: string;
   chainId: bigint;
@@ -76,6 +78,7 @@ export type TokenStatRead = {
   agentCount: number;
   protocols: string[];
   lastSeenSeconds: number;
+  series: TokenSeriesPointRead[];
 };
 
 type TokenStatQueryRow = {
@@ -89,6 +92,96 @@ type TokenStatQueryRow = {
   protocols: string[];
   last_seen_seconds: number;
 };
+
+const SPARKLINE_BUCKET_COUNT = 7;
+
+const SPARKLINE_WINDOW = `${OBSERVED_AT} >= to_timestamp((SELECT first_start FROM sparkline_span))`;
+
+const SPARKLINE_LEG_JOIN = `FROM listed t
+     JOIN activities a ON a.chain_family = t.chain_family AND a.chain_id = t.chain_id`;
+
+type TokenSeriesQueryRow = {
+  chain_family: string;
+  chain_id: string;
+  address: string;
+  bucket_start: string;
+  volume_usd: string;
+  tx_count: number;
+};
+
+function sparklineKey(chainFamily: string, chainId: string, address: string): string {
+  return `${chainFamily}:${chainId}:${address}`;
+}
+
+async function sparklineSeries(
+  pool: pg.Pool,
+  listed: TokenStatQueryRow[],
+): Promise<Map<string, TokenSeriesPointRead[]>> {
+  const result = await pool.query<TokenSeriesQueryRow>(
+    `WITH listed AS (
+       SELECT k.chain_family, k.chain_id::bigint AS chain_id, k.address
+       FROM unnest($1::text[], $2::text[], $3::text[]) AS k(chain_family, chain_id, address)
+     ),
+     sparkline_span AS (
+       SELECT last_start, last_start - $4::bigint * ($5::int - 1) AS first_start
+       FROM (SELECT (floor(extract(epoch FROM now()) / $4::bigint) * $4::bigint)::bigint AS last_start) latest
+     ),
+     buckets AS (
+       SELECT generate_series(first_start, last_start, $4::bigint) AS bucket_start FROM sparkline_span
+     ),
+     legs AS (
+       SELECT a.id AS activity_id, t.chain_family, t.chain_id, t.address,
+              a.usd_in_est AS usd, ${OBSERVED_AT} AS observed_at
+       ${SPARKLINE_LEG_JOIN} AND lower(a.token_in_address) = t.address
+       WHERE a.verification_state IN ${VERIFIED_STATES}
+         AND ${SPARKLINE_WINDOW}
+       UNION ALL
+       SELECT a.id, t.chain_family, t.chain_id, t.address,
+              a.usd_out_est, ${OBSERVED_AT}
+       ${SPARKLINE_LEG_JOIN} AND lower(a.token_out_address) = t.address
+       WHERE a.verification_state IN ${VERIFIED_STATES}
+         AND ${SPARKLINE_WINDOW}
+     ),
+     bucketed AS (
+       SELECT l.chain_family, l.chain_id, l.address,
+              (floor(extract(epoch FROM l.observed_at) / $4::bigint) * $4::bigint)::bigint AS bucket_start,
+              SUM(l.usd) AS volume_usd,
+              COUNT(DISTINCT l.activity_id)::int AS tx_count
+       FROM legs l
+       GROUP BY 1, 2, 3, 4
+     )
+     SELECT t.chain_family,
+            t.chain_id::text AS chain_id,
+            t.address,
+            b.bucket_start::text AS bucket_start,
+            COALESCE(x.volume_usd, 0)::text AS volume_usd,
+            COALESCE(x.tx_count, 0)::int AS tx_count
+     FROM listed t
+     CROSS JOIN buckets b
+     LEFT JOIN bucketed x ON x.chain_family = t.chain_family AND x.chain_id = t.chain_id
+                         AND x.address = t.address AND x.bucket_start = b.bucket_start
+     ORDER BY t.chain_family, t.chain_id, t.address, b.bucket_start`,
+    [
+      listed.map((row) => row.chain_family),
+      listed.map((row) => row.chain_id),
+      listed.map((row) => row.address),
+      DAY_SECONDS,
+      SPARKLINE_BUCKET_COUNT,
+    ],
+  );
+  const byToken = new Map<string, TokenSeriesPointRead[]>();
+  for (const row of result.rows) {
+    const key = sparklineKey(row.chain_family, row.chain_id, row.address);
+    const points = byToken.get(key) ?? [];
+    points.push({
+      bucketStart: Number(row.bucket_start),
+      volumeUsd: row.volume_usd,
+      txCount: row.tx_count,
+    });
+    byToken.set(key, points);
+  }
+  return byToken;
+}
 
 export async function tokenListing(
   pool: pg.Pool,
@@ -114,6 +207,8 @@ export async function tokenListing(
      LIMIT $3`,
     [window.bucketSeconds, window.bucketCount, limit],
   );
+  if (result.rows.length === 0) return [];
+  const series = await sparklineSeries(pool, result.rows);
   return result.rows.map((row) => ({
     chainFamily: row.chain_family,
     chainId: BigInt(row.chain_id),
@@ -124,6 +219,7 @@ export async function tokenListing(
     agentCount: row.agent_count,
     protocols: row.protocols,
     lastSeenSeconds: row.last_seen_seconds,
+    series: series.get(sparklineKey(row.chain_family, row.chain_id, row.address)) ?? [],
   }));
 }
 
@@ -163,8 +259,6 @@ export type TokenPairRead = {
   tokenOutSymbol: string | null;
   txCount: number;
 };
-
-export type TokenSeriesPointRead = { bucketStart: number; volumeUsd: string; txCount: number };
 
 export type TokenDetailRead = {
   symbol: string | null;

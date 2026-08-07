@@ -17,6 +17,7 @@ const orphanAddress = "0xDDD4";
 const vexAddress = "0xEEE5";
 const otherAddress = "0xFFF6";
 const oldAddress = "0x1117";
+const todayAddress = "0xFED8";
 
 const base = 8453;
 const arbitrum = 42161;
@@ -24,7 +25,10 @@ const unregisteredChain = 999;
 
 const hourAgo = 60;
 const tenMinutesAgo = 10;
+const rightNow = 0;
 const fortyDaysAgo = 40 * 24 * 60;
+
+const DAY_SECONDS = 86_400;
 
 type TokenLeg = { address: string; symbol: string; decimals: number; usd: string | null };
 
@@ -206,6 +210,15 @@ beforeAll(async () => {
     tokenIn: { address: oldAddress, symbol: "OLD", decimals: 18, usd: "7.00" },
     tokenOut: null,
   });
+  await seedActivity(db.pool, {
+    ...swapOnBase,
+    agentHash: agentA,
+    sourceRowId: "row-today-only",
+    chainId: arbitrum,
+    minutesAgo: rightNow,
+    tokenIn: { address: todayAddress, symbol: "TDY", decimals: 18, usd: "3.00" },
+    tokenOut: null,
+  });
   const config = loadConfig({ DATABASE_URL: "postgres://unused-in-tests", READ_CACHE_TTL_SEC: "0" });
   app = fastify();
   await app.register(tokensRoutes, { pool: db.pool, config, resolveChain, resolveBridgeChain });
@@ -293,6 +306,57 @@ describe("GET /api/tokens", () => {
     const everything = await fetchTokens("?range=all");
 
     expect(rowOf(everything, "base", "0x1117").volumeUsd).toBe("7.00");
+  });
+});
+
+describe("GET /api/tokens sparkline", () => {
+  it("gives every listed token exactly seven daily points", async () => {
+    const tokens = await fetchTokens("");
+
+    expect(tokens.map((token) => token.series.length)).toEqual([7, 7, 7, 7, 7, 7, 7]);
+  });
+
+  it("leaves the six buckets before today empty for a token first seen today", async () => {
+    const series = rowOf(await fetchTokens(""), "arbitrum", "0xfed8").series;
+
+    expect(series.map((point) => point.volumeUsd)).toEqual(["0", "0", "0", "0", "0", "0", "3.00"]);
+    expect(series.map((point) => point.txCount)).toEqual([0, 0, 0, 0, 0, 0, 1]);
+  });
+
+  it("orders the buckets from oldest to newest in daily steps", async () => {
+    const series = rowOf(await fetchTokens(""), "arbitrum", "0xfed8").series;
+    const newest = series.at(-1)?.bucketStart ?? 0;
+
+    expect(series.map((point) => point.bucketStart)).toEqual([
+      newest - 6 * DAY_SECONDS,
+      newest - 5 * DAY_SECONDS,
+      newest - 4 * DAY_SECONDS,
+      newest - 3 * DAY_SECONDS,
+      newest - 2 * DAY_SECONDS,
+      newest - DAY_SECONDS,
+      newest,
+    ]);
+  });
+
+  it("zero fills all seven buckets for a token last active before the sparkline window", async () => {
+    const series = rowOf(await fetchTokens("?range=all"), "base", "0x1117").series;
+
+    expect(series.map((point) => point.volumeUsd)).toEqual(["0", "0", "0", "0", "0", "0", "0"]);
+    expect(series.map((point) => point.txCount)).toEqual([0, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it("splits the seven day volume of a token across its buckets without losing any of it", async () => {
+    const row = rowOf(await fetchTokens("?range=7d"), "base", "0xbbb2");
+    const bucketed = row.series.reduce((total, point) => total + Number(point.volumeUsd), 0);
+
+    expect(bucketed).toBe(Number(row.volumeUsd));
+  });
+
+  it("keeps the same seven buckets whatever range the listing was asked for", async () => {
+    const inDay = rowOf(await fetchTokens("?range=24h"), "arbitrum", "0xfed8").series;
+    const everything = rowOf(await fetchTokens("?range=all"), "arbitrum", "0xfed8").series;
+
+    expect(everything).toEqual(inDay);
   });
 });
 

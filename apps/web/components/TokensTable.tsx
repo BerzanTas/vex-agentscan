@@ -4,11 +4,11 @@ import { formatAge, formatUsdCompact, formatUsdEstimate } from "../lib/format";
 import { ChainBadge } from "./ChainBadge";
 import { EmptyPanel } from "./EmptyPanel";
 import { ProtocolBadge } from "./ProtocolBadge";
+import { Sparkline } from "./Sparkline";
 
 const ADDRESS_HEAD_LENGTH = 6;
 const ADDRESS_TAIL_LENGTH = 4;
 const MAX_PROTOCOL_ICONS = 3;
-const TREND_HINT = "7d trend is on the token page";
 
 export function shortenAddress(address: string): string {
   if (address.length <= ADDRESS_HEAD_LENGTH + ADDRESS_TAIL_LENGTH) return address;
@@ -97,8 +97,8 @@ export function TokensTable({ rows, emptyMessage }: { rows: TokenStatDto[]; empt
               <td>
                 <ProtocolIcons protocols={token.protocols} />
               </td>
-              <td className="text-text-muted" title={TREND_HINT}>
-                —
+              <td className="w-24">
+                <Sparkline series={token.series} label={`Seven day observed volume for ${tokenLabel(token)}`} />
               </td>
               <td className="font-mono text-xs text-text-muted">
                 {formatAge(token.lastSeenSeconds)}
