@@ -34,6 +34,11 @@ export const healthRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
       workerAgeSec === null || workerAgeSec > deps.config.WORKER_HEARTBEAT_MAX_AGE_SEC;
     if (strict && heartbeatStale) return reply.status(503).send(unhealthy);
     if (!strict) return { db: "ok", workerAgeSec };
-    return { db: "ok", workerAgeSec, verificationQueue: await verificationQueueRead(deps.pool) };
+    try {
+      return { db: "ok", workerAgeSec, verificationQueue: await verificationQueueRead(deps.pool) };
+    } catch (error) {
+      request.log.error(error);
+      return reply.status(503).send(unhealthy);
+    }
   });
 };

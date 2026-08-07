@@ -50,16 +50,20 @@ async function persistOutcome(deps: VerificationLoopDeps, resolved: ResolvedJob)
 }
 
 async function logQueueDepth(deps: VerificationLoopDeps): Promise<void> {
-  const depth = await queueDepth(deps.pool);
-  if (depth.totalPending === 0) return;
-  deps.logger.info(
-    {
-      dueJobs: depth.dueJobs,
-      totalPending: depth.totalPending,
-      oldestDueAgeSec: depth.oldestDueAgeSec,
-    },
-    "verification queue depth",
-  );
+  try {
+    const depth = await queueDepth(deps.pool);
+    if (depth.totalPending === 0) return;
+    deps.logger.info(
+      {
+        dueJobs: depth.dueJobs,
+        totalPending: depth.totalPending,
+        oldestDueAgeSec: depth.oldestDueAgeSec,
+      },
+      "verification queue depth",
+    );
+  } catch (error) {
+    deps.logger.warn({ err: error }, "queue depth read failed");
+  }
 }
 
 export async function runVerificationPass(deps: VerificationLoopDeps): Promise<number> {

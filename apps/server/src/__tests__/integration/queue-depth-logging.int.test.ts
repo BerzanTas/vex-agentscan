@@ -78,4 +78,35 @@ describe("worker queue depth logging", () => {
 
     expect(lines().filter((entry) => entry.msg === "verification queue depth")).toHaveLength(0);
   });
+
+  it("still claims and processes due jobs when the queue depth read itself fails", async () => {
+    const activityId = await seedQueuedJob(pool, "depth-read-failure-job");
+    const { logger, lines } = capturingLogger();
+    const originalQuery = pool.query.bind(pool);
+    pool.query = ((...args: Parameters<typeof originalQuery>) => {
+      const [sql] = args;
+      if (typeof sql === "string" && sql.includes("due_jobs")) {
+        return Promise.reject(new Error("queue depth read boom"));
+      }
+      return originalQuery(...args);
+    }) as typeof pool.query;
+
+    let claimedCount: number;
+    try {
+      claimedCount = await runVerificationPass(stalledDeps(logger));
+    } finally {
+      pool.query = originalQuery;
+    }
+
+    expect(claimedCount).toBe(1);
+    expect(lines().filter((entry) => entry.msg === "verification queue depth")).toHaveLength(0);
+    const warnLines = lines().filter((entry) => entry.msg === "queue depth read failed");
+    expect(warnLines).toHaveLength(1);
+    expect(warnLines[0]?.level).toBe(40);
+    const jobRow = await pool.query<{ attempts: number }>(
+      "SELECT attempts FROM verification_jobs WHERE activity_id = $1",
+      [activityId.toString()],
+    );
+    expect(jobRow.rows[0]?.attempts).toBe(1);
+  });
 });
