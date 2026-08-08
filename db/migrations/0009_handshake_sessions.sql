@@ -1,6 +1,6 @@
 -- migrate:up
 -- handshake_challenges stores only address_hmacs (HMAC of chainFamily+address), never plaintext
--- addresses: /v2/agents/session/complete requires the caller to resend plaintext addresses inside
+-- addresses: /v1/agents/session/complete requires the caller to resend plaintext addresses inside
 -- its signed proofs, so the address set a challenge was opened for never touches the database in
 -- cleartext, not even transiently. A challenge row is deleted outright the moment its own agent
 -- claims it (valid or not), so single-use is enforced by row absence, not a used_at flag; this

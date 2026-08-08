@@ -101,7 +101,7 @@ export const handshakeRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
     deps.config.HANDSHAKE_RATE_WINDOW_SEC,
   );
 
-  app.post("/v2/agents/session/start", async (request, reply) => {
+  app.post("/v1/agents/session/start", async (request, reply) => {
     const rateDecision = await startLimiter.allow(
       rateLimitKeyHash("handshake_start", request.ip, deps.config.RATE_LIMIT_KEY_SALT),
     );
@@ -128,7 +128,7 @@ export const handshakeRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
     return { challengeId: id, nonce, domain, expiresAt: expiresAt.toISOString() };
   });
 
-  app.post("/v2/agents/session/complete", async (request, reply) => {
+  app.post("/v1/agents/session/complete", async (request, reply) => {
     const rateDecision = await completeLimiter.allow(
       rateLimitKeyHash("handshake_complete", request.ip, deps.config.RATE_LIMIT_KEY_SALT),
     );

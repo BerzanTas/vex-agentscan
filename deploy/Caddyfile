@@ -2,9 +2,6 @@
 	handle /v1/* {
 		reverse_proxy api:3000
 	}
-	handle /v2/* {
-		reverse_proxy api:3000
-	}
 	handle /api/* {
 		reverse_proxy api:3000
 	}

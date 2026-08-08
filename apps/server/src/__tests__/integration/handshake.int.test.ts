@@ -103,12 +103,12 @@ beforeEach(async () => {
 });
 
 const startSession = (payload: unknown, remoteAddress = requestIp) =>
-  app.inject({ method: "POST", url: "/v2/agents/session/start", payload: payload as object, remoteAddress });
+  app.inject({ method: "POST", url: "/v1/agents/session/start", payload: payload as object, remoteAddress });
 
 const completeSession = (payload: unknown, bearer?: string) =>
   app.inject({
     method: "POST",
-    url: "/v2/agents/session/complete",
+    url: "/v1/agents/session/complete",
     payload: payload as object,
     headers: bearer ? { authorization: `Bearer ${bearer}` } : {},
   });
@@ -129,7 +129,7 @@ async function allTableRowsAsJson(): Promise<string> {
   return JSON.stringify(rows);
 }
 
-describe("POST /v2/agents/session/start", () => {
+describe("POST /v1/agents/session/start", () => {
   it("returns a fresh challenge shaped per the wire contract", async () => {
     const agentHash = randomAgentHash();
     const account = evmKeypair();
@@ -173,9 +173,9 @@ describe("POST /v2/agents/session/start", () => {
       const account = evmKeypair();
       const body = { agentHash: randomAgentHash(), addresses: [{ chainFamily: "eip155", address: account.address }] };
       const limitedIp = "203.0.113.77";
-      const first = await limitedApp.inject({ method: "POST", url: "/v2/agents/session/start", payload: body, remoteAddress: limitedIp });
-      const second = await limitedApp.inject({ method: "POST", url: "/v2/agents/session/start", payload: body, remoteAddress: limitedIp });
-      const third = await limitedApp.inject({ method: "POST", url: "/v2/agents/session/start", payload: body, remoteAddress: limitedIp });
+      const first = await limitedApp.inject({ method: "POST", url: "/v1/agents/session/start", payload: body, remoteAddress: limitedIp });
+      const second = await limitedApp.inject({ method: "POST", url: "/v1/agents/session/start", payload: body, remoteAddress: limitedIp });
+      const third = await limitedApp.inject({ method: "POST", url: "/v1/agents/session/start", payload: body, remoteAddress: limitedIp });
       expect(first.statusCode).toBe(200);
       expect(second.statusCode).toBe(200);
       expect(third.statusCode).toBe(429);
@@ -187,7 +187,7 @@ describe("POST /v2/agents/session/start", () => {
   });
 });
 
-describe("POST /v2/agents/session/complete — happy path", () => {
+describe("POST /v1/agents/session/complete — happy path", () => {
   it("binds an EVM and a Solana wallet, creates the agent, and rotates in a fresh token", async () => {
     const agentHash = randomAgentHash();
     const evmAccount = evmKeypair();
@@ -238,7 +238,7 @@ describe("POST /v2/agents/session/complete — happy path", () => {
   });
 });
 
-describe("POST /v2/agents/session/complete — upgrading an existing v1 agent (AC4)", () => {
+describe("POST /v1/agents/session/complete — upgrading an existing v1 agent (AC4)", () => {
   it("requires the existing agent's bearer token, keeps its history, and rotates its token", async () => {
     const agentHash = randomAgentHash();
     const oldToken = "A".repeat(43);
@@ -301,7 +301,7 @@ describe("POST /v2/agents/session/complete — upgrading an existing v1 agent (A
   });
 });
 
-describe("POST /v2/agents/session/complete — revoked/quarantined agents never silently reactivate (C2)", () => {
+describe("POST /v1/agents/session/complete — revoked/quarantined agents never silently reactivate (C2)", () => {
   it("a revoked agent's automated re-handshake is rejected with 410, stays revoked, keeps the purge armed, and binds no wallet", async () => {
     const agentHash = randomAgentHash();
     const account = evmKeypair();
@@ -401,7 +401,7 @@ describe("POST /v2/agents/session/complete — revoked/quarantined agents never 
   });
 });
 
-describe("POST /v2/agents/session/complete — security (AC3)", () => {
+describe("POST /v1/agents/session/complete — security (AC3)", () => {
   it("burns the nonce on the first attempt and returns challenge_expired on replay", async () => {
     const agentHash = randomAgentHash();
     const evmAccount = evmKeypair();
@@ -514,7 +514,7 @@ describe("POST /v2/agents/session/complete — security (AC3)", () => {
       const attempt = () =>
         limitedApp.inject({
           method: "POST",
-          url: "/v2/agents/session/complete",
+          url: "/v1/agents/session/complete",
           payload: malformedBody,
           remoteAddress: limitedIp,
         });
@@ -548,7 +548,7 @@ describe("privacy: no plaintext address or pepper is ever logged (AC5)", () => {
       const account = evmKeypair();
       const startResponse = await loggedApp.inject({
         method: "POST",
-        url: "/v2/agents/session/start",
+        url: "/v1/agents/session/start",
         payload: { agentHash, addresses: [{ chainFamily: "eip155", address: account.address }] },
         remoteAddress: requestIp,
       });
@@ -558,7 +558,7 @@ describe("privacy: no plaintext address or pepper is ever logged (AC5)", () => {
 
       await loggedApp.inject({
         method: "POST",
-        url: "/v2/agents/session/complete",
+        url: "/v1/agents/session/complete",
         payload: { challengeId: challenge.challengeId, agentHash, consentVersion: 1, proofs: [proof] },
       });
 
