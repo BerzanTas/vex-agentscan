@@ -1,6 +1,7 @@
 import type { ChainFamily } from "@agentscan/contract";
 import type pg from "pg";
 import { agentNameCandidates } from "../handshake/agent-name.js";
+import type { AgentStatus } from "../plugins/auth.js";
 
 const UNIQUE_VIOLATION = "23505";
 const CHALLENGE_RETENTION_INTERVAL = "1 hour";
@@ -117,8 +118,6 @@ async function upsertAgentForHandshake(
        ingest_token_sha256 = EXCLUDED.ingest_token_sha256,
        consent_version = GREATEST(agents.consent_version, EXCLUDED.consent_version),
        app_version = EXCLUDED.app_version,
-       status = 'active',
-       revoked_at = NULL,
        last_handshake_at = now(),
        updated_at = now()
      RETURNING name`,
@@ -210,12 +209,22 @@ export async function lastAcceptedRowIdFor(pool: pg.Pool, agentHash: string): Pr
   return result.rows[0]?.source_row_id ?? null;
 }
 
-export async function existingAgentTokenSha256(pool: pg.Pool, agentHash: string): Promise<string | null> {
-  const result = await pool.query<{ ingest_token_sha256: string }>(
-    "SELECT ingest_token_sha256 FROM agents WHERE agent_hash = $1",
+export type ExistingAgentHandshakeState = {
+  status: AgentStatus;
+  ingestTokenSha256: string;
+};
+
+export async function existingAgentHandshakeState(
+  pool: pg.Pool,
+  agentHash: string,
+): Promise<ExistingAgentHandshakeState | null> {
+  const result = await pool.query<{ status: AgentStatus; ingest_token_sha256: string }>(
+    "SELECT status, ingest_token_sha256 FROM agents WHERE agent_hash = $1",
     [agentHash],
   );
-  return result.rows[0]?.ingest_token_sha256 ?? null;
+  const row = result.rows[0];
+  if (row === undefined) return null;
+  return { status: row.status, ingestTokenSha256: row.ingest_token_sha256 };
 }
 
 export async function deleteExpiredHandshakeChallenges(pool: pg.Pool): Promise<number> {

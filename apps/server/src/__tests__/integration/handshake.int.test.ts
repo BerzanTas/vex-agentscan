@@ -10,6 +10,7 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../app.js";
 import { loadConfig } from "../../config.js";
+import { findAgentsDueForPurge } from "../../repos/purge-repo.js";
 import { startTestDb } from "../../testing/pg-harness.js";
 
 const pepper = "handshake-int-test-pepper-value1";
@@ -297,6 +298,106 @@ describe("POST /v2/agents/session/complete — upgrading an existing v1 agent (A
       payload: { schemaVersion: 1, agentHash, backfill: false, events: [] },
     });
     expect(newTokenEvents.statusCode).toBe(200);
+  });
+});
+
+describe("POST /v2/agents/session/complete — revoked/quarantined agents never silently reactivate (C2)", () => {
+  it("a revoked agent's automated re-handshake is rejected with 410, stays revoked, keeps the purge armed, and binds no wallet", async () => {
+    const agentHash = randomAgentHash();
+    const account = evmKeypair();
+    const oldToken = "R".repeat(43);
+    const revokedAt = new Date(Date.now() - 2 * 3_600_000);
+    await pool.query(
+      "INSERT INTO agents (agent_hash, ingest_token_sha256, consent_version, accepted_at, status, revoked_at) VALUES ($1, $2, 1, now(), 'revoked', $3)",
+      [agentHash, sha256hex(oldToken), revokedAt],
+    );
+
+    const challenge = await startedChallenge(agentHash, [{ chainFamily: "eip155", address: account.address }]);
+    const issuedAt = new Date().toISOString();
+    const proofs = [await signEvmProof({ account, agentHash, domain: challenge.domain, nonce: challenge.nonce, issuedAt })];
+    const body = { challengeId: challenge.challengeId, agentHash, consentVersion: 2, proofs };
+
+    const response = await completeSession(body, oldToken);
+
+    expect(response.statusCode).toBe(410);
+    expect(response.json().error.code).toBe("consent_revoked");
+
+    const agentRow = await pool.query(
+      "SELECT status, revoked_at, ingest_token_sha256 FROM agents WHERE agent_hash = $1",
+      [agentHash],
+    );
+    expect(agentRow.rows[0].status).toBe("revoked");
+    expect(new Date(agentRow.rows[0].revoked_at).getTime()).toBe(revokedAt.getTime());
+    expect(agentRow.rows[0].ingest_token_sha256).toBe(sha256hex(oldToken));
+
+    const walletRows = await pool.query("SELECT id FROM agent_wallets WHERE agent_hash = $1", [agentHash]);
+    expect(walletRows.rows).toHaveLength(0);
+
+    const duePurge = await findAgentsDueForPurge(pool, 1);
+    expect(duePurge).toContain(agentHash);
+
+    const replay = await completeSession(body, oldToken);
+    expect(replay.statusCode).toBe(400);
+    expect(replay.json().error.code).toBe("challenge_expired");
+  });
+
+  it("a quarantined agent's automated re-handshake is rejected with 403, stays quarantined, and binds no wallet", async () => {
+    const agentHash = randomAgentHash();
+    const account = evmKeypair();
+    const oldToken = "Q".repeat(43);
+    const quarantinedAt = new Date(Date.now() - 3_600_000);
+    await pool.query(
+      "INSERT INTO agents (agent_hash, ingest_token_sha256, consent_version, accepted_at, status, quarantined_at) VALUES ($1, $2, 1, now(), 'quarantined', $3)",
+      [agentHash, sha256hex(oldToken), quarantinedAt],
+    );
+
+    const challenge = await startedChallenge(agentHash, [{ chainFamily: "eip155", address: account.address }]);
+    const issuedAt = new Date().toISOString();
+    const proofs = [await signEvmProof({ account, agentHash, domain: challenge.domain, nonce: challenge.nonce, issuedAt })];
+
+    const response = await completeSession(
+      { challengeId: challenge.challengeId, agentHash, consentVersion: 2, proofs },
+      oldToken,
+    );
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.code).toBe("quarantined");
+
+    const agentRow = await pool.query("SELECT status, quarantined_at FROM agents WHERE agent_hash = $1", [agentHash]);
+    expect(agentRow.rows[0].status).toBe("quarantined");
+    expect(new Date(agentRow.rows[0].quarantined_at).getTime()).toBe(quarantinedAt.getTime());
+
+    const walletRows = await pool.query("SELECT id FROM agent_wallets WHERE agent_hash = $1", [agentHash]);
+    expect(walletRows.rows).toHaveLength(0);
+  });
+
+  it("an already-active agent's re-handshake still succeeds unchanged (the new gate does not affect the ordinary path)", async () => {
+    const agentHash = randomAgentHash();
+    const account = evmKeypair();
+    const oldToken = "A".repeat(43);
+    await pool.query(
+      "INSERT INTO agents (agent_hash, ingest_token_sha256, consent_version, accepted_at, status) VALUES ($1, $2, 1, now(), 'active')",
+      [agentHash, sha256hex(oldToken)],
+    );
+
+    const challenge = await startedChallenge(agentHash, [{ chainFamily: "eip155", address: account.address }]);
+    const issuedAt = new Date().toISOString();
+    const proofs = [await signEvmProof({ account, agentHash, domain: challenge.domain, nonce: challenge.nonce, issuedAt })];
+
+    const response = await completeSession(
+      { challengeId: challenge.challengeId, agentHash, consentVersion: 2, proofs },
+      oldToken,
+    );
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json<{ ingestToken: string }>();
+
+    const agentRow = await pool.query("SELECT status, ingest_token_sha256 FROM agents WHERE agent_hash = $1", [agentHash]);
+    expect(agentRow.rows[0].status).toBe("active");
+    expect(agentRow.rows[0].ingest_token_sha256).toBe(sha256hex(body.ingestToken));
+
+    const walletRows = await pool.query("SELECT chain_family FROM agent_wallets WHERE agent_hash = $1", [agentHash]);
+    expect(walletRows.rows).toHaveLength(1);
   });
 });
 

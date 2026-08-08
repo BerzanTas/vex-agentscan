@@ -10,12 +10,12 @@ import type { Deps } from "../app.js";
 import { proofVerifierFor } from "../handshake/proof-verifiers.js";
 import { randomBase64UrlToken } from "../handshake/tokens.js";
 import { addressHmacHex, normalizeHandshakeAddress } from "../handshake/wallet-hmac.js";
-import { bearerTokenFrom, sha256Hex } from "../plugins/auth.js";
+import { bearerTokenFrom, sha256Hex, type AgentStatus } from "../plugins/auth.js";
 import { rateLimitKeyHash } from "../plugins/rate-limit-key.js";
 import {
   claimChallenge,
   completeHandshakeBinding,
-  existingAgentTokenSha256,
+  existingAgentHandshakeState,
   insertChallenge,
   lastAcceptedRowIdFor,
   type ClaimedChallenge,
@@ -67,15 +67,23 @@ async function verifyProof(proof: HandshakeProof, agentHash: string, challenge: 
   });
 }
 
-async function requireAuthorizedForExistingAgent(
+type ExistingAgentGateOutcome =
+  | { kind: "new_agent" }
+  | { kind: "unauthorized" }
+  | { kind: "authorized"; status: AgentStatus };
+
+async function existingAgentGate(
   deps: Deps,
   agentHash: string,
   authorizationHeader: string | undefined,
-): Promise<boolean> {
-  const existingTokenSha256 = await existingAgentTokenSha256(deps.pool, agentHash);
-  if (existingTokenSha256 === null) return true;
+): Promise<ExistingAgentGateOutcome> {
+  const existing = await existingAgentHandshakeState(deps.pool, agentHash);
+  if (existing === null) return { kind: "new_agent" };
   const bearerToken = bearerTokenFrom(authorizationHeader);
-  return bearerToken !== null && sha256Hex(bearerToken) === existingTokenSha256;
+  if (bearerToken === null || sha256Hex(bearerToken) !== existing.ingestTokenSha256) {
+    return { kind: "unauthorized" };
+  }
+  return { kind: "authorized", status: existing.status };
 }
 
 const sendRateLimited = (reply: FastifyReply, retryAfterSec: number, message: string) =>
@@ -144,9 +152,15 @@ export const handshakeRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
     }
     const { challenge } = claimOutcome;
 
-    const authorized = await requireAuthorizedForExistingAgent(deps, agentHash, request.headers.authorization);
-    if (!authorized) {
+    const gate = await existingAgentGate(deps, agentHash, request.headers.authorization);
+    if (gate.kind === "unauthorized") {
       return sendError(reply, 401, "unauthorized", "existing agent requires its current ingest token");
+    }
+    if (gate.kind === "authorized" && gate.status === "revoked") {
+      return sendError(reply, 410, "consent_revoked", "agent consent has been revoked");
+    }
+    if (gate.kind === "authorized" && gate.status === "quarantined") {
+      return sendError(reply, 403, "quarantined", "agent is quarantined");
     }
 
     const proofBindings = proofs.map((proof) => ({

@@ -1,7 +1,23 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../config.js";
 
 const baseEnv = { DATABASE_URL: "postgres://agentscan:agentscan@localhost:5432/agentscan" };
+
+const deployEnvExamplePath = fileURLToPath(new URL("../../../../deploy/.env.example", import.meta.url));
+
+function parseDotEnv(text: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0 || trimmed.startsWith("#")) continue;
+    const separatorIndex = trimmed.indexOf("=");
+    if (separatorIndex === -1) continue;
+    env[trimmed.slice(0, separatorIndex)] = trimmed.slice(separatorIndex + 1);
+  }
+  return env;
+}
 
 describe("loadConfig", () => {
   it("defaults QUARANTINE_STRIKES to 3", () => {
@@ -134,5 +150,47 @@ describe("loadConfig", () => {
         RATE_LIMIT_KEY_SALT: "custom-rate-salt",
       }),
     ).toThrow();
+  });
+
+  describe("deploy/.env.example (C3: was missing the production-guarded handshake vars)", () => {
+    const deployEnv = parseDotEnv(readFileSync(deployEnvExamplePath, "utf8"));
+    const withDocumentedSecretPlaceholdersReplaced = {
+      ...deployEnv,
+      AGENT_ALIAS_SALT: "operator-real-alias-salt",
+      RATE_LIMIT_KEY_SALT: "operator-real-rate-salt",
+      WALLET_HMAC_PEPPER: "operator-real-wallet-hmac-pepper-value",
+    };
+
+    it("is checked in with NODE_ENV=production, the setting that makes the production guards live", () => {
+      expect(deployEnv.NODE_ENV).toBe("production");
+    });
+
+    it("declares every handshake var this round added", () => {
+      expect(deployEnv.HANDSHAKE_RATE_LIMIT_PER_IP).toBe("10");
+      expect(deployEnv.HANDSHAKE_RATE_WINDOW_SEC).toBe("3600");
+      expect(deployEnv.HANDSHAKE_CHALLENGE_TTL_MIN).toBe("5");
+      expect(deployEnv.HANDSHAKE_DOMAIN).toBeDefined();
+      expect(deployEnv.WALLET_HMAC_PEPPER).toBeDefined();
+    });
+
+    it("pins HANDSHAKE_DOMAIN to the bare hostname of SITE_ADDRESS (M1)", () => {
+      expect(deployEnv.HANDSHAKE_DOMAIN).toBe(deployEnv.SITE_ADDRESS);
+      expect(deployEnv.HANDSHAKE_DOMAIN).not.toMatch(/^https?:\/\//);
+      expect(deployEnv.HANDSHAKE_DOMAIN).not.toMatch(/[:/]/);
+    });
+
+    it("once an operator has replaced every documented secret placeholder, this round's additions load cleanly under loadConfig", () => {
+      const config = loadConfig(withDocumentedSecretPlaceholdersReplaced);
+      expect(config.HANDSHAKE_DOMAIN).toBe(deployEnv.SITE_ADDRESS);
+      expect(config.ATTEST_CANDIDATES_MAX).toBe(50);
+      expect(config.ATTEST_BACKOFF_SCHEDULE).toEqual(["1m", "5m", "30m", "2h", "12h"]);
+    });
+
+    it("as checked in, still refuses to boot: AGENT_ALIAS_SALT, RATE_LIMIT_KEY_SALT and WALLET_HMAC_PEPPER are all placeholders an operator must replace, same fail-closed discipline as the salts already had before this round", () => {
+      expect(deployEnv.AGENT_ALIAS_SALT).toBe("agentscan-dev-salt");
+      expect(deployEnv.RATE_LIMIT_KEY_SALT).toBe("agentscan-dev-rate-salt");
+      expect(deployEnv.WALLET_HMAC_PEPPER).toBe("agentscan-dev-wallet-hmac-pepper");
+      expect(() => loadConfig(deployEnv)).toThrow();
+    });
   });
 });

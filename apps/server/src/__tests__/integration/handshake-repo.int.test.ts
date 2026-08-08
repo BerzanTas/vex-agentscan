@@ -230,6 +230,70 @@ describe("completeHandshakeBinding", () => {
     expect(oldOwnerRow.rows).toHaveLength(1);
   });
 
+  it("never resurrects a revoked agent's status or clears revoked_at (defense in depth below the route's own gate)", async () => {
+    const revokedAt = new Date(Date.now() - 2 * 3_600_000);
+    await pool.query(
+      "INSERT INTO agents (agent_hash, ingest_token_sha256, consent_version, accepted_at, status, revoked_at) VALUES ($1, 'revoked-token-sha', 1, now(), 'revoked', $2)",
+      [AGENT_HASH, revokedAt],
+    );
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const outcome = await completeHandshakeBinding(client, {
+        agentHash: AGENT_HASH,
+        consentVersion: 1,
+        appVersion: null,
+        ingestTokenSha256: "new-token-sha",
+        wallets: [],
+      });
+      await client.query("COMMIT");
+
+      expect(outcome.kind).toBe("bound");
+    } finally {
+      client.release();
+    }
+
+    const agentRow = await pool.query(
+      "SELECT status, revoked_at FROM agents WHERE agent_hash = $1",
+      [AGENT_HASH],
+    );
+    expect(agentRow.rows[0].status).toBe("revoked");
+    expect(agentRow.rows[0].revoked_at.getTime()).toBe(revokedAt.getTime());
+  });
+
+  it("never resurrects a quarantined agent's status or clears quarantined_at (defense in depth below the route's own gate)", async () => {
+    const quarantinedAt = new Date(Date.now() - 3_600_000);
+    await pool.query(
+      "INSERT INTO agents (agent_hash, ingest_token_sha256, consent_version, accepted_at, status, quarantined_at) VALUES ($1, 'quarantined-token-sha', 1, now(), 'quarantined', $2)",
+      [AGENT_HASH, quarantinedAt],
+    );
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const outcome = await completeHandshakeBinding(client, {
+        agentHash: AGENT_HASH,
+        consentVersion: 1,
+        appVersion: null,
+        ingestTokenSha256: "new-token-sha",
+        wallets: [],
+      });
+      await client.query("COMMIT");
+
+      expect(outcome.kind).toBe("bound");
+    } finally {
+      client.release();
+    }
+
+    const agentRow = await pool.query(
+      "SELECT status, quarantined_at FROM agents WHERE agent_hash = $1",
+      [AGENT_HASH],
+    );
+    expect(agentRow.rows[0].status).toBe("quarantined");
+    expect(agentRow.rows[0].quarantined_at.getTime()).toBe(quarantinedAt.getTime());
+  });
+
   it("keeps the wallet with the same agent on re-handshake, refreshing only the signature (no transfer)", async () => {
     await pool.query(
       "INSERT INTO agents (agent_hash, ingest_token_sha256, consent_version, accepted_at) VALUES ($1, 'v1-token-sha', 1, now())",
