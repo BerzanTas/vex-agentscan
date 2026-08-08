@@ -122,6 +122,24 @@ async function rateLimitHitExists(keyHash: string): Promise<boolean> {
   return onlyRow(result.rows).count > 0;
 }
 
+async function seedHandshakeChallenge(nonce: string, createdHoursAgo: number): Promise<string> {
+  const inserted = await db.pool.query<{ id: string }>(
+    `INSERT INTO handshake_challenges (agent_hash, nonce, domain, address_hmacs, created_at, expires_at)
+     VALUES ($1, $2, 'localhost', ARRAY['hmac'], now() - make_interval(hours => $3), now() - make_interval(hours => $3) + interval '5 minutes')
+     RETURNING id`,
+    [dueAgent, nonce, createdHoursAgo],
+  );
+  return onlyRow(inserted.rows).id;
+}
+
+async function handshakeChallengeExists(id: string): Promise<boolean> {
+  const result = await db.pool.query<{ count: number }>(
+    "SELECT count(*)::int AS count FROM handshake_challenges WHERE id = $1",
+    [id],
+  );
+  return onlyRow(result.rows).count > 0;
+}
+
 describe("purge sweep", () => {
   it("purges activities, verification jobs and strikes of an agent revoked past PURGE_DELAY_H, stamps purged_at and leaves daily_aggregates untouched", async () => {
     await seedRevokedAgent(dueAgent, 25);
@@ -194,5 +212,15 @@ describe("purge sweep", () => {
     await runPurgeSweep(db.pool, config);
 
     expect(await rateLimitHitExists("rate-limit-outside-both-windows")).toBe(false);
+  });
+
+  it("deletes a handshake challenge created more than an hour ago and keeps a recent one", async () => {
+    const oldChallengeId = await seedHandshakeChallenge("purge-sweep-old-nonce", 2);
+    const recentChallengeId = await seedHandshakeChallenge("purge-sweep-recent-nonce", 0);
+
+    await runPurgeSweep(db.pool, config);
+
+    expect(await handshakeChallengeExists(oldChallengeId)).toBe(false);
+    expect(await handshakeChallengeExists(recentChallengeId)).toBe(true);
   });
 });

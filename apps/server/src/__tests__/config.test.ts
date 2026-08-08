@@ -69,4 +69,59 @@ describe("loadConfig", () => {
     expect(config.ATTEST_MIN_CONFIRMATIONS).toBe(12);
     expect(config.ATTEST_MAX_AGE_DAYS).toBe(30);
   });
+
+  it("defaults the handshake rate limit, domain, and challenge ttl", () => {
+    const config = loadConfig(baseEnv);
+    expect(config.HANDSHAKE_RATE_LIMIT_PER_IP).toBe(10);
+    expect(config.HANDSHAKE_RATE_WINDOW_SEC).toBe(3600);
+    expect(config.HANDSHAKE_DOMAIN).toBe("localhost");
+    expect(config.HANDSHAKE_CHALLENGE_TTL_MIN).toBe(5);
+  });
+
+  it("overrides HANDSHAKE_RATE_LIMIT_PER_IP and HANDSHAKE_DOMAIN from env", () => {
+    const config = loadConfig({
+      ...baseEnv,
+      HANDSHAKE_RATE_LIMIT_PER_IP: "3",
+      HANDSHAKE_DOMAIN: "agentscan.example",
+    });
+    expect(config.HANDSHAKE_RATE_LIMIT_PER_IP).toBe(3);
+    expect(config.HANDSHAKE_DOMAIN).toBe("agentscan.example");
+  });
+
+  it("throws when the default HANDSHAKE_DOMAIN runs in production", () => {
+    expect(() => loadConfig({ ...baseEnv, NODE_ENV: "production" })).toThrow();
+  });
+
+  it("accepts a custom HANDSHAKE_DOMAIN in production", () => {
+    expect(() =>
+      loadConfig({
+        ...baseEnv,
+        NODE_ENV: "production",
+        HANDSHAKE_DOMAIN: "agentscan.example",
+        WALLET_HMAC_PEPPER: "w".repeat(32),
+        AGENT_ALIAS_SALT: "custom-alias-salt",
+        RATE_LIMIT_KEY_SALT: "custom-rate-salt",
+      }),
+    ).not.toThrow();
+  });
+
+  it("defaults WALLET_HMAC_PEPPER to a dev value at least 32 characters long", () => {
+    expect(loadConfig(baseEnv).WALLET_HMAC_PEPPER.length).toBeGreaterThanOrEqual(32);
+  });
+
+  it("throws when WALLET_HMAC_PEPPER is shorter than 32 characters", () => {
+    expect(() => loadConfig({ ...baseEnv, WALLET_HMAC_PEPPER: "short" })).toThrow();
+  });
+
+  it("throws when the default WALLET_HMAC_PEPPER runs in production", () => {
+    expect(() =>
+      loadConfig({
+        ...baseEnv,
+        NODE_ENV: "production",
+        HANDSHAKE_DOMAIN: "agentscan.example",
+        AGENT_ALIAS_SALT: "custom-alias-salt",
+        RATE_LIMIT_KEY_SALT: "custom-rate-salt",
+      }),
+    ).toThrow();
+  });
 });

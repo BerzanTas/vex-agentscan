@@ -1,6 +1,7 @@
 import type pg from "pg";
 import type { Logger } from "pino";
 import type { Config } from "../config.js";
+import { deleteExpiredHandshakeChallenges } from "../repos/handshake-repo.js";
 import { findAgentsDueForPurge, purgeAgentData } from "../repos/purge-repo.js";
 import { deleteExpiredRateLimitHits } from "../repos/rate-limit-repo.js";
 
@@ -12,6 +13,7 @@ export async function runPurgeSweep(pool: pg.Pool, config: Config): Promise<{ pu
   }
   const longestRateLimitWindowSec = Math.max(config.INGEST_RATE_WINDOW_SEC, config.REGISTER_RATE_WINDOW_SEC);
   await deleteExpiredRateLimitHits(pool, longestRateLimitWindowSec);
+  await deleteExpiredHandshakeChallenges(pool);
   return { purgedAgents };
 }
 

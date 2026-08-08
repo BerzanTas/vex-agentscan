@@ -7,3 +7,4 @@ export const BANNED_INGEST_FIELDS = ["wallet_address", "from_address", "session_
 export type EventStatus = (typeof EVENT_STATUSES)[number];
 export type EventRole = (typeof EVENT_ROLES)[number];
 export type FailureCode = (typeof FAILURE_CODES)[number];
+export type ChainFamily = (typeof CHAIN_FAMILIES)[number];

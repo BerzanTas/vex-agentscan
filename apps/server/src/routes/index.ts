@@ -3,6 +3,7 @@ import type { WiredDeps } from "../app.js";
 import { healthRoutes } from "./health.js";
 import { agentsRoutes } from "./agents.js";
 import { eventsRoutes } from "./events.js";
+import { handshakeRoutes } from "./handshake.js";
 import { statsRoutes } from "./public/stats.js";
 import { chartRoutes } from "./public/chart.js";
 import { protocolsRoutes } from "./public/protocols.js";
@@ -20,6 +21,7 @@ export const routePlugins: FastifyPluginAsync<WiredDeps>[] = [
   healthRoutes,
   agentsRoutes,
   eventsRoutes,
+  handshakeRoutes,
   tokenAttestationsRoutes,
   statsRoutes,
   chartRoutes,

@@ -4,6 +4,8 @@ const RPC_URLS_PREFIX = "RPC_URLS_";
 const ATTEST_FACTORY_ADDRESSES_PREFIX = "ATTEST_FACTORY_ADDRESSES_";
 const DEFAULT_AGENT_ALIAS_SALT = "agentscan-dev-salt";
 const DEFAULT_RATE_LIMIT_KEY_SALT = "agentscan-dev-rate-salt";
+const DEFAULT_HANDSHAKE_DOMAIN = "localhost";
+const DEFAULT_WALLET_HMAC_PEPPER = "agentscan-dev-wallet-hmac-pepper";
 
 const commaSeparated = (value: string) =>
   value
@@ -58,6 +60,11 @@ const envSchema = z.object({
   ATTEST_WORKER_BATCH: z.coerce.number().int().default(20),
   ATTEST_WORKER_LEASE_SEC: z.coerce.number().int().min(1).default(120),
   ATTEST_BACKOFF_SCHEDULE: z.string().default("1m,5m,30m,2h,12h").transform(commaSeparated),
+  HANDSHAKE_RATE_LIMIT_PER_IP: z.coerce.number().int().default(10),
+  HANDSHAKE_RATE_WINDOW_SEC: z.coerce.number().int().default(3600),
+  HANDSHAKE_DOMAIN: z.string().min(1).default(DEFAULT_HANDSHAKE_DOMAIN),
+  HANDSHAKE_CHALLENGE_TTL_MIN: z.coerce.number().int().min(1).default(5),
+  WALLET_HMAC_PEPPER: z.string().min(32).default(DEFAULT_WALLET_HMAC_PEPPER),
 });
 
 export type Config = z.infer<typeof envSchema> & {
@@ -93,6 +100,12 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   }
   if (parsed.RATE_LIMIT_KEY_SALT === DEFAULT_RATE_LIMIT_KEY_SALT && env.NODE_ENV === "production") {
     throw new Error("RATE_LIMIT_KEY_SALT must be set to a random value when NODE_ENV=production");
+  }
+  if (parsed.HANDSHAKE_DOMAIN === DEFAULT_HANDSHAKE_DOMAIN && env.NODE_ENV === "production") {
+    throw new Error("HANDSHAKE_DOMAIN must be set to the real domain when NODE_ENV=production");
+  }
+  if (parsed.WALLET_HMAC_PEPPER === DEFAULT_WALLET_HMAC_PEPPER && env.NODE_ENV === "production") {
+    throw new Error("WALLET_HMAC_PEPPER must be set to a random value when NODE_ENV=production");
   }
   return {
     ...parsed,
