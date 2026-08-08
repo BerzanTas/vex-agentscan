@@ -88,6 +88,17 @@ describe("loadConfig", () => {
     expect(config.HANDSHAKE_DOMAIN).toBe("agentscan.example");
   });
 
+  it("accepts a HANDSHAKE_DOMAIN with a port", () => {
+    expect(loadConfig({ ...baseEnv, HANDSHAKE_DOMAIN: "localhost:8080" }).HANDSHAKE_DOMAIN).toBe(
+      "localhost:8080",
+    );
+  });
+
+  it("rejects a HANDSHAKE_DOMAIN with characters outside the domain charset", () => {
+    expect(() => loadConfig({ ...baseEnv, HANDSHAKE_DOMAIN: "https://evil.example/" })).toThrow();
+    expect(() => loadConfig({ ...baseEnv, HANDSHAKE_DOMAIN: "evil example" })).toThrow();
+  });
+
   it("throws when the default HANDSHAKE_DOMAIN runs in production", () => {
     expect(() => loadConfig({ ...baseEnv, NODE_ENV: "production" })).toThrow();
   });

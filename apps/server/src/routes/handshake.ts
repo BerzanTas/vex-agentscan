@@ -78,8 +78,16 @@ async function requireAuthorizedForExistingAgent(
   return bearerToken !== null && sha256Hex(bearerToken) === existingTokenSha256;
 }
 
+const sendRateLimited = (reply: FastifyReply, retryAfterSec: number, message: string) =>
+  reply.status(429).header("retry-after", String(retryAfterSec)).send({ error: { code: "rate_limited", message } });
+
 export const handshakeRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
   const startLimiter = new PostgresSlidingWindowLimiter(
+    deps.pool,
+    deps.config.HANDSHAKE_RATE_LIMIT_PER_IP,
+    deps.config.HANDSHAKE_RATE_WINDOW_SEC,
+  );
+  const completeLimiter = new PostgresSlidingWindowLimiter(
     deps.pool,
     deps.config.HANDSHAKE_RATE_LIMIT_PER_IP,
     deps.config.HANDSHAKE_RATE_WINDOW_SEC,
@@ -90,10 +98,7 @@ export const handshakeRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
       rateLimitKeyHash("handshake_start", request.ip, deps.config.RATE_LIMIT_KEY_SALT),
     );
     if (!rateDecision.ok) {
-      return reply
-        .status(429)
-        .header("retry-after", String(rateDecision.retryAfterSec))
-        .send({ error: { code: "rate_limited", message: "too many handshake session requests" } });
+      return sendRateLimited(reply, rateDecision.retryAfterSec, "too many handshake session requests");
     }
     const parsed = handshakeSessionStartRequestSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -116,6 +121,12 @@ export const handshakeRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
   });
 
   app.post("/v2/agents/session/complete", async (request, reply) => {
+    const rateDecision = await completeLimiter.allow(
+      rateLimitKeyHash("handshake_complete", request.ip, deps.config.RATE_LIMIT_KEY_SALT),
+    );
+    if (!rateDecision.ok) {
+      return sendRateLimited(reply, rateDecision.retryAfterSec, "too many handshake completion requests");
+    }
     const parsed = handshakeSessionCompleteRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return sendError(reply, 400, "validation_failed", "session complete body failed validation");

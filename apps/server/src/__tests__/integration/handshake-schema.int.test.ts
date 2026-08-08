@@ -36,13 +36,6 @@ describe("handshake_challenges schema", () => {
     });
   });
 
-  it("defaults used_at to null", async () => {
-    const inserted = await insertChallenge({ nonce: "nonce-null-used", addressHmacs: ["h1"] });
-    const row = await db.pool.query("SELECT used_at FROM handshake_challenges WHERE id = $1", [
-      inserted.rows[0].id,
-    ]);
-    expect(row.rows[0].used_at).toBeNull();
-  });
 });
 
 describe("agent_wallets schema", () => {
@@ -64,6 +57,14 @@ describe("agent_wallets schema", () => {
   it("accepts a wallet row for a known agent", async () => {
     const inserted = await insertWallet({ chainFamily: "eip155", addressHmac: "hmac-1" });
     expect(inserted.rowCount).toBe(1);
+  });
+
+  it("defaults hmac_version to 1", async () => {
+    await insertWallet({ chainFamily: "eip155", addressHmac: "hmac-version-default" });
+    const row = await db.pool.query(
+      "SELECT hmac_version FROM agent_wallets WHERE chain_family = 'eip155' AND address_hmac = 'hmac-version-default'",
+    );
+    expect(row.rows[0].hmac_version).toBe(1);
   });
 
   it("rejects a chain_family outside the allowed set", async () => {

@@ -11,7 +11,12 @@ export async function runPurgeSweep(pool: pg.Pool, config: Config): Promise<{ pu
   for (const agentHash of dueAgents) {
     if (await purgeAgentData(pool, agentHash)) purgedAgents += 1;
   }
-  const longestRateLimitWindowSec = Math.max(config.INGEST_RATE_WINDOW_SEC, config.REGISTER_RATE_WINDOW_SEC);
+  const longestRateLimitWindowSec = Math.max(
+    config.INGEST_RATE_WINDOW_SEC,
+    config.REGISTER_RATE_WINDOW_SEC,
+    config.HANDSHAKE_RATE_WINDOW_SEC,
+    config.ATTEST_RATE_WINDOW_SEC,
+  );
   await deleteExpiredRateLimitHits(pool, longestRateLimitWindowSec);
   await deleteExpiredHandshakeChallenges(pool);
   return { purgedAgents };

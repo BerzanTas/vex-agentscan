@@ -59,6 +59,21 @@ async function seedStrike(agentHash: string): Promise<void> {
   await db.pool.query("INSERT INTO strikes (agent_hash, reason) VALUES ($1, 'tx_reverted')", [agentHash]);
 }
 
+async function seedAgentWallet(agentHash: string, addressHmac: string): Promise<void> {
+  await db.pool.query(
+    "INSERT INTO agent_wallets (agent_hash, chain_family, address_hmac, proof_signature) VALUES ($1, 'eip155', $2, 'sig')",
+    [agentHash, addressHmac],
+  );
+}
+
+async function countWallets(agentHash: string): Promise<number> {
+  const result = await db.pool.query<{ count: number }>(
+    "SELECT count(*)::int AS count FROM agent_wallets WHERE agent_hash = $1",
+    [agentHash],
+  );
+  return onlyRow(result.rows).count;
+}
+
 async function seedAggregate(protocol: string): Promise<void> {
   await db.pool.query(
     "INSERT INTO daily_aggregates (day, protocol, kind, volume_usd, tx_count) VALUES ('2026-07-28', $1, 'swap', 12.5, 3)",
@@ -141,10 +156,11 @@ async function handshakeChallengeExists(id: string): Promise<boolean> {
 }
 
 describe("purge sweep", () => {
-  it("purges activities, verification jobs and strikes of an agent revoked past PURGE_DELAY_H, stamps purged_at and leaves daily_aggregates untouched", async () => {
+  it("purges activities, verification jobs, strikes and wallet hmacs of an agent revoked past PURGE_DELAY_H, stamps purged_at and leaves daily_aggregates untouched", async () => {
     await seedRevokedAgent(dueAgent, 25);
     dueActivityId = await seedQueuedActivityWithJob(dueAgent, "p-purge-due");
     await seedStrike(dueAgent);
+    await seedAgentWallet(dueAgent, "hmac-purge-due");
     await seedAggregate("p-purge-due");
 
     const outcome = await runPurgeSweep(db.pool, config);
@@ -153,6 +169,7 @@ describe("purge sweep", () => {
     expect(await countActivities(dueAgent)).toBe(0);
     expect(await countJobs(dueActivityId)).toBe(0);
     expect(await countStrikes(dueAgent)).toBe(0);
+    expect(await countWallets(dueAgent)).toBe(0);
     expect(await purgedAtOf(dueAgent)).not.toBeNull();
     expect(await aggregateOf("p-purge-due")).toEqual({
       day: "2026-07-28",
@@ -166,6 +183,7 @@ describe("purge sweep", () => {
     await seedRevokedAgent(recentAgent, 1);
     recentActivityId = await seedQueuedActivityWithJob(recentAgent, "p-purge-recent");
     await seedStrike(recentAgent);
+    await seedAgentWallet(recentAgent, "hmac-purge-recent");
 
     const outcome = await runPurgeSweep(db.pool, config);
 
@@ -173,6 +191,7 @@ describe("purge sweep", () => {
     expect(await countActivities(recentAgent)).toBe(1);
     expect(await countJobs(recentActivityId)).toBe(1);
     expect(await countStrikes(recentAgent)).toBe(1);
+    expect(await countWallets(recentAgent)).toBe(1);
     expect(await purgedAtOf(recentAgent)).toBeNull();
   });
 
@@ -212,6 +231,18 @@ describe("purge sweep", () => {
     await runPurgeSweep(db.pool, config);
 
     expect(await rateLimitHitExists("rate-limit-outside-both-windows")).toBe(false);
+  });
+
+  it("keeps a rate limit counter inside a widened HANDSHAKE_RATE_WINDOW_SEC that the default ingest/register windows alone would have swept", async () => {
+    const widerConfig = loadConfig({
+      DATABASE_URL: "postgres://unused-in-tests",
+      HANDSHAKE_RATE_WINDOW_SEC: "7200",
+    });
+    await seedRateLimitHit("rate-limit-within-widened-handshake-window", 90);
+
+    await runPurgeSweep(db.pool, widerConfig);
+
+    expect(await rateLimitHitExists("rate-limit-within-widened-handshake-window")).toBe(true);
   });
 
   it("deletes a handshake challenge created more than an hour ago and keeps a recent one", async () => {

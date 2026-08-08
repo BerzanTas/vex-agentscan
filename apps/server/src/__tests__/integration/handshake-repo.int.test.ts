@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type pg from "pg";
 import {
   claimChallenge,
+  claimWallet,
   completeHandshakeBinding,
   deleteExpiredHandshakeChallenges,
   insertChallenge,
@@ -59,13 +60,13 @@ describe("insertChallenge + claimChallenge", () => {
     expect(second.kind).toBe("invalid");
   });
 
-  it("marks used_at in the database on the very first claim, even before any proof is checked", async () => {
+  it("deletes the challenge row on the very first matching-agent claim, even before any proof is checked", async () => {
     const { id } = await freshChallenge();
 
     await claimChallenge(pool, id, AGENT_HASH);
 
-    const row = await pool.query("SELECT used_at FROM handshake_challenges WHERE id = $1", [id]);
-    expect(row.rows[0].used_at).not.toBeNull();
+    const row = await pool.query("SELECT id FROM handshake_challenges WHERE id = $1", [id]);
+    expect(row.rows).toHaveLength(0);
   });
 
   it("returns invalid for an unknown challenge id", async () => {
@@ -81,12 +82,17 @@ describe("insertChallenge + claimChallenge", () => {
     expect(outcome.kind).toBe("invalid");
   });
 
-  it("returns invalid when the agentHash does not match the challenge's agentHash", async () => {
+  it("returns invalid when the agentHash does not match the challenge's agentHash, without burning it", async () => {
     const { id } = await freshChallenge({ agentHash: AGENT_HASH });
 
-    const outcome = await claimChallenge(pool, id, OTHER_AGENT_HASH);
+    const mismatchedOutcome = await claimChallenge(pool, id, OTHER_AGENT_HASH);
+    expect(mismatchedOutcome.kind).toBe("invalid");
 
-    expect(outcome.kind).toBe("invalid");
+    const row = await pool.query("SELECT id FROM handshake_challenges WHERE id = $1", [id]);
+    expect(row.rows).toHaveLength(1);
+
+    const ownerOutcome = await claimChallenge(pool, id, AGENT_HASH);
+    expect(ownerOutcome.kind).toBe("claimed");
   });
 });
 
@@ -186,13 +192,13 @@ describe("completeHandshakeBinding", () => {
     }
   });
 
-  it("reports wallet_conflict and rolls back entirely when an address is already bound to a different agent", async () => {
+  it("transfers a wallet to the proving agent when a proof re-binds an address already owned by someone else (rebind happy path)", async () => {
     await pool.query(
-      "INSERT INTO agents (agent_hash, ingest_token_sha256, consent_version, accepted_at) VALUES ($1, 'existing-owner-token', 1, now())",
+      "INSERT INTO agents (agent_hash, ingest_token_sha256, consent_version, accepted_at) VALUES ($1, 'old-owner-token', 1, now())",
       [OTHER_AGENT_HASH],
     );
     await pool.query(
-      "INSERT INTO agent_wallets (agent_hash, chain_family, address_hmac, proof_signature) VALUES ($1, 'eip155', 'hmac-conflict', 'sig-owner')",
+      "INSERT INTO agent_wallets (agent_hash, chain_family, address_hmac, proof_signature) VALUES ($1, 'eip155', 'hmac-rebind', 'sig-old-owner')",
       [OTHER_AGENT_HASH],
     );
 
@@ -203,26 +209,33 @@ describe("completeHandshakeBinding", () => {
         agentHash: AGENT_HASH,
         consentVersion: 1,
         appVersion: null,
-        ingestTokenSha256: "token-sha-conflict",
-        wallets: [{ chainFamily: "eip155", addressHmac: "hmac-conflict", proofSignature: "sig-attacker" }],
+        ingestTokenSha256: "token-sha-new-owner",
+        wallets: [{ chainFamily: "eip155", addressHmac: "hmac-rebind", proofSignature: "sig-new-owner" }],
       });
-      if (outcome.kind === "wallet_conflict") await client.query("ROLLBACK");
-      else await client.query("COMMIT");
+      await client.query("COMMIT");
 
-      expect(outcome.kind).toBe("wallet_conflict");
+      expect(outcome.kind).toBe("bound");
     } finally {
       client.release();
     }
 
-    const agentRow = await pool.query("SELECT * FROM agents WHERE agent_hash = $1", [AGENT_HASH]);
-    expect(agentRow.rows).toHaveLength(0);
-    const walletRow = await pool.query(
-      "SELECT proof_signature FROM agent_wallets WHERE chain_family = 'eip155' AND address_hmac = 'hmac-conflict'",
+    const walletRows = await pool.query(
+      "SELECT agent_hash, proof_signature FROM agent_wallets WHERE chain_family = 'eip155' AND address_hmac = 'hmac-rebind'",
     );
-    expect(walletRow.rows[0].proof_signature).toBe("sig-owner");
+    expect(walletRows.rows).toHaveLength(1);
+    expect(walletRows.rows[0].agent_hash).toBe(AGENT_HASH);
+    expect(walletRows.rows[0].proof_signature).toBe("sig-new-owner");
+
+    const oldOwnerRow = await pool.query("SELECT agent_hash FROM agents WHERE agent_hash = $1", [OTHER_AGENT_HASH]);
+    expect(oldOwnerRow.rows).toHaveLength(1);
   });
 
-  it("upserts the same agent re-proving its own address, refreshing the signature", async () => {
+  it("keeps the wallet with the same agent on re-handshake, refreshing only the signature (no transfer)", async () => {
+    await pool.query(
+      "INSERT INTO agents (agent_hash, ingest_token_sha256, consent_version, accepted_at) VALUES ($1, 'v1-token-sha', 1, now())",
+      [AGENT_HASH],
+    );
+
     const firstClient = await pool.connect();
     try {
       await firstClient.query("BEGIN");
@@ -259,7 +272,51 @@ describe("completeHandshakeBinding", () => {
       "SELECT agent_hash, proof_signature FROM agent_wallets WHERE chain_family = 'eip155' AND address_hmac = 'hmac-reprove'",
     );
     expect(walletRow.rows).toHaveLength(1);
+    expect(walletRow.rows[0].agent_hash).toBe(AGENT_HASH);
     expect(walletRow.rows[0].proof_signature).toBe("sig-new");
+  });
+});
+
+describe("claimWallet — concurrent zero-row race", () => {
+  it("resolves two truly concurrent zero-row claims for the same address without throwing, settling on a single owner", async () => {
+    await pool.query(
+      "INSERT INTO agents (agent_hash, ingest_token_sha256, consent_version, accepted_at) VALUES ($1, 'racer-a-token', 1, now())",
+      [AGENT_HASH],
+    );
+    await pool.query(
+      "INSERT INTO agents (agent_hash, ingest_token_sha256, consent_version, accepted_at) VALUES ($1, 'racer-b-token', 1, now())",
+      [OTHER_AGENT_HASH],
+    );
+
+    const clientA = await pool.connect();
+    const clientB = await pool.connect();
+    try {
+      await clientA.query("BEGIN");
+      await clientB.query("BEGIN");
+
+      const taskA = claimWallet(clientA, AGENT_HASH, {
+        chainFamily: "eip155",
+        addressHmac: "hmac-race",
+        proofSignature: "sig-a",
+      }).then(() => clientA.query("COMMIT"));
+      const taskB = claimWallet(clientB, OTHER_AGENT_HASH, {
+        chainFamily: "eip155",
+        addressHmac: "hmac-race",
+        proofSignature: "sig-b",
+      }).then(() => clientB.query("COMMIT"));
+
+      await expect(Promise.all([taskA, taskB])).resolves.toBeDefined();
+    } finally {
+      clientA.release();
+      clientB.release();
+    }
+
+    const walletRows = await pool.query(
+      "SELECT agent_hash, proof_signature FROM agent_wallets WHERE chain_family = 'eip155' AND address_hmac = 'hmac-race'",
+    );
+    expect(walletRows.rows).toHaveLength(1);
+    expect([AGENT_HASH, OTHER_AGENT_HASH]).toContain(walletRows.rows[0].agent_hash);
+    expect(["sig-a", "sig-b"]).toContain(walletRows.rows[0].proof_signature);
   });
 });
 

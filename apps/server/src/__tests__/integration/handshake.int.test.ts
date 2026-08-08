@@ -342,15 +342,15 @@ describe("POST /v2/agents/session/complete — security (AC3)", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe("invalid_signature");
-    const challengeRow = await pool.query("SELECT used_at FROM handshake_challenges WHERE id = $1", [challenge.challengeId]);
-    expect(challengeRow.rows[0].used_at).not.toBeNull();
+    const challengeRow = await pool.query("SELECT id FROM handshake_challenges WHERE id = $1", [challenge.challengeId]);
+    expect(challengeRow.rows).toHaveLength(0);
     const agentRow = await pool.query("SELECT * FROM agents WHERE agent_hash = $1", [agentHash]);
     expect(agentRow.rows).toHaveLength(0);
   });
 
-  it("returns wallet_conflict and binds nothing when an address is already owned by another agent", async () => {
+  it("transfers a wallet to the new proving agent (rebind), taking it away from its previous owner", async () => {
     const ownerAgentHash = randomAgentHash();
-    const attackerAgentHash = randomAgentHash();
+    const newOwnerAgentHash = randomAgentHash();
     const sharedAccount = evmKeypair();
 
     const ownerChallenge = await startedChallenge(ownerAgentHash, [{ chainFamily: "eip155", address: sharedAccount.address }]);
@@ -363,21 +363,71 @@ describe("POST /v2/agents/session/complete — security (AC3)", () => {
     });
     expect(ownerComplete.statusCode).toBe(200);
 
-    const attackerChallenge = await startedChallenge(attackerAgentHash, [{ chainFamily: "eip155", address: sharedAccount.address }]);
-    const attackerIssuedAt = new Date().toISOString();
-    const attackerComplete = await completeSession({
-      challengeId: attackerChallenge.challengeId,
-      agentHash: attackerAgentHash,
+    const newOwnerChallenge = await startedChallenge(newOwnerAgentHash, [{ chainFamily: "eip155", address: sharedAccount.address }]);
+    const newOwnerIssuedAt = new Date().toISOString();
+    const newOwnerComplete = await completeSession({
+      challengeId: newOwnerChallenge.challengeId,
+      agentHash: newOwnerAgentHash,
       consentVersion: 1,
-      proofs: [await signEvmProof({ account: sharedAccount, agentHash: attackerAgentHash, domain: attackerChallenge.domain, nonce: attackerChallenge.nonce, issuedAt: attackerIssuedAt })],
+      proofs: [await signEvmProof({ account: sharedAccount, agentHash: newOwnerAgentHash, domain: newOwnerChallenge.domain, nonce: newOwnerChallenge.nonce, issuedAt: newOwnerIssuedAt })],
     });
 
-    expect(attackerComplete.statusCode).toBe(409);
-    expect(attackerComplete.json().error.code).toBe("wallet_conflict");
-    const attackerAgentRow = await pool.query("SELECT * FROM agents WHERE agent_hash = $1", [attackerAgentHash]);
-    expect(attackerAgentRow.rows).toHaveLength(0);
-    const walletRow = await pool.query("SELECT agent_hash FROM agent_wallets WHERE chain_family = 'eip155'");
-    expect(walletRow.rows).toHaveLength(1);
+    expect(newOwnerComplete.statusCode).toBe(200);
+    const walletRows = await pool.query("SELECT agent_hash FROM agent_wallets WHERE chain_family = 'eip155'");
+    expect(walletRows.rows).toHaveLength(1);
+    expect(walletRows.rows[0].agent_hash).toBe(newOwnerAgentHash);
+    const oldOwnerAgentRow = await pool.query("SELECT agent_hash FROM agents WHERE agent_hash = $1", [ownerAgentHash]);
+    expect(oldOwnerAgentRow.rows).toHaveLength(1);
+  });
+
+  it("resolves two truly concurrent completes proving the same address for different agents without a 500, settling on one owner", async () => {
+    const agentHashX = randomAgentHash();
+    const agentHashY = randomAgentHash();
+    const sharedAccount = evmKeypair();
+
+    const challengeX = await startedChallenge(agentHashX, [{ chainFamily: "eip155", address: sharedAccount.address }]);
+    const challengeY = await startedChallenge(agentHashY, [{ chainFamily: "eip155", address: sharedAccount.address }]);
+    const issuedAtX = new Date().toISOString();
+    const issuedAtY = new Date().toISOString();
+    const proofX = await signEvmProof({ account: sharedAccount, agentHash: agentHashX, domain: challengeX.domain, nonce: challengeX.nonce, issuedAt: issuedAtX });
+    const proofY = await signEvmProof({ account: sharedAccount, agentHash: agentHashY, domain: challengeY.domain, nonce: challengeY.nonce, issuedAt: issuedAtY });
+
+    const [responseX, responseY] = await Promise.all([
+      completeSession({ challengeId: challengeX.challengeId, agentHash: agentHashX, consentVersion: 1, proofs: [proofX] }),
+      completeSession({ challengeId: challengeY.challengeId, agentHash: agentHashY, consentVersion: 1, proofs: [proofY] }),
+    ]);
+
+    expect(responseX.statusCode).toBe(200);
+    expect(responseY.statusCode).toBe(200);
+
+    const walletRows = await pool.query("SELECT agent_hash FROM agent_wallets WHERE chain_family = 'eip155'");
+    expect(walletRows.rows).toHaveLength(1);
+    expect([agentHashX, agentHashY]).toContain(walletRows.rows[0].agent_hash);
+  });
+
+  it("rate limits /session/complete after the configured per-IP threshold, reusing the HANDSHAKE limiter budget", async () => {
+    const limitedApp = await buildTestApp({ HANDSHAKE_RATE_LIMIT_PER_IP: "2", HANDSHAKE_RATE_WINDOW_SEC: "3600" });
+    try {
+      const limitedIp = "203.0.113.88";
+      const malformedBody = { challengeId: "not-a-uuid" };
+      const attempt = () =>
+        limitedApp.inject({
+          method: "POST",
+          url: "/v2/agents/session/complete",
+          payload: malformedBody,
+          remoteAddress: limitedIp,
+        });
+      const first = await attempt();
+      const second = await attempt();
+      const third = await attempt();
+      expect(first.statusCode).toBe(400);
+      expect(second.statusCode).toBe(400);
+      expect(third.statusCode).toBe(429);
+      expect(third.json().error.code).toBe("rate_limited");
+      expect(Number(third.headers["retry-after"])).toBeGreaterThanOrEqual(1);
+    } finally {
+      await limitedApp.close();
+    }
   });
 });
 

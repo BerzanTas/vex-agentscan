@@ -62,7 +62,7 @@ const envSchema = z.object({
   ATTEST_BACKOFF_SCHEDULE: z.string().default("1m,5m,30m,2h,12h").transform(commaSeparated),
   HANDSHAKE_RATE_LIMIT_PER_IP: z.coerce.number().int().default(10),
   HANDSHAKE_RATE_WINDOW_SEC: z.coerce.number().int().default(3600),
-  HANDSHAKE_DOMAIN: z.string().min(1).default(DEFAULT_HANDSHAKE_DOMAIN),
+  HANDSHAKE_DOMAIN: z.string().min(1).regex(/^[a-z0-9.:-]+$/i).default(DEFAULT_HANDSHAKE_DOMAIN),
   HANDSHAKE_CHALLENGE_TTL_MIN: z.coerce.number().int().min(1).default(5),
   WALLET_HMAC_PEPPER: z.string().min(32).default(DEFAULT_WALLET_HMAC_PEPPER),
 });

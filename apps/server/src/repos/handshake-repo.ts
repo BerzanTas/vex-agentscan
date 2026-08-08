@@ -42,7 +42,6 @@ type ChallengeLockRow = {
   agent_hash: string;
   created_at: Date;
   expires_at: Date;
-  already_used: boolean;
   expired: boolean;
 };
 
@@ -56,7 +55,7 @@ export async function claimChallenge(
     await client.query("BEGIN");
     const locked = await client.query<ChallengeLockRow>(
       `SELECT domain, nonce, address_hmacs, agent_hash, created_at, expires_at,
-              used_at IS NOT NULL AS already_used, expires_at < now() AS expired
+              expires_at < now() AS expired
        FROM handshake_challenges
        WHERE id = $1
        FOR UPDATE`,
@@ -67,12 +66,12 @@ export async function claimChallenge(
       await client.query("COMMIT");
       return { kind: "invalid" };
     }
-    if (!row.already_used) {
-      await client.query("UPDATE handshake_challenges SET used_at = now() WHERE id = $1", [challengeId]);
+    const agentMatches = row.agent_hash === requestAgentHash;
+    if (agentMatches) {
+      await client.query("DELETE FROM handshake_challenges WHERE id = $1", [challengeId]);
     }
     await client.query("COMMIT");
-    const invalid = row.already_used || row.expired || row.agent_hash !== requestAgentHash;
-    if (invalid) return { kind: "invalid" };
+    if (!agentMatches || row.expired) return { kind: "invalid" };
     return {
       kind: "claimed",
       challenge: {
@@ -147,31 +146,45 @@ async function assignAgentName(client: pg.PoolClient, agentHash: string): Promis
   throw new Error(`could not assign a unique agent name for ${agentHash}`);
 }
 
-type WalletClaimOutcome = "bound" | "conflict";
-
-async function claimWallet(
+async function reassignWallet(
   client: pg.PoolClient,
   agentHash: string,
   wallet: HandshakeWalletBinding,
-): Promise<WalletClaimOutcome> {
-  const existing = await client.query<{ agent_hash: string }>(
-    "SELECT agent_hash FROM agent_wallets WHERE chain_family = $1 AND address_hmac = $2 FOR UPDATE",
-    [wallet.chainFamily, wallet.addressHmac],
-  );
-  const row = existing.rows[0];
-  if (row !== undefined && row.agent_hash !== agentHash) return "conflict";
-  if (row !== undefined) {
-    await client.query(
-      "UPDATE agent_wallets SET proof_signature = $3, proven_at = now() WHERE chain_family = $1 AND address_hmac = $2",
-      [wallet.chainFamily, wallet.addressHmac, wallet.proofSignature],
-    );
-    return "bound";
-  }
+): Promise<void> {
   await client.query(
-    "INSERT INTO agent_wallets (agent_hash, chain_family, address_hmac, proof_signature) VALUES ($1, $2, $3, $4)",
+    `UPDATE agent_wallets SET agent_hash = $1, proof_signature = $4, proven_at = now()
+     WHERE chain_family = $2 AND address_hmac = $3`,
     [agentHash, wallet.chainFamily, wallet.addressHmac, wallet.proofSignature],
   );
-  return "bound";
+}
+
+const CLAIM_WALLET_SAVEPOINT = "claim_wallet";
+
+export async function claimWallet(
+  client: pg.PoolClient,
+  agentHash: string,
+  wallet: HandshakeWalletBinding,
+): Promise<void> {
+  const existing = await client.query<{ id: string }>(
+    "SELECT id FROM agent_wallets WHERE chain_family = $1 AND address_hmac = $2 FOR UPDATE",
+    [wallet.chainFamily, wallet.addressHmac],
+  );
+  if (existing.rows[0] !== undefined) {
+    await reassignWallet(client, agentHash, wallet);
+    return;
+  }
+  await client.query(`SAVEPOINT ${CLAIM_WALLET_SAVEPOINT}`);
+  try {
+    await client.query(
+      "INSERT INTO agent_wallets (agent_hash, chain_family, address_hmac, proof_signature) VALUES ($1, $2, $3, $4)",
+      [agentHash, wallet.chainFamily, wallet.addressHmac, wallet.proofSignature],
+    );
+    await client.query(`RELEASE SAVEPOINT ${CLAIM_WALLET_SAVEPOINT}`);
+  } catch (error) {
+    if ((error as { code?: string }).code !== UNIQUE_VIOLATION) throw error;
+    await client.query(`ROLLBACK TO SAVEPOINT ${CLAIM_WALLET_SAVEPOINT}`);
+    await reassignWallet(client, agentHash, wallet);
+  }
 }
 
 export async function completeHandshakeBinding(
@@ -180,8 +193,7 @@ export async function completeHandshakeBinding(
 ): Promise<HandshakeBindOutcome> {
   const existingName = await upsertAgentForHandshake(client, request);
   for (const wallet of request.wallets) {
-    const outcome = await claimWallet(client, request.agentHash, wallet);
-    if (outcome === "conflict") return { kind: "wallet_conflict" };
+    await claimWallet(client, request.agentHash, wallet);
   }
   const agentName = existingName ?? (await assignAgentName(client, request.agentHash));
   return { kind: "bound", agentName };
