@@ -5,6 +5,7 @@ import { AutoRefresh } from "../components/AutoRefresh";
 import { ChartPanel } from "../components/ChartPanel";
 import { Hero } from "../components/Hero";
 import { PanelHeading } from "../components/PanelHeading";
+import { PricingCoverageNote } from "../components/PricingCoverageNote";
 import { ProtocolRanking } from "../components/ProtocolRanking";
 import { StatCards } from "../components/StatCards";
 import {
@@ -12,6 +13,7 @@ import {
   fetchActivity,
   fetchAgents,
   fetchChart,
+  fetchPricingCoverage,
   fetchProtocols,
   fetchStats,
 } from "../lib/api";
@@ -20,15 +22,17 @@ export const dynamic = "force-dynamic";
 export const fetchCache = "default-cache";
 
 const AGENT_RANKING_DAYS = 30;
+const TOTALS_COVERAGE_RANGE = "all";
 const LATEST_ACTIVITY_ROWS = 10;
 
 export default async function DashboardPage() {
-  const [stats, chart, protocols, agents, activity] = await Promise.all([
+  const [stats, chart, protocols, agents, activity, coverage] = await Promise.all([
     fetchStats(),
     fetchChart(DEFAULT_CHART_RANGE),
     fetchProtocols(),
     fetchAgents(),
     fetchActivity(),
+    fetchPricingCoverage(TOTALS_COVERAGE_RANGE),
   ]);
 
   return (
@@ -36,6 +40,7 @@ export default async function DashboardPage() {
       <AutoRefresh />
       <Hero />
       <StatCards stats={stats} series={chart} />
+      <PricingCoverageNote coverage={coverage} />
       <ChartPanel initialPoints={chart} initialRange={DEFAULT_CHART_RANGE} />
       <div className="section-enter grid grid-cols-1 items-start gap-8 lg:grid-cols-2">
         <section className="glass p-4">

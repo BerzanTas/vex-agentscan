@@ -21,15 +21,15 @@ type ActivitySeed = {
   protocol: string;
   kind: "swap" | "bridge";
   eventRole: "swap" | "bridge_deposit" | "bridge_fill_observed";
-  usdInEst: string;
+  usdInPriced: string;
   fractionOfElapsedDay: number;
 };
 
 const SEEDS: ActivitySeed[] = [
-  { protocol: "kyberswap", kind: "swap", eventRole: "swap", usdInEst: "1234.56", fractionOfElapsedDay: 0.1 },
-  { protocol: "relay", kind: "bridge", eventRole: "bridge_deposit", usdInEst: "87.30", fractionOfElapsedDay: 0.4 },
-  { protocol: "relay", kind: "bridge", eventRole: "bridge_fill_observed", usdInEst: "86.90", fractionOfElapsedDay: 0.7 },
-  { protocol: "kyberswap", kind: "swap", eventRole: "swap", usdInEst: "0.01", fractionOfElapsedDay: 0.9 },
+  { protocol: "kyberswap", kind: "swap", eventRole: "swap", usdInPriced: "1234.56", fractionOfElapsedDay: 0.1 },
+  { protocol: "relay", kind: "bridge", eventRole: "bridge_deposit", usdInPriced: "87.30", fractionOfElapsedDay: 0.4 },
+  { protocol: "relay", kind: "bridge", eventRole: "bridge_fill_observed", usdInPriced: "86.90", fractionOfElapsedDay: 0.7 },
+  { protocol: "kyberswap", kind: "swap", eventRole: "swap", usdInPriced: "0.01", fractionOfElapsedDay: 0.9 },
 ];
 
 const EXPECTED_TODAY_VOLUME_USD = "1321.87";
@@ -75,12 +75,12 @@ async function seedQueuedActivity(pool: pg.Pool, index: number, seed: ActivitySe
   const inserted = await pool.query<{ id: string }>(
     `INSERT INTO activities
        (agent_hash, source_row_id, public_id, source_execution_id, event_index, kind, event_role, status,
-        protocol, chain_family, chain_id, usd_in_est, tx_hash,
+        protocol, chain_family, chain_id, usd_in_priced, pricing_state, tx_hash,
         client_created_at, client_confirmed_at, statuses_seen, verification_state, received_schema_version)
-     VALUES ($1, $2, $2, $2, 0, $3, $4, 'confirmed', $5, 'eip155', 8453, $6::numeric, $7,
+     VALUES ($1, $2, $2, $2, 0, $3, $4, 'confirmed', $5, 'eip155', 8453, $6::numeric, 'server_priced', $7,
              $8, $8, ARRAY['pending','confirmed'], 'queued', 1)
      RETURNING id`,
-    [agentHash, rowKey, seed.kind, seed.eventRole, seed.protocol, seed.usdInEst, `0xtx-${index}`, confirmedAt],
+    [agentHash, rowKey, seed.kind, seed.eventRole, seed.protocol, seed.usdInPriced, `0xtx-${index}`, confirmedAt],
   );
   await pool.query(
     `INSERT INTO verification_jobs (activity_id, attempts, first_attempt_at, next_attempt_at)

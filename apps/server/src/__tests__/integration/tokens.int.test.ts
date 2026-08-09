@@ -32,6 +32,11 @@ const DAY_SECONDS = 86_400;
 
 type TokenLeg = { address: string; symbol: string; decimals: number; usd: string | null };
 
+function pricingStateOf(seed: ActivitySeed): "server_priced" | "unpriced" {
+  const legs = [seed.tokenIn, seed.tokenOut].filter((leg) => leg !== null);
+  return legs.some((leg) => leg.usd !== null) ? "server_priced" : "unpriced";
+}
+
 type ActivitySeed = {
   agentHash: string;
   sourceRowId: string;
@@ -60,14 +65,14 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
         protocol, chain_family, chain_id,
         token_in_address, token_in_symbol, token_in_decimals,
         token_out_address, token_out_symbol, token_out_decimals,
-        usd_in_est, usd_out_est, tx_hash,
+        usd_in_priced, usd_out_priced, pricing_state, tx_hash,
         client_created_at, client_confirmed_at, statuses_seen, verification_state, verified_at,
         received_at, received_schema_version)
      VALUES ($1, $2, $2, 'exec-' || $2, 0, $3, $4, 'confirmed',
              $5, 'eip155', $6::bigint,
              $7, $8, $9::smallint,
              $10, $11, $12::smallint,
-             $13::numeric, $14::numeric, '0xabc',
+             $13::numeric, $14::numeric, $17, '0xabc',
              now() - make_interval(mins => $15::int), now() - make_interval(mins => $15::int),
              ARRAY['confirmed'], $16, now(), now(), 1)`,
     [
@@ -87,6 +92,7 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
       seed.tokenOut?.usd ?? null,
       seed.minutesAgo,
       seed.verificationState,
+      pricingStateOf(seed),
     ],
   );
 }
@@ -167,7 +173,7 @@ beforeAll(async () => {
   await seedActivity(db.pool, {
     ...swapOnBase,
     agentHash: agentA,
-    sourceRowId: "row-without-estimate",
+    sourceRowId: "row-nothing-priced",
     tokenIn: { address: vexAddress, symbol: "VEX", decimals: 18, usd: null },
     tokenOut: { address: otherAddress, symbol: "OTH", decimals: 18, usd: null },
   });
@@ -258,7 +264,7 @@ describe("GET /api/tokens", () => {
     expect(row.txCount).toBe(3);
   });
 
-  it("counts a leg without a usd estimate in txCount and not in volume", async () => {
+  it("counts an unpriced leg in txCount and not in volume", async () => {
     const row = rowOf(await fetchTokens(""), "base", "0xeee5");
 
     expect(row.volumeUsd).toBe("0");
@@ -366,11 +372,11 @@ describe("GET /api/tokens with a limit above the cap", () => {
       `INSERT INTO activities
          (agent_hash, source_row_id, public_id, source_execution_id, event_index, kind, event_role, status,
           protocol, chain_family, chain_id, token_in_address, token_in_symbol, token_in_decimals,
-          usd_in_est, tx_hash, client_created_at, client_confirmed_at, statuses_seen,
+          usd_in_priced, pricing_state, tx_hash, client_created_at, client_confirmed_at, statuses_seen,
           verification_state, verified_at, received_at, received_schema_version)
        SELECT $1, 'filler-' || n, 'filler-' || n, 'exec-filler', 0, 'swap', 'swap', 'confirmed',
               'kyberswap', 'eip155', $2::bigint, '0xF1' || lpad(n::text, 4, '0'), 'FIL', 18,
-              1.00, '0xabc', now(), now(), ARRAY['confirmed'],
+              1.00, 'server_priced', '0xabc', now(), now(), ARRAY['confirmed'],
               'verified_full', now(), now(), 1
        FROM generate_series(1, 120) AS n`,
       [agentA, arbitrum],

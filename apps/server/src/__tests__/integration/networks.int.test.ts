@@ -21,8 +21,8 @@ type ActivitySeed = {
   kind: "swap" | "bridge";
   eventRole: string;
   verificationState: string;
-  usdInEst: string | null;
-  usdOutEst?: string | null;
+  usdInPriced: string | null;
+  usdOutPriced?: string | null;
   fromChainId?: string | null;
   toChainId?: string | null;
   tokenInAddress?: string | null;
@@ -38,14 +38,14 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
         kind, event_role, status, protocol, chain_family, chain_id, from_chain_id, to_chain_id,
         token_in_address, token_in_symbol, token_in_decimals,
         token_out_address, token_out_symbol, token_out_decimals,
-        amount_in_raw, usd_in_est, usd_out_est, tx_hash,
+        amount_in_raw, usd_in_priced, usd_out_priced, pricing_state, tx_hash,
         client_created_at, client_confirmed_at, statuses_seen, verification_state, verified_at,
         received_at, received_schema_version)
      VALUES ($1, $2, $2, $2, 0,
              $3, $4, 'confirmed', $5, $6, $7::bigint, $8::bigint, $9::bigint,
              $10, $11, 6,
              $12, $13, 18,
-             '1000000000000000000', $14::numeric, $15::numeric, '0xhash' || $2,
+             '1000000000000000000', $14::numeric, $15::numeric, 'server_priced', '0xhash' || $2,
              now() - make_interval(mins => $16::int), now() - make_interval(mins => $16::int),
              ARRAY['confirmed'], $17, now(),
              now(), 1)`,
@@ -63,8 +63,8 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
       seed.tokenInSymbol ?? null,
       seed.tokenOutAddress ?? null,
       seed.tokenOutSymbol ?? null,
-      seed.usdInEst,
-      seed.usdOutEst ?? null,
+      seed.usdInPriced,
+      seed.usdOutPriced ?? null,
       confirmedMinutesAgo,
       seed.verificationState,
     ],
@@ -89,8 +89,8 @@ beforeAll(async () => {
     kind: "swap",
     eventRole: "swap",
     verificationState: "verified_full",
-    usdInEst: "100.50",
-    usdOutEst: "100.00",
+    usdInPriced: "100.50",
+    usdOutPriced: "100.00",
     tokenInAddress: usdcOnBase,
     tokenInSymbol: "USDC",
     tokenOutAddress: wethOnBase,
@@ -104,7 +104,7 @@ beforeAll(async () => {
     kind: "bridge",
     eventRole: "bridge_fill_observed",
     verificationState: "verified_full",
-    usdInEst: "77.00",
+    usdInPriced: "77.00",
   });
   await seedActivity(db.pool, {
     publicId: "base-deposit",
@@ -114,7 +114,7 @@ beforeAll(async () => {
     kind: "bridge",
     eventRole: "bridge_deposit",
     verificationState: "verified_full",
-    usdInEst: "25.00",
+    usdInPriced: "25.00",
     fromChainId: "8453",
     toChainId: "42161",
   });
@@ -126,7 +126,7 @@ beforeAll(async () => {
     kind: "swap",
     eventRole: "swap",
     verificationState: "none",
-    usdInEst: "999.00",
+    usdInPriced: "999.00",
   });
   await seedActivity(db.pool, {
     publicId: "solana-deposit",
@@ -136,7 +136,7 @@ beforeAll(async () => {
     kind: "bridge",
     eventRole: "bridge_deposit",
     verificationState: "verified_basic",
-    usdInEst: "40.00",
+    usdInPriced: "40.00",
     fromChainId: "20011000000",
     toChainId: "8453",
   });
@@ -148,7 +148,7 @@ beforeAll(async () => {
     kind: "bridge",
     eventRole: "bridge_deposit",
     verificationState: "verified_full",
-    usdInEst: "60.00",
+    usdInPriced: "60.00",
     fromChainId: "999999",
     toChainId: "888888",
   });

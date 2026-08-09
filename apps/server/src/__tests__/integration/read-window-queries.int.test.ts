@@ -46,7 +46,7 @@ describe("zapytania okienkowe", () => {
       publicId: "counted",
       verificationState: "verified_full",
       eventRole: "swap",
-      usdInEst: "100.00",
+      usdInPriced: "100.00",
       confirmedDaysAgo: 2,
     });
 

@@ -10,20 +10,20 @@ async function seedVerifiedActivity(
   pool: pg.Pool,
   sourceRowId: string,
   eventRole: string,
-  usdInEst: string,
+  usdInPriced: string,
   minutesAgo: number,
 ): Promise<void> {
   await pool.query(
     `INSERT INTO activities
        (agent_hash, source_row_id, public_id, source_execution_id, event_index, kind, event_role, status,
-        protocol, chain_family, chain_id, amount_in_raw, usd_in_est, tx_hash,
+        protocol, chain_family, chain_id, amount_in_raw, usd_in_priced, pricing_state, tx_hash,
         client_created_at, client_confirmed_at, statuses_seen, verification_state, verified_at,
         received_at, received_schema_version)
      VALUES ($1, $2, $2, 'exec-1', 0, 'swap', $3, 'confirmed',
-             'kyberswap', 'eip155', 8453, '1000000000000000000', $4::numeric, '0xabc',
+             'kyberswap', 'eip155', 8453, '1000000000000000000', $4::numeric, 'server_priced', '0xabc',
              now() - make_interval(mins => $5::int), now() - make_interval(mins => $5::int),
              ARRAY['confirmed'], 'verified_full', now(), now(), 1)`,
-    [agentHash, sourceRowId, eventRole, usdInEst, minutesAgo],
+    [agentHash, sourceRowId, eventRole, usdInPriced, minutesAgo],
   );
 }
 
@@ -110,9 +110,11 @@ function utcMidnightSecondsToday(): number {
 }
 
 describe("chartBuckets for the all range", () => {
-  it("returns a single zero-filled day when no aggregate was ever written", async () => {
+  it("spans a single day when no aggregate was ever written and fills it with the priced volume", async () => {
     const buckets = await chartBuckets(db.pool, resolveChartRange("all"));
 
-    expect(buckets).toEqual([{ bucketStart: utcMidnightSecondsToday(), volumeUsd: "0", txCount: 0 }]);
+    expect(buckets).toEqual([
+      { bucketStart: utcMidnightSecondsToday(), volumeUsd: "100.50", txCount: 0 },
+    ]);
   });
 });
