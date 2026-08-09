@@ -48,6 +48,7 @@ type ActivitySeed = {
   tokenOut: TokenLeg | null;
   verificationState: string;
   minutesAgo: number;
+  pricingState?: "server_priced" | "unpriced" | "pending";
 };
 
 async function seedAgent(pool: pg.Pool, agentHash: string): Promise<void> {
@@ -92,7 +93,7 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
       seed.tokenOut?.usd ?? null,
       seed.minutesAgo,
       seed.verificationState,
-      pricingStateOf(seed),
+      seed.pricingState ?? pricingStateOf(seed),
     ],
   );
 }
@@ -173,9 +174,10 @@ beforeAll(async () => {
   await seedActivity(db.pool, {
     ...swapOnBase,
     agentHash: agentA,
-    sourceRowId: "row-nothing-priced",
-    tokenIn: { address: vexAddress, symbol: "VEX", decimals: 18, usd: null },
-    tokenOut: { address: otherAddress, symbol: "OTH", decimals: 18, usd: null },
+    sourceRowId: "row-stale-priced-unpriced",
+    pricingState: "unpriced",
+    tokenIn: { address: vexAddress, symbol: "VEX", decimals: 18, usd: "300.00" },
+    tokenOut: { address: otherAddress, symbol: "OTH", decimals: 18, usd: "250.00" },
   });
   await seedActivity(db.pool, {
     ...swapOnBase,
@@ -264,7 +266,7 @@ describe("GET /api/tokens", () => {
     expect(row.txCount).toBe(3);
   });
 
-  it("counts an unpriced leg in txCount and not in volume", async () => {
+  it("counts an unpriced leg in txCount and keeps its stale price out of the volume", async () => {
     const row = rowOf(await fetchTokens(""), "base", "0xeee5");
 
     expect(row.volumeUsd).toBe("0");
@@ -459,6 +461,15 @@ describe("GET /api/tokens/:chainSlug/:address", () => {
     const bucketed = detail.series.reduce((total, point) => total + Number(point.volumeUsd), 0);
 
     expect(bucketed).toBe(Number(detail.volumeUsd));
+  });
+
+  it("serves an unpriced token at zero volume with its activity still counted", async () => {
+    const detail = await fetchDetail("base/0xeee5");
+
+    expect(detail.symbol).toBe("VEX");
+    expect(detail.volumeUsd).toBe("0");
+    expect(detail.txCount).toBe(1);
+    expect(detail.protocols).toEqual([{ protocol: "kyberswap", volumeUsd: "0", txCount: 1 }]);
   });
 
   it("answers not_found for an address nobody traded", async () => {

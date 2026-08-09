@@ -69,6 +69,14 @@ const pendingSwap: ActivitySeed = {
   pricingState: "pending",
 };
 
+const stalePricedPendingSwap: ActivitySeed = {
+  ...pricedSwap,
+  sourceRowId: "stale-priced-pending-swap",
+  pricingState: "pending",
+  usdInPriced: "500.00",
+  usdOutPriced: "450.00",
+};
+
 const pricedDeposit: ActivitySeed = {
   sourceRowId: "priced-deposit",
   protocol: "relay",
@@ -94,15 +102,21 @@ const MIXED_WINDOW: ActivitySeed[] = [
   pricedSwap,
   unpricedSwap,
   pendingSwap,
+  stalePricedPendingSwap,
   pricedDeposit,
   unpricedDeposit,
 ];
 
-const NOTHING_PRICED_WINDOW: ActivitySeed[] = [unpricedSwap, pendingSwap, unpricedDeposit];
+const NOTHING_PRICED_WINDOW: ActivitySeed[] = [
+  unpricedSwap,
+  pendingSwap,
+  stalePricedPendingSwap,
+  unpricedDeposit,
+];
 
 const PRICED_VOLUME_USD = "125.00";
 const PRICED_TOKEN_OUT_VOLUME_USD = "90.00";
-const SEEDED_SWAP_COUNT = 3;
+const SEEDED_SWAP_COUNT = 4;
 const SEEDED_DEPOSIT_COUNT = 2;
 const SEEDED_ACTIVITY_COUNT = SEEDED_SWAP_COUNT + SEEDED_DEPOSIT_COUNT;
 
@@ -304,7 +318,7 @@ describe("public aggregates over a window mixing priced, unpriced and pending ro
     expect(coverage).toEqual({
       pricedActivityCount: 2,
       unpricedActivityCount: 2,
-      pendingActivityCount: 1,
+      pendingActivityCount: 2,
       pricedCoverage: 0.5,
     });
   });
@@ -362,7 +376,7 @@ describe("public aggregates over a window where nothing has been priced yet", ()
     expect(coverage).toEqual({
       pricedActivityCount: 0,
       unpricedActivityCount: 2,
-      pendingActivityCount: 1,
+      pendingActivityCount: 2,
       pricedCoverage: 0,
     });
   });

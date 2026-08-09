@@ -1,42 +1,121 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+const SERVER_SRC = new URL("../", import.meta.url);
+
 const CLIENT_ESTIMATE_COLUMN = /usd_(in|out)_est/;
+const SERVER_PRICED_COLUMN = /usd_(in|out)_priced/;
+const PRICING_STATE_GUARD = /pricing_state/;
+
+const PRICED_COLUMN_OWNER = "repos/server-priced-usd.ts";
+
+const NON_AGGREGATE_REPOS: readonly string[] = [
+  "activities-ingest-repo.ts",
+  "activities-verify-repo.ts",
+  "agents-repo.ts",
+  "handshake-repo.ts",
+  "purge-repo.ts",
+  "rate-limit-repo.ts",
+  "token-attestations-repo.ts",
+  "token-attestations-verify-repo.ts",
+  "verification-repo.ts",
+];
 
 const PER_ROW_DETAIL_LINES: Record<string, readonly string[]> = {
-  "read-repo.ts": [
+  "repos/read-repo.ts": [
     "usd_in_est: string | null;",
     "usd_out_est: string | null;",
     "a.usd_in_est, a.usd_out_est, a.usd_fee_est, a.usd_source,",
     "usd_in_est: raw.usd_in_est,",
     "usd_out_est: raw.usd_out_est,",
   ],
-  "network-repo.ts": [],
-  "token-repo.ts": [],
-  "route-repo.ts": [],
+  "public-dto.ts": ["usdInEst: row.usd_in_est,", "usdOutEst: row.usd_out_est,"],
 };
 
-function estimateReferencesIn(fileName: string): string[] {
-  const path = fileURLToPath(new URL(`../repos/${fileName}`, import.meta.url));
-  return readFileSync(path, "utf8")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => CLIENT_ESTIMATE_COLUMN.test(line));
+function typeScriptFilesIn(directory: string): string[] {
+  return readdirSync(fileURLToPath(new URL(directory, SERVER_SRC)))
+    .filter((fileName) => fileName.endsWith(".ts"))
+    .sort();
 }
 
-describe("public aggregate repositories", () => {
-  for (const [fileName, perRowDetailLines] of Object.entries(PER_ROW_DETAIL_LINES)) {
-    it(`sums no client usd estimate in ${fileName}`, () => {
-      const references = estimateReferencesIn(fileName);
+function aggregateSources(): string[] {
+  const repos = typeScriptFilesIn("repos/")
+    .filter((fileName) => !NON_AGGREGATE_REPOS.includes(fileName))
+    .map((fileName) => `repos/${fileName}`);
+  const dtos = typeScriptFilesIn("./").filter((fileName) => fileName.endsWith("-dto.ts"));
+  return [...repos, ...dtos];
+}
 
-      expect(references.filter((line) => !perRowDetailLines.includes(line))).toEqual([]);
+function linesOf(sourcePath: string): string[] {
+  const path = fileURLToPath(new URL(sourcePath, SERVER_SRC));
+  return readFileSync(path, "utf8")
+    .split("\n")
+    .map((line) => line.trim());
+}
+
+function linesMatching(sourcePath: string, pattern: RegExp): string[] {
+  return linesOf(sourcePath).filter((line) => pattern.test(line));
+}
+
+function perRowDetailLinesOf(sourcePath: string): readonly string[] {
+  return PER_ROW_DETAIL_LINES[sourcePath] ?? [];
+}
+
+const KNOWN_AGGREGATE_SOURCES = [
+  "repos/network-repo.ts",
+  "repos/read-repo.ts",
+  "repos/route-repo.ts",
+  "repos/server-priced-usd.ts",
+  "repos/token-repo.ts",
+  "public-dto.ts",
+];
+
+describe("the set of files the price basis is guarded over", () => {
+  it("scans every repository that is not named as a non-aggregate one", () => {
+    expect(aggregateSources()).toEqual(expect.arrayContaining(KNOWN_AGGREGATE_SOURCES));
+  });
+
+  it("names no non-aggregate repository that has been renamed away", () => {
+    const present = typeScriptFilesIn("repos/");
+
+    expect(NON_AGGREGATE_REPOS.filter((fileName) => !present.includes(fileName))).toEqual([]);
+  });
+});
+
+describe("public aggregate sources", () => {
+  for (const sourcePath of aggregateSources()) {
+    it(`sums no client usd estimate in ${sourcePath}`, () => {
+      const references = linesMatching(sourcePath, CLIENT_ESTIMATE_COLUMN);
+      const exempted = perRowDetailLinesOf(sourcePath);
+
+      expect(references.filter((line) => !exempted.includes(line))).toEqual([]);
     });
 
-    it(`keeps every exempted per-row detail line of ${fileName} present`, () => {
-      const references = estimateReferencesIn(fileName);
+    if (sourcePath === PRICED_COLUMN_OWNER) continue;
 
-      expect(perRowDetailLines.filter((line) => !references.includes(line))).toEqual([]);
+    it(`reads the priced columns only through ${PRICED_COLUMN_OWNER} in ${sourcePath}`, () => {
+      expect(linesMatching(sourcePath, SERVER_PRICED_COLUMN)).toEqual([]);
     });
   }
+
+  for (const [sourcePath, exempted] of Object.entries(PER_ROW_DETAIL_LINES)) {
+    it(`keeps every exempted per-row detail line of ${sourcePath} present`, () => {
+      const references = linesMatching(sourcePath, CLIENT_ESTIMATE_COLUMN);
+
+      expect(exempted.filter((line) => !references.includes(line))).toEqual([]);
+    });
+  }
+});
+
+describe(PRICED_COLUMN_OWNER, () => {
+  it("guards every priced column read with the pricing state", () => {
+    const priced = linesMatching(PRICED_COLUMN_OWNER, SERVER_PRICED_COLUMN);
+
+    expect(priced.filter((line) => !PRICING_STATE_GUARD.test(line))).toEqual([]);
+  });
+
+  it("reads both priced columns", () => {
+    expect(linesMatching(PRICED_COLUMN_OWNER, SERVER_PRICED_COLUMN)).toHaveLength(2);
+  });
 });

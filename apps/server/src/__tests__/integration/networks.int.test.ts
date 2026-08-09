@@ -23,6 +23,7 @@ type ActivitySeed = {
   verificationState: string;
   usdInPriced: string | null;
   usdOutPriced?: string | null;
+  pricingState?: "server_priced" | "unpriced" | "pending";
   fromChainId?: string | null;
   toChainId?: string | null;
   tokenInAddress?: string | null;
@@ -45,7 +46,7 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
              $3, $4, 'confirmed', $5, $6, $7::bigint, $8::bigint, $9::bigint,
              $10, $11, 6,
              $12, $13, 18,
-             '1000000000000000000', $14::numeric, $15::numeric, 'server_priced', '0xhash' || $2,
+             '1000000000000000000', $14::numeric, $15::numeric, $18, '0xhash' || $2,
              now() - make_interval(mins => $16::int), now() - make_interval(mins => $16::int),
              ARRAY['confirmed'], $17, now(),
              now(), 1)`,
@@ -67,6 +68,7 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
       seed.usdOutPriced ?? null,
       confirmedMinutesAgo,
       seed.verificationState,
+      seed.pricingState ?? "server_priced",
     ],
   );
 }
@@ -115,6 +117,35 @@ beforeAll(async () => {
     eventRole: "bridge_deposit",
     verificationState: "verified_full",
     usdInPriced: "25.00",
+    fromChainId: "8453",
+    toChainId: "42161",
+  });
+  await seedActivity(db.pool, {
+    publicId: "base-stale-priced-swap",
+    protocol: "kyberswap",
+    chainFamily: "eip155",
+    chainId: "8453",
+    kind: "swap",
+    eventRole: "swap",
+    verificationState: "verified_full",
+    pricingState: "unpriced",
+    usdInPriced: "700.00",
+    usdOutPriced: "600.00",
+    tokenInAddress: usdcOnBase,
+    tokenInSymbol: "USDC",
+    tokenOutAddress: wethOnBase,
+    tokenOutSymbol: "WETH",
+  });
+  await seedActivity(db.pool, {
+    publicId: "base-stale-priced-deposit",
+    protocol: "relay",
+    chainFamily: "eip155",
+    chainId: "8453",
+    kind: "bridge",
+    eventRole: "bridge_deposit",
+    verificationState: "verified_full",
+    pricingState: "pending",
+    usdInPriced: "900.00",
     fromChainId: "8453",
     toChainId: "42161",
   });
@@ -230,7 +261,16 @@ describe("GET /api/networks", () => {
     const base = await networkNamed("base");
 
     expect(base.volumeUsd).toBe("125.50");
-    expect(base.txCount).toBe(3);
+    expect(base.txCount).toBe(5);
+  });
+
+  it("counts rows the server has not priced without letting their stale prices into the volume", async () => {
+    const base = await networkNamed("base");
+
+    expect({ volumeUsd: base.volumeUsd, txCount: base.txCount }).toEqual({
+      volumeUsd: "125.50",
+      txCount: 5,
+    });
   });
 
   it("leaves a network whose only activity is unverified at zero with no last seen", async () => {
@@ -254,7 +294,7 @@ describe("GET /api/networks", () => {
   });
 
   it("counts a bridge leg out of the network its from_chain_id resolves to", async () => {
-    expect(bridgeCountsOf(await networkNamed("base"))).toEqual({ bridgeInCount: 1, bridgeOutCount: 1 });
+    expect(bridgeCountsOf(await networkNamed("base"))).toEqual({ bridgeInCount: 1, bridgeOutCount: 2 });
     expect(bridgeCountsOf(await networkNamed("solana"))).toEqual({ bridgeInCount: 0, bridgeOutCount: 1 });
   });
 
@@ -265,7 +305,7 @@ describe("GET /api/networks", () => {
       verificationTier: "full",
       volumeUsd: "0",
       txCount: 0,
-      bridgeInCount: 1,
+      bridgeInCount: 2,
       bridgeOutCount: 0,
       lastSeenSeconds: null,
     });
@@ -275,7 +315,7 @@ describe("GET /api/networks", () => {
     const rows = await listNetworks();
     const legsCounted = rows.reduce((total, row) => total + row.bridgeInCount + row.bridgeOutCount, 0);
 
-    expect(legsCounted).toBe(4);
+    expect(legsCounted).toBe(6);
     expect(bridgeCountsOf(await networkNamed("polygon"))).toEqual({ bridgeInCount: 0, bridgeOutCount: 0 });
   });
 });
@@ -285,7 +325,7 @@ describe("GET /api/networks/:slug", () => {
     const detail = await detailOf("base");
 
     expect(detail.volumeUsd).toBe("125.50");
-    expect(detail.txCount).toBe(3);
+    expect(detail.txCount).toBe(5);
     expect(detail.displayName).toBe("Base");
     expect(detail.verificationTier).toBe("full");
   });
@@ -294,8 +334,8 @@ describe("GET /api/networks/:slug", () => {
     const detail = await detailOf("base");
 
     expect(detail.protocols).toEqual([
-      { protocol: "kyberswap", volumeUsd: "100.50", txCount: 1 },
-      { protocol: "relay", volumeUsd: "25.00", txCount: 2 },
+      { protocol: "kyberswap", volumeUsd: "100.50", txCount: 2 },
+      { protocol: "relay", volumeUsd: "25.00", txCount: 3 },
     ]);
   });
 
@@ -307,14 +347,25 @@ describe("GET /api/networks/:slug", () => {
         address: usdcOnBase.toLowerCase(),
         symbol: "USDC",
         volumeUsd: "100.50",
-        txCount: 1,
+        txCount: 2,
       },
       {
         address: wethOnBase,
         symbol: "WETH",
         volumeUsd: "100.00",
-        txCount: 1,
+        txCount: 2,
       },
+    ]);
+  });
+
+  it("keeps a stale priced leg out of the token volumes and inside their counts", async () => {
+    const detail = await detailOf("base");
+
+    expect(
+      detail.tokens.map(({ symbol, volumeUsd, txCount }) => ({ symbol, volumeUsd, txCount })),
+    ).toEqual([
+      { symbol: "USDC", volumeUsd: "100.50", txCount: 2 },
+      { symbol: "WETH", volumeUsd: "100.00", txCount: 2 },
     ]);
   });
 
@@ -323,7 +374,7 @@ describe("GET /api/networks/:slug", () => {
 
     expect(detail.routes).toEqual([
       { fromChainSlug: "solana", toChainSlug: "base", legCount: 1, volumeUsd: "40.00" },
-      { fromChainSlug: "base", toChainSlug: "arbitrum", legCount: 1, volumeUsd: "25.00" },
+      { fromChainSlug: "base", toChainSlug: "arbitrum", legCount: 2, volumeUsd: "25.00" },
     ]);
   });
 
@@ -341,7 +392,7 @@ describe("GET /api/networks/:slug", () => {
     expect(detail.series).toHaveLength(24);
     expect(detail.series.every((point) => point.bucketStart % 3600 === 0)).toBe(true);
     expect(observed.map(({ volumeUsd, txCount }) => ({ volumeUsd, txCount }))).toEqual([
-      { volumeUsd: "125.50", txCount: 3 },
+      { volumeUsd: "125.50", txCount: 5 },
     ]);
   });
 
