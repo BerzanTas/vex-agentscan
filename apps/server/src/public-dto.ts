@@ -28,6 +28,7 @@ export type ProtocolRankingDto = ProtocolStatDto & {
 
 export type AgentStatDto = {
   alias: string;
+  name: string | null;
   volumeUsd: string;
   txCount: number;
   protocolCount: number;
@@ -40,9 +41,14 @@ export function agentAlias(salt: string, agentHash: string): string {
   return `agent-${digest.slice(0, 8)}`;
 }
 
-export function toAgentStatDto(salt: string, read: AgentVolumeRead): AgentStatDto {
+export function toAgentStatDto(
+  salt: string,
+  read: AgentVolumeRead,
+  name: string | null,
+): AgentStatDto {
   return {
     alias: agentAlias(salt, read.agentHash),
+    name,
     volumeUsd: read.volumeUsd,
     txCount: read.txCount,
     protocolCount: read.protocolCount,

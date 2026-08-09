@@ -2,10 +2,12 @@ import { pino } from "pino";
 import { buildAttestationChainRegistry, resolveChain } from "@agentscan/core";
 import { loadConfig } from "./config.js";
 import { createPool } from "./db.js";
+import { DEFILLAMA_PRICE_SOURCE, makeDefiLlamaPriceFeed } from "./pricing/defillama-price-feed.js";
 import { makeChainReader } from "./verification/viem-chain-reader.js";
 import { startAttestationVerificationLoop } from "./worker/attestation-loop.js";
 import { startHeartbeat } from "./worker/heartbeat.js";
 import { startVerificationLoop } from "./worker/loop.js";
+import { startPricingLoop } from "./worker/pricing-loop.js";
 import { startPurgeInterval } from "./worker/purge.js";
 
 const config = loadConfig(process.env);
@@ -32,6 +34,14 @@ startAttestationVerificationLoop({
   resolveChain,
   chainReaderFor: (entry, context) => makeChainReader(entry, config, context),
   chainRegistry: buildAttestationChainRegistry(config.attestFactoryAddressesByChainId),
+  logger,
+});
+startPricingLoop({
+  pool,
+  config,
+  now: () => new Date(),
+  priceFeed: makeDefiLlamaPriceFeed(config),
+  priceSource: DEFILLAMA_PRICE_SOURCE,
   logger,
 });
 if (config.PURGE_IN_WORKER) startPurgeInterval({ pool, config, logger });

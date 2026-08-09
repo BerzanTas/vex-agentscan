@@ -102,6 +102,7 @@ describe("GET /api/agents", () => {
     it("serves the top 10 sorted by volume descending and drops the eleventh", async () => {
       const expected = Array.from({ length: 10 }, (_, index) => ({
         alias: aliasOf(index),
+        name: null,
         volumeUsd: String(1100 - index * 100),
         txCount: 1,
         protocolCount: 1,
@@ -126,6 +127,7 @@ describe("GET /api/agents", () => {
       expect(await leaderboardResponse()).toEqual([
         {
           alias: aliasOf(1),
+          name: null,
           volumeUsd: "100.25",
           txCount: 1,
           protocolCount: 1,
@@ -152,6 +154,7 @@ describe("GET /api/agents", () => {
       expect(await leaderboardResponse()).toEqual([
         {
           alias: aliasOf(3),
+          name: null,
           volumeUsd: "50.5",
           txCount: 1,
           protocolCount: 1,
@@ -179,6 +182,7 @@ describe("GET /api/agents", () => {
       expect(await leaderboardResponse()).toEqual([
         {
           alias: aliasOf(5),
+          name: null,
           volumeUsd: "300.75",
           txCount: 1,
           protocolCount: 1,
@@ -202,6 +206,7 @@ describe("GET /api/agents", () => {
       expect(await leaderboardResponse()).toEqual([
         {
           alias: aliasOf(7),
+          name: null,
           volumeUsd: "80",
           txCount: 1,
           protocolCount: 1,
@@ -210,6 +215,7 @@ describe("GET /api/agents", () => {
         },
         {
           alias: aliasOf(6),
+          name: null,
           volumeUsd: "60",
           txCount: 1,
           protocolCount: 1,
@@ -223,7 +229,44 @@ describe("GET /api/agents", () => {
       expect(await leaderboardResponse()).toEqual([
         {
           alias: aliasOf(6),
+          name: null,
           volumeUsd: "60",
+          txCount: 1,
+          protocolCount: 1,
+          chainCount: 1,
+          lastSeenSeconds: expect.any(Number),
+        },
+      ]);
+    });
+  });
+
+  describe("with one bound agent and one unbound agent", () => {
+    beforeAll(async () => {
+      await resetData(db.pool);
+      await seedAgent(db.pool, hashOf(9));
+      await db.pool.query("UPDATE agents SET name = 'Vex-09090909' WHERE agent_hash = $1", [
+        hashOf(9),
+      ]);
+      await seedActivity(db.pool, { agentHash: hashOf(9), usdInEst: "200" });
+      await seedAgent(db.pool, hashOf(10));
+      await seedActivity(db.pool, { agentHash: hashOf(10), usdInEst: "100" });
+    });
+
+    it("links the bound agent by name and leaves the unbound one linkless", async () => {
+      expect(await leaderboardResponse()).toEqual([
+        {
+          alias: aliasOf(9),
+          name: "Vex-09090909",
+          volumeUsd: "200",
+          txCount: 1,
+          protocolCount: 1,
+          chainCount: 1,
+          lastSeenSeconds: expect.any(Number),
+        },
+        {
+          alias: aliasOf(10),
+          name: null,
+          volumeUsd: "100",
           txCount: 1,
           protocolCount: 1,
           chainCount: 1,

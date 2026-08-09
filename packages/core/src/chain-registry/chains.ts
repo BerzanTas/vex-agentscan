@@ -4,6 +4,7 @@ export type ChainEntry = {
   explorerTxUrl: (txHash: string) => string | null;
   rpcUrls: string[];
   verificationTier: "full" | "basic";
+  priceFeedKey?: string;
 };
 
 export type EvmChain = { chainId: bigint; entry: ChainEntry };
@@ -19,6 +20,7 @@ export const evmChains: readonly EvmChain[] = [
     chainId: 1n,
     entry: {
       canonicalSlug: "ethereum",
+      priceFeedKey: "ethereum",
       displayName: "Ethereum",
       explorerTxUrl: explorerTx("https://etherscan.io"),
       rpcUrls: ["https://ethereum-rpc.publicnode.com", "https://eth.llamarpc.com"],
@@ -29,6 +31,7 @@ export const evmChains: readonly EvmChain[] = [
     chainId: 8453n,
     entry: {
       canonicalSlug: "base",
+      priceFeedKey: "base",
       displayName: "Base",
       explorerTxUrl: explorerTx("https://basescan.org"),
       rpcUrls: ["https://mainnet.base.org", "https://base-rpc.publicnode.com"],
@@ -39,6 +42,7 @@ export const evmChains: readonly EvmChain[] = [
     chainId: 42161n,
     entry: {
       canonicalSlug: "arbitrum",
+      priceFeedKey: "arbitrum",
       displayName: "Arbitrum One",
       explorerTxUrl: explorerTx("https://arbiscan.io"),
       rpcUrls: ["https://arb1.arbitrum.io/rpc", "https://arbitrum-one-rpc.publicnode.com"],
@@ -49,6 +53,7 @@ export const evmChains: readonly EvmChain[] = [
     chainId: 10n,
     entry: {
       canonicalSlug: "optimism",
+      priceFeedKey: "optimism",
       displayName: "OP Mainnet",
       explorerTxUrl: explorerTx("https://optimistic.etherscan.io"),
       rpcUrls: ["https://mainnet.optimism.io", "https://optimism-rpc.publicnode.com"],
@@ -59,6 +64,7 @@ export const evmChains: readonly EvmChain[] = [
     chainId: 137n,
     entry: {
       canonicalSlug: "polygon",
+      priceFeedKey: "polygon",
       displayName: "Polygon",
       explorerTxUrl: explorerTx("https://polygonscan.com"),
       rpcUrls: ["https://polygon-rpc.com", "https://polygon-bor-rpc.publicnode.com"],
@@ -79,6 +85,7 @@ export const evmChains: readonly EvmChain[] = [
 
 const solanaEntry: ChainEntry = {
   canonicalSlug: "solana",
+  priceFeedKey: "solana",
   displayName: "Solana",
   explorerTxUrl: explorerTx("https://solscan.io"),
   rpcUrls: ["https://api.mainnet-beta.solana.com"],

@@ -28,8 +28,22 @@ export {
   type IngestEventStatus,
   type IngestOutcome,
 } from "./ingest-decision.js";
-export { nextBackoff } from "./backoff.js";
+export { backoffDelayMs, nextBackoff } from "./backoff.js";
 export { generatePublicId } from "./public-id.js";
+export type { PriceFeed, PricePoint, PriceQuery } from "./pricing/price-feed.js";
+export { resolveCoinKey, type CoinKeyQuery, type CoinKeyResolution } from "./pricing/coin-key.js";
+export { isPriceAcceptable, type PriceAcceptanceGate } from "./pricing/acceptance.js";
+export { isPositiveDecimalText, legUsd, plainDecimalFrom } from "./pricing/decimal.js";
+export {
+  decidePricingOutcome,
+  presentLeg,
+  priceDivergenceRatio,
+  pricingRetryOutcome,
+  type ActivityLeg,
+  type LegPricing,
+  type PricingOutcome,
+  type PricingRetryBudget,
+} from "./pricing/pricing-decision.js";
 export {
   rangeWindowSeconds,
   resolveChartRange,
@@ -50,6 +64,26 @@ export {
   type AttestationChainEntry,
   type AttestationChainRegistry,
 } from "./chain-registry/attestation-chain-registry.js";
+export type {
+  AgentActivity,
+  AgentActivityLeg,
+  PricingState,
+} from "./agent-metrics/agent-activity.js";
+export {
+  capitalDeployed,
+  type CapitalDeployed,
+  type DailyDeployed,
+} from "./agent-metrics/capital-deployed.js";
+export { realizedResult, winRate, type RealizedResult } from "./agent-metrics/realized-result.js";
+export {
+  chainBreakdown,
+  protocolBreakdown,
+  type ChainVolume,
+  type ProtocolVolume,
+} from "./agent-metrics/breakdowns.js";
+export { activitiesPerDay30d } from "./agent-metrics/activity-cadence.js";
+export { unpriced30dSharePct, unpricedSharePct } from "./agent-metrics/unpriced-share.js";
+export { publishedUsd } from "./agent-metrics/published-usd.js";
 export {
   attestationSignalsFor,
   bestAttestationCandidate,
