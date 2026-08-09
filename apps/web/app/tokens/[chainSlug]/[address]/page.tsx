@@ -82,7 +82,6 @@ export default async function TokenDetailPage({ params, searchParams }: TokenPag
           </div>
           <p className="stat-card-value" title={`$${formatUsdEstimate(detail.volumeUsd)}`}>
             ${formatUsdCompact(detail.volumeUsd)}
-            <span className="stat-card-unit">est.</span>
           </p>
         </div>
         <div className="glass stat-card">

@@ -40,7 +40,6 @@ export function AgentsRankingTable({
                 title={`$${formatUsdEstimate(agent.volumeUsd)}`}
               >
                 ${formatUsdCompact(agent.volumeUsd)}
-                <span className="ml-1 text-xs text-text-muted">est.</span>
               </td>
               <td className="font-mono text-xs text-text-secondary">{countLabel(agent.txCount)}</td>
               <td className="font-mono text-xs text-text-secondary">

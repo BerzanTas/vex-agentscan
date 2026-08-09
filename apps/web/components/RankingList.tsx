@@ -47,7 +47,6 @@ export function RankingList({
                 title={`$${formatUsdEstimate(row.volumeUsd)}`}
               >
                 ${formatUsdCompact(row.volumeUsd)}
-                <span className="ml-1 text-xs text-text-muted">est.</span>
               </span>
               <span className="w-12 whitespace-nowrap text-right font-mono text-xs text-text-muted">
                 {row.txCount.toLocaleString("en-US")}

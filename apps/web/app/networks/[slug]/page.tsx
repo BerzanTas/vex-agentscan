@@ -65,7 +65,6 @@ function NetworkTokens({
             title={`$${formatUsdEstimate(token.volumeUsd)}`}
           >
             ${formatUsdCompact(token.volumeUsd)}
-            <span className="ml-1 text-xs text-text-muted">est.</span>
           </span>
         </li>
       ))}
@@ -117,7 +116,6 @@ export default async function NetworkDetailPage({ params, searchParams }: Networ
           >
             ${formatUsdCompact(detail.volumeUsd)}
           </span>
-          <span className="text-xs text-text-muted">est.</span>
         </div>
         <div className="glass verification-stat">
           <span className="table-head">Transactions</span>

@@ -35,7 +35,6 @@ export function RoutesList({
           <span className="ml-auto text-xs text-text-muted">{legLabel(route.legCount)}</span>
           <span className="text-text-primary" title={`$${formatUsdEstimate(route.volumeUsd)}`}>
             ${formatUsdCompact(route.volumeUsd)}
-            <span className="ml-1 text-xs text-text-muted">est.</span>
           </span>
         </li>
       ))}

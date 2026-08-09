@@ -60,7 +60,6 @@ export function NetworksTable({ networks }: { networks: NetworkStatDto[] }) {
                 title={`$${formatUsdEstimate(network.volumeUsd)}`}
               >
                 ${formatUsdCompact(network.volumeUsd)}
-                <span className="ml-1 text-xs text-text-muted">est.</span>
               </td>
               <td className="text-right font-mono text-xs text-text-secondary">
                 {network.txCount.toLocaleString("en-US")}

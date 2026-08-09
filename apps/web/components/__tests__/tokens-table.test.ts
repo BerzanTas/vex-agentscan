@@ -83,11 +83,11 @@ describe("TokensTable", () => {
     expect(markup).toContain('title="0x1234567890abcdef1234567890abcdefabcd"');
   });
 
-  it("marks the observed volume as an estimate", () => {
+  it("shows the observed volume without an estimate badge", () => {
     const markup = markupFor([usdc]);
 
     expect(markup).toContain("$5.4K");
-    expect(markup).toContain(">est.<");
+    expect(markup).not.toContain(">est.<");
   });
 
   it("keeps the exact volume in the title of the compact one", () => {

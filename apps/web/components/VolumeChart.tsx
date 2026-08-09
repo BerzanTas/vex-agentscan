@@ -186,7 +186,7 @@ export function priceScaleOptionsFor(scale: ChartScale): DeepPartial<PriceScaleO
 }
 
 export function formatBucketValue(point: ChartPointDto, metric: ChartMetric): string {
-  if (metric === "volume") return `$${formatUsdEstimate(point.volumeUsd)} est.`;
+  if (metric === "volume") return `$${formatUsdEstimate(point.volumeUsd)}`;
   return point.txCount.toLocaleString("en");
 }
 
