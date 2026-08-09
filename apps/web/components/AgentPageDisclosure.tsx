@@ -1,3 +1,5 @@
+import { legCount } from "../lib/pricing-legs";
+
 const SHARE_FORMAT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 
 const TRUNCATION_SENTENCE = "Figures cover the most recent activities only.";
@@ -15,19 +17,26 @@ function trailing30dSentence(unpriced30dSharePct: number): string {
   return `Over the trailing 30 days that share is ${SHARE_FORMAT.format(unpriced30dSharePct)}%, not fully reflected in the capital deployed figure or the daily chart.`;
 }
 
+function awaitingAPriceSentence(awaitingAPriceCount: number): string {
+  return `${legCount(awaitingAPriceCount)} still being priced, and not yet in any USD figure on this page.`;
+}
+
 export function AgentPageDisclosure({
   unpricedSharePct,
   unpriced30dSharePct,
+  awaitingAPriceCount,
   truncated,
 }: {
   unpricedSharePct: number;
   unpriced30dSharePct: number;
+  awaitingAPriceCount: number;
   truncated: boolean;
 }) {
   return (
     <p className="section-enter max-w-3xl text-xs text-text-muted">
       {readSetSentence(unpricedSharePct)}
       {` ${trailing30dSentence(unpriced30dSharePct)}`}
+      {awaitingAPriceCount > 0 && ` ${awaitingAPriceSentence(awaitingAPriceCount)}`}
       {truncated && ` ${TRUNCATION_SENTENCE}`}
     </p>
   );

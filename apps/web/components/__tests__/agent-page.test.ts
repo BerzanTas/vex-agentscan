@@ -42,6 +42,7 @@ const agent: AgentPageDto = {
   lastSeenSeconds: 7200,
   unpricedSharePct: 12.5,
   unpriced30dSharePct: 4.2,
+  awaitingAPriceCount: 0,
   truncated: false,
 };
 
@@ -64,6 +65,26 @@ const partlyPricedAgent: AgentPageDto = {
   unpriced30dSharePct: 100,
 };
 
+const pendingBesidePricedAgent: AgentPageDto = {
+  ...agent,
+  capitalDeployedPeak30dUsd: "1000",
+  dailyDeployedUsd: thirtyDaysDeployed().map((entry, index) => ({
+    day: entry.day,
+    usd: index === 29 ? "1000" : "0",
+  })),
+  realizedResultUsd: "0",
+  closedRoundTrips: 0,
+  unmatchedDisposals: 0,
+  winRate: null,
+  protocolBreakdown: [{ protocol: "kyberswap", volumeUsd: "1000", txCount: 2 }],
+  chainBreakdown: [{ chainSlug: "base", volumeUsd: "1000", txCount: 2 }],
+  activityCount: 2,
+  activitiesPerDay30d: 0.07,
+  unpricedSharePct: 0,
+  unpriced30dSharePct: 0,
+  awaitingAPriceCount: 1,
+};
+
 function viewMarkup(page: AgentPageDto): string {
   return renderToStaticMarkup(createElement(AgentPageView, { agent: page }));
 }
@@ -76,9 +97,15 @@ function disclosureMarkup(
   unpricedSharePct: number,
   unpriced30dSharePct: number,
   truncated: boolean,
+  awaitingAPriceCount = 0,
 ): string {
   return renderToStaticMarkup(
-    createElement(AgentPageDisclosure, { unpricedSharePct, unpriced30dSharePct, truncated }),
+    createElement(AgentPageDisclosure, {
+      unpricedSharePct,
+      unpriced30dSharePct,
+      awaitingAPriceCount,
+      truncated,
+    }),
   );
 }
 
@@ -196,6 +223,30 @@ describe("AgentPageView", () => {
     expect(rowLabels(markup)).toEqual(["kyberswap", "base"]);
     expect(disclosureText(markup)).not.toMatch(/\bexcluded\b/);
     expect(disclosureText(markup)).toContain("not fully reflected");
+  });
+
+  it("names the row still being priced when a settled row already carries the figures", () => {
+    const markup = viewMarkup(pendingBesidePricedAgent);
+
+    expect(markup).toContain('title="$1,000.00"');
+    expect(rowLabels(markup)).toEqual(["kyberswap", "base"]);
+    expect(markup).toContain(">2</td>");
+    expect(disclosureText(markup)).toContain("0% could not be fully priced");
+    expect(disclosureText(markup)).toContain("1 swap or bridge deposit still being priced");
+  });
+
+  it("names the row still being priced when nothing has settled at all", () => {
+    const markup = viewMarkup({
+      ...pendingBesidePricedAgent,
+      capitalDeployedPeak30dUsd: "0",
+      dailyDeployedUsd: thirtyDaysDeployed().map((entry) => ({ day: entry.day, usd: "0" })),
+      protocolBreakdown: [{ protocol: "kyberswap", volumeUsd: "0", txCount: 1 }],
+      chainBreakdown: [{ chainSlug: "base", volumeUsd: "0", txCount: 1 }],
+      activityCount: 1,
+    });
+
+    expect(markup).toContain('title="$0.00"');
+    expect(disclosureText(markup)).toContain("1 swap or bridge deposit still being priced");
   });
 
   it("keeps the exact figures in their titles and carries no estimate badge", () => {
@@ -342,6 +393,26 @@ describe("AgentPageDisclosure", () => {
     expect(markup).toContain("swaps and bridge deposits");
     expect(markup).not.toContain("verified activity");
     expect(markup).not.toContain("verified activities");
+  });
+
+  it("names what is still being priced, in the words every other surface uses", () => {
+    const markup = disclosureMarkup(0, 0, false, 1);
+
+    expect(markup).toContain(
+      "1 swap or bridge deposit still being priced, and not yet in any USD figure on this page.",
+    );
+  });
+
+  it("counts more than one row still being priced in the plural", () => {
+    const markup = disclosureMarkup(0, 0, false, 3);
+
+    expect(markup).toContain(
+      "3 swaps and bridge deposits still being priced, and not yet in any USD figure on this page.",
+    );
+  });
+
+  it("says nothing about pricing in flight when every row has settled", () => {
+    expect(disclosureMarkup(12.5, 4.2, false, 0)).not.toContain("still being priced");
   });
 
   it("does not claim unpriced activity is missing from the breakdown transaction counts", () => {

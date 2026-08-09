@@ -1,4 +1,5 @@
 import type { PricingCoverageDto } from "../lib/api";
+import { legCount } from "../lib/pricing-legs";
 
 const NOTE_CLASS = "max-w-3xl text-xs text-text-muted";
 
@@ -18,10 +19,6 @@ function finishedPricingCount(coverage: PricingCoverageDto): number {
 
 function excludedActivityCount(coverage: PricingCoverageDto): number {
   return coverage.unpricedActivityCount + coverage.pendingActivityCount;
-}
-
-function legCount(count: number): string {
-  return count === 1 ? "1 swap or bridge deposit" : `${count} swaps and bridge deposits`;
 }
 
 function legPhrase(count: number): string {
