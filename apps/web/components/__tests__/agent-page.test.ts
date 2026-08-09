@@ -163,6 +163,15 @@ describe("AgentPageView", () => {
     expect(markup).toContain("4.2% could not be priced");
   });
 
+  it("keeps the exact figures in their titles and carries no estimate badge", () => {
+    const markup = viewMarkup(agent);
+
+    expect(markup).toContain('title="$184,320.75"');
+    expect(markup).toContain('title="$120,400.00"');
+    expect(markup).not.toContain(">est.<");
+    expect(markup).not.toContain("est.");
+  });
+
   it("renders exactly one breakdown row per entry and no footer row", () => {
     const markup = viewMarkup(agent);
 

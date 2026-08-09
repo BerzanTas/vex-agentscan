@@ -21,7 +21,7 @@ export function AgentPageDeployedChart({ days }: { days: AgentDailyDeployedDto[]
   const points = deployedChartPoints(days);
   return (
     <section className="section-enter glass p-4">
-      <PanelHeading title="Daily capital deployed" meta="30D · USD est." />
+      <PanelHeading title="Daily capital deployed" meta="30D · USD" />
       {chartSeriesIsEmpty(points, "volume") ? (
         <EmptyPanel message={NO_DAY_REACHED_A_CENT} withLiveDot={false} />
       ) : (
