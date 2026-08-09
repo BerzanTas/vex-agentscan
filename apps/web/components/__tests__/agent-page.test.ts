@@ -45,6 +45,25 @@ const agent: AgentPageDto = {
   truncated: false,
 };
 
+const partlyPricedAgent: AgentPageDto = {
+  ...agent,
+  capitalDeployedPeak30dUsd: "100",
+  dailyDeployedUsd: thirtyDaysDeployed().map((entry, index) => ({
+    day: entry.day,
+    usd: index === 29 ? "100" : "0",
+  })),
+  realizedResultUsd: "0",
+  closedRoundTrips: 0,
+  unmatchedDisposals: 0,
+  winRate: null,
+  protocolBreakdown: [{ protocol: "kyberswap", volumeUsd: "100", txCount: 1 }],
+  chainBreakdown: [{ chainSlug: "base", volumeUsd: "100", txCount: 1 }],
+  activityCount: 1,
+  activitiesPerDay30d: 0.03,
+  unpricedSharePct: 100,
+  unpriced30dSharePct: 100,
+};
+
 function viewMarkup(page: AgentPageDto): string {
   return renderToStaticMarkup(createElement(AgentPageView, { agent: page }));
 }
@@ -74,6 +93,12 @@ function markupWithHostileLabel(label: string): string {
     protocolBreakdown: [{ protocol: label, volumeUsd: "120400.00", txCount: 240 }],
     chainBreakdown: [{ chainSlug: label, volumeUsd: "140000.00", txCount: 300 }],
   });
+}
+
+function disclosureText(markup: string): string {
+  return (
+    markup.match(/<p class="section-enter max-w-3xl text-xs text-text-muted">(.*?)<\/p>/)?.[1] ?? ""
+  );
 }
 
 function disposalsNote(markup: string): string {
@@ -159,8 +184,18 @@ describe("AgentPageView", () => {
   it("always states both unpriced shares against the figures each one qualifies", () => {
     const markup = viewMarkup(agent);
 
-    expect(markup).toContain("12.5% could not be priced");
+    expect(markup).toContain("12.5% could not be fully priced");
     expect(markup).toContain("Over the trailing 30 days that share is 4.2%");
+  });
+
+  it("never calls a figure excluded while that figure is published above the caption", () => {
+    const markup = viewMarkup(partlyPricedAgent);
+
+    expect(markup).toContain("100% could not be fully priced");
+    expect(markup).toContain('title="$100.00"');
+    expect(rowLabels(markup)).toEqual(["kyberswap", "base"]);
+    expect(disclosureText(markup)).not.toMatch(/\bexcluded\b/);
+    expect(disclosureText(markup)).toContain("not fully reflected");
   });
 
   it("keeps the exact figures in their titles and carries no estimate badge", () => {
@@ -169,7 +204,7 @@ describe("AgentPageView", () => {
     expect(markup).toContain('title="$184,320.75"');
     expect(markup).toContain('title="$120,400.00"');
     expect(markup).not.toContain(">est.<");
-    expect(markup).not.toContain("est.");
+    expect(markup).not.toMatch(/(^|[\s>])est\./);
   });
 
   it("renders exactly one breakdown row per entry and no footer row", () => {
@@ -286,7 +321,7 @@ describe("AgentPageDisclosure", () => {
   it("states both fully priced shares rather than staying silent", () => {
     const markup = disclosureMarkup(0, 0, false);
 
-    expect(markup).toContain("0% could not be priced");
+    expect(markup).toContain("0% could not be fully priced");
     expect(markup).toContain("Over the trailing 30 days that share is 0%");
   });
 
@@ -294,10 +329,10 @@ describe("AgentPageDisclosure", () => {
     const markup = disclosureMarkup(12.5, 4.2, false);
 
     expect(markup).toContain(
-      "Of this agent&#x27;s swaps and bridge deposits we have finished pricing, 12.5% could not be priced.",
+      "Of this agent&#x27;s swaps and bridge deposits we have finished pricing, 12.5% could not be fully priced.",
     );
     expect(markup).toContain(
-      "Those transactions are excluded from the realized result, the win rate and the breakdown volumes, but are still counted in the transaction counts.",
+      "Those transactions are not fully reflected in the realized result, the win rate or the breakdown volumes, and are still counted in the transaction counts.",
     );
   });
 
@@ -320,14 +355,14 @@ describe("AgentPageDisclosure", () => {
     const markup = disclosureMarkup(12.5, 4.2, false);
 
     expect(markup).toContain(
-      "Over the trailing 30 days that share is 4.2%, excluded from the capital deployed figure and the daily chart.",
+      "Over the trailing 30 days that share is 4.2%, not fully reflected in the capital deployed figure or the daily chart.",
     );
   });
 
   it("states a trailing share that a lifetime share would have hidden", () => {
     const markup = disclosureMarkup(5.8, 75, false);
 
-    expect(markup).toContain("5.8% could not be priced");
+    expect(markup).toContain("5.8% could not be fully priced");
     expect(markup).toContain("Over the trailing 30 days that share is 75%");
   });
 
