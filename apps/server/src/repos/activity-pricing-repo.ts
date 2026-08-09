@@ -1,9 +1,9 @@
 import type pg from "pg";
 import type { ChainFamily } from "@agentscan/core";
 import {
-  ACTIVITY_AGGREGATE_DAY_SQL,
-  ACTIVITY_PRICE_HOUR_SQL,
-  ACTIVITY_TIME_ANCHOR_SQL,
+  activityAggregateDaySql,
+  activityPriceHourSql,
+  activityTimeAnchorSql,
 } from "./activity-time-anchor.js";
 
 export type SqlExecutor = Pick<pg.PoolClient, "query">;
@@ -49,11 +49,11 @@ type ClaimedPricingRowShape = {
 };
 
 export async function claimDuePricingRows(
-  pool: pg.Pool,
+  exec: SqlExecutor,
   limit: number,
   leaseSec: number,
 ): Promise<ClaimedPricingRow[]> {
-  const result = await pool.query<ClaimedPricingRowShape>(
+  const result = await exec.query<ClaimedPricingRowShape>(
     `UPDATE activities
      SET pricing_next_attempt_at = now() + make_interval(secs => $2::float8)
      WHERE id IN (
@@ -61,14 +61,14 @@ export async function claimDuePricingRows(
        WHERE pricing_state = 'pending'
          AND verification_state IN ('verified_full','verified_basic')
          AND (pricing_next_attempt_at IS NULL OR pricing_next_attempt_at <= now())
-         AND ${ACTIVITY_TIME_ANCHOR_SQL} IS NOT NULL
+         AND ${activityTimeAnchorSql("activities")} IS NOT NULL
        ORDER BY id
        LIMIT $1
        FOR UPDATE SKIP LOCKED
      )
      RETURNING id, protocol, kind, event_role, chain_family, chain_id,
-               ${ACTIVITY_PRICE_HOUR_SQL} AS price_hour,
-               ${ACTIVITY_AGGREGATE_DAY_SQL}::text AS aggregate_day,
+               ${activityPriceHourSql("activities")} AS price_hour,
+               ${activityAggregateDaySql("activities")}::text AS aggregate_day,
                pricing_attempts,
                executed_in_raw, token_in_address, token_in_decimals, usd_in_est,
                executed_out_raw, token_out_address, token_out_decimals, usd_out_est`,

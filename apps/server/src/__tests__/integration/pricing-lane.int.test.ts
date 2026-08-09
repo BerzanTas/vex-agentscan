@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type pg from "pg";
 import { pino } from "pino";
 import type { PriceFeed, PricePoint, PriceQuery } from "@agentscan/core";
 import { loadConfig } from "../../config.js";
-import { claimDuePricingRows } from "../../repos/activity-pricing-repo.js";
+import { claimDuePricingRows, markServerPriced } from "../../repos/activity-pricing-repo.js";
+import { activityAggregateDaySql } from "../../repos/activity-time-anchor.js";
 import { startTestDb } from "../../testing/pg-harness.js";
 import { seedAgent } from "../../testing/seed.js";
 import { runPricingPass, type PricingLoopDeps } from "../../worker/pricing-loop.js";
@@ -19,6 +22,7 @@ const PRICE_HOUR_SECOND = Math.floor(Date.parse(PRICE_HOUR) / 1000);
 const CONFIRMED_AT = "2026-08-04T10:41:00Z";
 const AGGREGATE_DAY = "2026-08-04";
 const VERIFIED_AT = "2026-08-06T09:15:00Z";
+const LATE_UTC_EVENING = "2026-08-04T23:50:00Z";
 const WETH = "0x4200000000000000000000000000000000000006";
 const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const NATIVE_SENTINEL = `0x${"E".repeat(40)}`;
@@ -101,6 +105,47 @@ async function pricedVolumeRows(): Promise<{ day: string; volume_usd_priced: str
     "SELECT day::text AS day, volume_usd_priced, tx_count FROM daily_aggregates ORDER BY day",
   );
   return result.rows;
+}
+
+async function inKathmanduSession<T>(run: (client: pg.PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL TIME ZONE 'Asia/Kathmandu'");
+    return await run(client);
+  } finally {
+    await client.query("ROLLBACK").catch(() => undefined);
+    client.release();
+  }
+}
+
+async function withRejectedAggregateWrites(run: () => Promise<void>): Promise<void> {
+  await pool.query(
+    `CREATE OR REPLACE FUNCTION reject_daily_aggregate_write() RETURNS trigger AS $$
+     BEGIN RAISE EXCEPTION 'daily aggregate write rejected'; END; $$ LANGUAGE plpgsql`,
+  );
+  await pool.query(
+    `CREATE TRIGGER reject_daily_aggregate_write BEFORE INSERT OR UPDATE ON daily_aggregates
+     FOR EACH ROW EXECUTE FUNCTION reject_daily_aggregate_write()`,
+  );
+  try {
+    await run();
+  } finally {
+    await pool.query("DROP TRIGGER reject_daily_aggregate_write ON daily_aggregates");
+  }
+}
+
+function legacyAbandonStatementOfMigration0011(): string {
+  const migrationPath = fileURLToPath(
+    new URL("../../../../../db/migrations/0011_activity_block_time_and_priced_volume.sql", import.meta.url),
+  );
+  const upSection = readFileSync(migrationPath, "utf8").split("-- migrate:down")[0] ?? "";
+  const start = upSection.indexOf("UPDATE activities");
+  const end = upSection.indexOf(";", start);
+  if (start === -1 || end === -1) {
+    throw new Error("migration 0011 no longer abandons activities that predate block_time");
+  }
+  return upSection.slice(start, end + 1);
 }
 
 type PricingStateRow = {
@@ -193,22 +238,22 @@ describe("claimDuePricingRows", () => {
   });
 
   it("anchors the hour and day buckets in UTC whatever the session timezone is", async () => {
-    await seedPricingActivity({ publicId: "kathmandu-session" });
-    const sessionClient = await pool.connect();
-    try {
-      await sessionClient.query("SET TIME ZONE 'Asia/Kathmandu'");
-      const claimed = await sessionClient.query<{ price_hour: Date; aggregate_day: string }>(
-        `SELECT date_trunc('hour', COALESCE(client_confirmed_at, block_time, verified_at) AT TIME ZONE 'utc')
-                  AT TIME ZONE 'utc' AS price_hour,
-                (COALESCE(client_confirmed_at, block_time, verified_at) AT TIME ZONE 'utc')::date::text
-                  AS aggregate_day
-         FROM activities`,
-      );
-      expect(claimed.rows[0]!.price_hour.toISOString()).toBe("2026-08-04T10:00:00.000Z");
-      expect(claimed.rows[0]!.aggregate_day).toBe(AGGREGATE_DAY);
-    } finally {
-      sessionClient.release();
-    }
+    await seedPricingActivity({ publicId: "kathmandu-session", confirmedAt: LATE_UTC_EVENING });
+
+    const claimed = await inKathmanduSession((client) => claimDuePricingRows(client, 10, 60));
+
+    expect(claimed[0]!.priceHour.toISOString()).toBe("2026-08-04T23:00:00.000Z");
+    expect(claimed[0]!.aggregateDay).toBe(AGGREGATE_DAY);
+  });
+
+  it("keeps the alias-qualified anchor usable from a query that aliases the activities table", async () => {
+    await seedPricingActivity({ publicId: "aliased-anchor", confirmedAt: LATE_UTC_EVENING });
+
+    const aliased = await pool.query<{ aggregate_day: string }>(
+      `SELECT ${activityAggregateDaySql("a")}::text AS aggregate_day FROM activities a`,
+    );
+
+    expect(aliased.rows[0]!.aggregate_day).toBe(AGGREGATE_DAY);
   });
 
   it("falls back to the on-chain block time when the client sent no confirmation time", async () => {
@@ -231,6 +276,35 @@ describe("claimDuePricingRows", () => {
 
     expect(claimed[0]!.priceHour.toISOString()).toBe("2026-08-06T09:00:00.000Z");
     expect(claimed[0]!.aggregateDay).toBe("2026-08-06");
+  });
+});
+
+describe("migration 0011 abandons activities that predate block_time", () => {
+  it("takes an unanchored pre-migration activity out of the pricing lane instead of dating it wrongly", async () => {
+    const unanchored = await seedPricingActivity({
+      publicId: "predates-block-time",
+      confirmedAt: null,
+      blockTime: null,
+    });
+    const anchored = await seedPricingActivity({ publicId: "has-client-time" });
+
+    await pool.query(legacyAbandonStatementOfMigration0011());
+
+    expect((await pricingStateOf(unanchored)).pricing_state).toBe("unpriced");
+    expect((await pricingStateOf(anchored)).pricing_state).toBe("pending");
+    expect((await claimDuePricingRows(pool, 10, 60)).map((row) => row.activityId)).toEqual([anchored]);
+  });
+
+  it("leaves an unanchored activity alone once verification has stamped its block time", async () => {
+    const backfilled = await seedPricingActivity({
+      publicId: "block-time-present",
+      confirmedAt: null,
+      blockTime: "2026-08-05T22:30:00Z",
+    });
+
+    await pool.query(legacyAbandonStatementOfMigration0011());
+
+    expect((await pricingStateOf(backfilled)).pricing_state).toBe("pending");
   });
 
   it("skips an activity that is not verified", async () => {
@@ -354,7 +428,63 @@ describe("runPricingPass", () => {
     expect(await pricedVolumeRows()).toEqual([{ day: AGGREGATE_DAY, volume_usd_priced: "0", tx_count: 0 }]);
   });
 
-  it("counts an activity's priced volume once even if a lease expiry re-runs the pass over it", async () => {
+  it("adds no priced volume when another replica won the row while this pass was at the feed", async () => {
+    const activityId = await seedPricingActivity({ publicId: "cas-gate" });
+    const winRowElsewhere: PriceFeed = {
+      historical: async (queries) => {
+        await pool.query(
+          "UPDATE activities SET pricing_state = 'server_priced', usd_in_priced = 2500, priced_at = now() WHERE id = $1",
+          [activityId.toString()],
+        );
+        return new Map(queries.map((query) => [query.coinKey, wethPoint]));
+      },
+    };
+
+    await runPricingPass(depsWith(winRowElsewhere));
+
+    expect(await pricedVolumeRows()).toEqual([]);
+  });
+
+  it("gives exactly one of two concurrent transactions the pricing CAS for the same claimed row", async () => {
+    const activityId = await seedPricingActivity({ publicId: "cas-race" });
+    const first = await pool.connect();
+    const second = await pool.connect();
+    try {
+      await first.query("BEGIN");
+      await second.query("BEGIN");
+      const [wonFirst, wonSecond] = await Promise.all([
+        markServerPriced(first, activityId, "2500", null),
+        markServerPriced(second, activityId, "2500", null).then(async (won) => {
+          await second.query("COMMIT");
+          return won;
+        }),
+        first.query("COMMIT"),
+      ]);
+      expect([wonFirst, wonSecond].filter(Boolean)).toHaveLength(1);
+    } finally {
+      await first.query("ROLLBACK").catch(() => undefined);
+      await second.query("ROLLBACK").catch(() => undefined);
+      first.release();
+      second.release();
+    }
+  });
+
+  it("rolls the pricing CAS back with the volume increment when the aggregate write fails", async () => {
+    const activityId = await seedPricingActivity({ publicId: "atomic-volume" });
+    const feed = recordingFeed({ [`base:${WETH.toLowerCase()}`]: wethPoint, [`base:${USDC.toLowerCase()}`]: usdcPoint });
+
+    await withRejectedAggregateWrites(async () => {
+      await runPricingPass(depsWith(feed.feed));
+    });
+
+    const state = await pricingStateOf(activityId);
+    expect(state.pricing_state).toBe("pending");
+    expect(state.usd_in_priced).toBeNull();
+    expect(state.priced_at).toBeNull();
+    expect(await pricedVolumeRows()).toEqual([]);
+  });
+
+  it("does not re-claim an activity a previous pass already priced", async () => {
     const activityId = await seedPricingActivity({ publicId: "volume-once" });
     const feed = recordingFeed({ [`base:${WETH.toLowerCase()}`]: wethPoint, [`base:${USDC.toLowerCase()}`]: usdcPoint });
 
@@ -362,14 +492,14 @@ describe("runPricingPass", () => {
     await pool.query("UPDATE activities SET pricing_next_attempt_at = NULL WHERE id = $1", [
       activityId.toString(),
     ]);
-    await runPricingPass(depsWith(feed.feed));
 
+    expect(await runPricingPass(depsWith(feed.feed))).toBe(0);
     expect(await pricedVolumeRows()).toEqual([
       { day: AGGREGATE_DAY, volume_usd_priced: "2500", tx_count: 0 },
     ]);
   });
 
-  it("leaves the priced volume untouched when the pricing write is rolled back", async () => {
+  it("writes no priced volume when the pricing CAS itself throws", async () => {
     await seedPricingActivity({
       publicId: "rollback-volume",
       executedInRaw: "9".repeat(200_000),
@@ -644,7 +774,7 @@ describe("runPricingPass", () => {
 
     const state = await pricingStateOf(activityId);
     expect(state.pricing_attempts).toBe(1);
-    expect(state.pricing_next_attempt_at!.getTime() - before).toBeLessThan(10 * 60_000);
+    expect(state.pricing_next_attempt_at!.getTime() - before).toBeLessThan(2 * 60_000);
   });
 
   it("refetches a cached miss once the retry window has passed", async () => {

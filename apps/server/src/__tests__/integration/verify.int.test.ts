@@ -393,6 +393,35 @@ describe("verification worker", () => {
     });
   });
 
+  it("books the aggregate day in UTC even when the session runs on a non-whole-hour timezone", async () => {
+    const agent = "e".repeat(64);
+    await seedAgent(agent);
+    const lateUtcEvening = new Date("2026-07-24T23:50:00.000Z");
+    const activityId = await seedQueuedActivity({
+      agentHash: agent,
+      protocol: "p-kathmandu",
+      usdInEst: "15",
+      clientConfirmedAt: lateUtcEvening,
+    });
+    const client = await db.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SET LOCAL TIME ZONE 'Asia/Kathmandu'");
+      await finalizeVerification(client, activityId, { result: "verified_full", blockTimestamp: lateUtcEvening }, config);
+      await client.query("COMMIT");
+    } finally {
+      await client.query("ROLLBACK").catch(() => undefined);
+      client.release();
+    }
+
+    expect(await aggregateOf("p-kathmandu")).toEqual({
+      day: "2026-07-24",
+      kind: "swap",
+      volume_usd: "15",
+      tx_count: 1,
+    });
+  });
+
   it("gives two concurrent claims disjoint job sets", async () => {
     await db.pool.query("DELETE FROM verification_jobs");
     const agent = "9".repeat(64);

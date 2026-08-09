@@ -257,6 +257,28 @@ the Stage 4a design (§8). Low coverage at that point is a launch decision —
 add a second price feed, or narrow which chains are published — not something
 to discover from users after the fact.
 
+### A one-off block of `unpriced` right after migration 0011
+
+Migration 0011 takes activities that were already verified before it ran, and
+that carry neither `client_confirmed_at` nor a recoverable block timestamp,
+straight to terminal `unpriced`. Their `volume_usd` already sits on the block
+day, and the pricing lane could only key `volume_usd_priced` on the verification
+day — two days for one activity, permanently, since `daily_aggregates` are never
+recomputed. A disclosed missing figure is the lane's posture everywhere else; a
+wrong per-day figure is not. Count what was abandoned on any deploy target:
+
+```sql
+SELECT count(*) FROM activities
+WHERE pricing_state = 'unpriced' AND client_confirmed_at IS NULL AND block_time IS NULL
+  AND verification_state IN ('verified_full','verified_basic');
+```
+
+Expect zero on an empty production database. A non-zero count on staging or a
+local dataset is the migration working as intended, not a feed problem — it does
+not indicate a broken feed key, and it must **not** be requeued by the procedure
+below, because the block timestamp those rows needed is unrecoverable. Every row
+verified from 0011 onward carries `block_time`, so the count never grows.
+
 ### Recovering from a wrong feed key
 
 `pricing_state = 'unpriced'` is terminal and nothing in the lane requeues it.
@@ -274,14 +296,17 @@ corrected key is deployed:
 DELETE FROM token_prices
 WHERE price_usd IS NULL AND chain_family = 'eip155' AND chain_id = 8453;
 
--- 2. requeue the activities that failed against the wrong key. The leg
---    predicate matters: without it this also resurrects legless rows that were
---    correctly terminal, and they would burn the whole retry budget again.
+-- 2. requeue the activities that failed against the wrong key. Both extra
+--    predicates matter. Without the leg predicate this resurrects legless rows
+--    that were correctly terminal, and they burn the whole retry budget again.
+--    Without the anchor predicate it resurrects the rows migration 0011
+--    abandoned, which would then book their volume on the wrong day.
 UPDATE activities
 SET pricing_state = 'pending', pricing_attempts = 0, pricing_next_attempt_at = NULL
 WHERE pricing_state = 'unpriced'
   AND chain_family = 'eip155' AND chain_id = 8453
-  AND (executed_in_raw IS NOT NULL OR executed_out_raw IS NOT NULL);
+  AND (executed_in_raw IS NOT NULL OR executed_out_raw IS NOT NULL)
+  AND (client_confirmed_at IS NOT NULL OR block_time IS NOT NULL);
 ```
 
 Substitute the affected `chain_family` / `chain_id`. Requeued rows re-enter the

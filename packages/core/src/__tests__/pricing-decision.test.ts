@@ -124,9 +124,12 @@ describe("decidePricingOutcome", () => {
     });
   });
 
-  it("keeps the transient ladder when one blocked leg has no known wake-up time", () => {
+  it("waits for the known wake-up time even when the other blocked leg has none", () => {
     const later = new Date(now.getTime() + 7_200_000);
     expect(outcomeFor(blocked, blockedUntil(later), 0)).toEqual({ kind: "reschedule", delayMs: 7_200_000 });
+  });
+
+  it("keeps the transient ladder when no blocked leg has a known wake-up time", () => {
     expect(outcomeFor(blocked, blocked, 0)).toEqual({ kind: "reschedule", delayMs: 60_000 });
   });
 

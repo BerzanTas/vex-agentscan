@@ -1,7 +1,7 @@
 import type pg from "pg";
 import { isLaunchShaped, type Verdict, type VerificationKind } from "@agentscan/core";
 import type { Config } from "../config.js";
-import { ACTIVITY_AGGREGATE_DAY_SQL } from "./activity-time-anchor.js";
+import { activityAggregateDaySql } from "./activity-time-anchor.js";
 
 export type SqlExecutor = Pick<pg.PoolClient, "query">;
 
@@ -133,7 +133,7 @@ export async function finalizeVerification(
     `UPDATE activities SET verification_state = $2, verified_at = now(), block_time = $3::timestamptz
      WHERE id = $1 AND verification_state = 'queued'
      RETURNING agent_hash, protocol, kind, event_role, usd_in_est,
-               ${ACTIVITY_AGGREGATE_DAY_SQL}::text AS aggregate_day`,
+               ${activityAggregateDaySql("activities")}::text AS aggregate_day`,
     [activityId.toString(), state, blockTimeOf(verdict)],
   );
   const activity = finalized.rows[0];
