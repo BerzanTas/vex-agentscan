@@ -64,6 +64,26 @@ export {
   type AttestationChainEntry,
   type AttestationChainRegistry,
 } from "./chain-registry/attestation-chain-registry.js";
+export type {
+  AgentActivity,
+  AgentActivityLeg,
+  PricingState,
+} from "./agent-metrics/agent-activity.js";
+export {
+  capitalDeployed,
+  type CapitalDeployed,
+  type DailyDeployed,
+} from "./agent-metrics/capital-deployed.js";
+export { realizedResult, winRate, type RealizedResult } from "./agent-metrics/realized-result.js";
+export {
+  chainBreakdown,
+  protocolBreakdown,
+  type ChainVolume,
+  type ProtocolVolume,
+} from "./agent-metrics/breakdowns.js";
+export { activitiesPerDay30d } from "./agent-metrics/activity-cadence.js";
+export { unpriced30dSharePct, unpricedSharePct } from "./agent-metrics/unpriced-share.js";
+export { publishedUsd } from "./agent-metrics/published-usd.js";
 export {
   attestationSignalsFor,
   bestAttestationCandidate,
