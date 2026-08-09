@@ -6,12 +6,14 @@ import { ChainBadge } from "../../../components/ChainBadge";
 import { TierBadge } from "../../../components/NetworksTable";
 import { PageHeading } from "../../../components/PageHeading";
 import { PanelHeading } from "../../../components/PanelHeading";
+import { PricingCoverageNote } from "../../../components/PricingCoverageNote";
 import { ProtocolRanking } from "../../../components/ProtocolRanking";
 import { RangeChips } from "../../../components/RangeChips";
 import { RoutesList } from "../../../components/RoutesList";
 import { Sparkline } from "../../../components/Sparkline";
 import {
   fetchNetworkDetail,
+  fetchPricingCoverage,
   type NetworkTokenStatDto,
 } from "../../../lib/api";
 import { formatUsdCompact, formatUsdAmount } from "../../../lib/format";
@@ -88,7 +90,10 @@ export async function generateMetadata({
 export default async function NetworkDetailPage({ params, searchParams }: NetworkDetailPageProps) {
   const { slug } = await params;
   const range = parseChartRange((await searchParams).range);
-  const detail = await fetchNetworkDetail(slug, range);
+  const [detail, coverage] = await Promise.all([
+    fetchNetworkDetail(slug, range),
+    fetchPricingCoverage(range),
+  ]);
   if (detail === null) notFound();
 
   return (
@@ -144,6 +149,7 @@ export default async function NetworkDetailPage({ params, searchParams }: Networ
           emptyMessage="No bridge legs touching this network in this window"
         />
       </section>
+      <PricingCoverageNote coverage={coverage} />
     </div>
   );
 }

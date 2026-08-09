@@ -5,11 +5,13 @@ import { notFound } from "next/navigation";
 import { ChainBadge } from "../../../../components/ChainBadge";
 import { PageHeading } from "../../../../components/PageHeading";
 import { PanelHeading } from "../../../../components/PanelHeading";
+import { PricingCoverageNote } from "../../../../components/PricingCoverageNote";
 import { ProtocolRanking } from "../../../../components/ProtocolRanking";
 import { RangeChips } from "../../../../components/RangeChips";
 import { Sparkline } from "../../../../components/Sparkline";
 import { shortenAddress } from "../../../../components/TokensTable";
 import {
+  fetchPricingCoverage,
   fetchTokenDetail,
   type TokenDetailDto,
   type TokenPairStatDto,
@@ -48,7 +50,10 @@ export async function generateMetadata({ params, searchParams }: TokenPageProps)
 export default async function TokenDetailPage({ params, searchParams }: TokenPageProps) {
   const { chainSlug, address } = await params;
   const range = parseChartRange((await searchParams).range);
-  const detail = await fetchTokenDetail(chainSlug, address, range);
+  const [detail, coverage] = await Promise.all([
+    fetchTokenDetail(chainSlug, address, range),
+    fetchPricingCoverage(range),
+  ]);
   if (detail === null) notFound();
 
   const windowLabel = range.toUpperCase();
@@ -132,6 +137,7 @@ export default async function TokenDetailPage({ params, searchParams }: TokenPag
         Volumes are observed in Vex agent activity, not market volume. A swap counts on both of its
         tokens.
       </p>
+      <PricingCoverageNote coverage={coverage} />
     </div>
   );
 }

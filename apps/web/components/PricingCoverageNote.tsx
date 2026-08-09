@@ -53,8 +53,8 @@ export function PricingCoverageNote({ coverage }: { coverage: PricingCoverageDto
   if (measuredActivityCount(coverage) === 0) {
     return (
       <p className={NOTE_CLASS}>
-        USD figures are priced by AgentScan from the swaps and bridge deposits it holds. It holds none
-        for this window, so there is no coverage to report here.
+        USD figures are priced by AgentScan from the swaps and bridge deposits it holds. None remain on
+        record for this window, so the coverage of any figure shown here cannot be measured.
       </p>
     );
   }

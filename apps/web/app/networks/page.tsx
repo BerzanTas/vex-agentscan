@@ -39,12 +39,12 @@ export default async function NetworksPage({ searchParams }: NetworksPageProps) 
           actions={<RangeChips current={range} label="Network activity range" />}
         />
         <NetworksTable networks={networks} />
-        <PricingCoverageNote coverage={coverage} />
       </section>
       <section className="section-enter glass p-4">
         <PanelHeading title="Bridge routes" meta={range} />
         <RoutesList routes={routes} emptyMessage="No bridge legs observed in this window" />
       </section>
+      <PricingCoverageNote coverage={coverage} />
     </div>
   );
 }

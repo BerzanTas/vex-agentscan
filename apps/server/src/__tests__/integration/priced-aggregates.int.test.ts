@@ -525,6 +525,18 @@ describe("windows where the coverage note must not claim the window was empty", 
       pricedCoverage: 0,
     });
   });
+
+  it("still publishes the purged agent's volume on every aggregate the note sits beside", async () => {
+    await seedWindow(db.pool, [pricedSwap]);
+    await db.pool.query("DELETE FROM activities WHERE agent_hash = $1", [agentHash]);
+
+    const protocols = await getJson<ProtocolStatDto[]>("/api/protocols");
+    const daily = await getJson<ChartPointDto[]>("/api/chart?range=30d");
+
+    expect(protocols).toEqual([{ protocol: "kyberswap", volumeUsd: "100.00", txCount: 1 }]);
+    expect(totalVolumeOf(daily)).toBe(100);
+    expect(await coverageOf()).toMatchObject({ pricedCoverage: 0 });
+  });
 });
 
 describe("a swap the lane priced on one leg only", () => {
