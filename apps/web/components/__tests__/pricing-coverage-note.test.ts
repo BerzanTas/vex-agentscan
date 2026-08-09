@@ -45,6 +45,31 @@ describe("PricingCoverageNote", () => {
     expect(markup).toContain("0 activities are left out");
   });
 
+  it("says one activity in the singular", () => {
+    const markup = markupOf({
+      pricedActivityCount: 4,
+      unpricedActivityCount: 1,
+      pendingActivityCount: 0,
+      pricedCoverage: 0.8,
+    });
+
+    expect(markup).toContain("1 activity is left out");
+    expect(markup).not.toContain("1 activities");
+  });
+
+  it("says there is no verified activity rather than nothing priced on an empty window", () => {
+    const markup = markupOf({
+      pricedActivityCount: 0,
+      unpricedActivityCount: 0,
+      pendingActivityCount: 0,
+      pricedCoverage: 0,
+    });
+
+    expect(markup).toContain("No verified activity in this window yet.");
+    expect(markup).not.toContain("0.0%");
+    expect(markup).not.toContain("left out");
+  });
+
   it("renders zero coverage on a window where nothing is priced yet", () => {
     const markup = markupOf({
       pricedActivityCount: 0,
