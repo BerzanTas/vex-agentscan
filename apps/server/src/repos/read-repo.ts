@@ -1,7 +1,13 @@
 import type pg from "pg";
 import type { ChainFamily, ChartRangePlan } from "@agentscan/core";
 import { activityTimeAnchorSql } from "./activity-time-anchor.js";
-import { serverPricedUsdInSum, serverPricedUsdInSumOf } from "./server-priced-usd.js";
+import {
+  awaitingAPrice,
+  contributesNoUsd,
+  contributesUsd,
+  serverPricedUsdInSum,
+  serverPricedUsdInSumOf,
+} from "./server-priced-usd.js";
 
 export type ActivityDbRow = {
   id: bigint;
@@ -525,10 +531,8 @@ export type PricingCoverageRead = {
   pendingActivityCount: number;
 };
 
-type PricingState = "server_priced" | "unpriced" | "pending";
-
-function pricingStateCount(state: PricingState): string {
-  return `COUNT(*) FILTER (WHERE a.pricing_state = '${state}')::int`;
+function activityCountWhere(predicate: string): string {
+  return `COUNT(*) FILTER (WHERE ${predicate})::int`;
 }
 
 export async function pricingCoverage(
@@ -540,9 +544,9 @@ export async function pricingCoverage(
     unpriced_activity_count: number;
     pending_activity_count: number;
   }>(
-    `SELECT ${pricingStateCount("server_priced")} AS priced_activity_count,
-            ${pricingStateCount("unpriced")} AS unpriced_activity_count,
-            ${pricingStateCount("pending")} AS pending_activity_count
+    `SELECT ${activityCountWhere(contributesUsd("a"))} AS priced_activity_count,
+            ${activityCountWhere(contributesNoUsd("a"))} AS unpriced_activity_count,
+            ${activityCountWhere(awaitingAPrice("a"))} AS pending_activity_count
      FROM activities a
      WHERE ${VERIFIED_STATES_PREDICATE}
        AND ${VOLUME_LEG_PREDICATE}

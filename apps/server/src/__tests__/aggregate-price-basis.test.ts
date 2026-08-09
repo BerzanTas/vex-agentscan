@@ -162,6 +162,9 @@ describe(PRICED_COLUMN_OWNER, () => {
   });
 
   it("reads both priced columns", () => {
-    expect(linesMatching(PRICED_COLUMN_OWNER, SERVER_PRICED_COLUMN)).toHaveLength(2);
+    const priced = linesMatching(PRICED_COLUMN_OWNER, SERVER_PRICED_COLUMN).join("\n");
+
+    expect(priced).toContain("usd_in_priced");
+    expect(priced).toContain("usd_out_priced");
   });
 });
