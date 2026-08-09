@@ -57,6 +57,7 @@ export function AgentPageView({ agent }: { agent: AgentPageDto }) {
       <AgentPageDisclosure
         unpricedSharePct={agent.unpricedSharePct}
         unpriced30dSharePct={agent.unpriced30dSharePct}
+        awaitingAPriceCount={agent.awaitingAPriceCount}
         truncated={agent.truncated}
       />
     </div>

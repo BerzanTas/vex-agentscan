@@ -44,6 +44,7 @@ export type AgentPageDto = {
   lastSeenSeconds: number;
   unpricedSharePct: number;
   unpriced30dSharePct: number;
+  awaitingAPriceCount: number;
   truncated: boolean;
 };
 
