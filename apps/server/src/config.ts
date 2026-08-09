@@ -46,6 +46,7 @@ const envSchema = z.object({
     .transform((value) => value === "true"),
   PUBLIC_FEED_PAGE_SIZE: z.coerce.number().int().default(25),
   PUBLIC_TOKEN_ROWS_MAX: z.coerce.number().int().min(1).default(100),
+  PUBLIC_AGENT_ROWS_MAX: z.coerce.number().int().min(1).default(5000),
   PUBLIC_PANEL_ROWS: z.coerce.number().int().min(1).default(10),
   READ_CACHE_TTL_SEC: z.coerce.number().int().min(0).default(5),
   AGENT_ALIAS_SALT: z.string().min(1).default(DEFAULT_AGENT_ALIAS_SALT),
@@ -65,6 +66,17 @@ const envSchema = z.object({
   HANDSHAKE_DOMAIN: z.string().min(1).regex(/^[a-z0-9.:-]+$/i).default(DEFAULT_HANDSHAKE_DOMAIN),
   HANDSHAKE_CHALLENGE_TTL_MIN: z.coerce.number().int().min(1).default(5),
   WALLET_HMAC_PEPPER: z.string().min(32).default(DEFAULT_WALLET_HMAC_PEPPER),
+  PRICE_FEED_BASE_URL: z.string().url().default("https://coins.llama.fi"),
+  PRICE_MIN_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.9),
+  PRICE_MAX_DRIFT_SEC: z.coerce.number().int().min(1).default(3600),
+  PRICE_MISS_RETRY_HOURS: z.coerce.number().int().min(1).default(24),
+  PRICE_FEED_COINS_PER_REQUEST: z.coerce.number().int().min(1).default(50),
+  PRICE_DIVERGENCE_WARN_RATIO: z.coerce.number().min(1).default(5),
+  PRICING_BATCH_MAX: z.coerce.number().int().min(1).default(50),
+  PRICING_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(5),
+  PRICING_POLL_INTERVAL_SEC: z.coerce.number().int().min(1).default(30),
+  PRICING_BACKOFF_SCHEDULE: z.string().default("1m,5m,30m,2h,12h").transform(commaSeparated),
+  WIN_RATE_MIN_ROUND_TRIPS: z.coerce.number().int().min(1).default(5),
 });
 
 export type Config = z.infer<typeof envSchema> & {
