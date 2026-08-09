@@ -129,8 +129,8 @@ export default async function TokenDetailPage({ params, searchParams }: TokenPag
         </section>
       </div>
       <p className="section-enter max-w-3xl text-xs text-text-muted">
-        Volumes are estimates observed in Vex agent activity, not market volume. A swap counts on
-        both of its tokens.
+        Volumes are observed in Vex agent activity, not market volume. A swap counts on both of its
+        tokens.
       </p>
     </div>
   );
