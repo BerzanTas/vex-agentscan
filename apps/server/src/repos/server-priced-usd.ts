@@ -17,12 +17,12 @@ export function serverPricedUsdInSumOf(alias: string, rowPredicate: string): str
 }
 
 export function contributesUsd(alias: string): string {
-  return `(${alias}.pricing_state = '${SERVER_PRICED}' AND ${alias}.usd_in_priced IS NOT NULL)`;
+  return `(${alias}.pricing_state = '${SERVER_PRICED}' AND ${alias}.usd_in_priced IS NOT NULL AND (${alias}.token_out_address IS NULL OR ${alias}.usd_out_priced IS NOT NULL))`;
 }
 
 export function contributesNoUsd(alias: string): string {
-  const pricedWithoutValue = `${alias}.pricing_state = '${SERVER_PRICED}' AND ${alias}.usd_in_priced IS NULL`;
-  return `(${alias}.pricing_state = 'unpriced' OR (${pricedWithoutValue}))`;
+  const settled = `${alias}.pricing_state = '${SERVER_PRICED}'`;
+  return `(${alias}.pricing_state = 'unpriced' OR (${settled} AND NOT ${contributesUsd(alias)}))`;
 }
 
 export function awaitingAPrice(alias: string): string {
