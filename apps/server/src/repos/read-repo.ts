@@ -573,6 +573,7 @@ export async function pricingCoverage(
             ${pricingStateCount("pending")} AS pending_activity_count
      FROM activities a
      WHERE ${VERIFIED_STATES_PREDICATE}
+       AND ${VOLUME_LEG_PREDICATE}
        AND ${windowPredicate(1)}`,
     [windowSeconds],
   );

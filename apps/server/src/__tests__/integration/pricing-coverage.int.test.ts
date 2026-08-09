@@ -14,6 +14,8 @@ type ActivitySeed = {
   pricingState: "server_priced" | "unpriced" | "pending";
   verificationState: string;
   confirmedHoursAgo: number;
+  kind?: "swap" | "bridge" | "launch";
+  eventRole?: "swap" | "bridge_deposit" | "bridge_fill_observed" | "token_launch";
 };
 
 async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
@@ -23,12 +25,20 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
         protocol, chain_family, chain_id, usd_in_priced, pricing_state, tx_hash,
         client_created_at, client_confirmed_at, statuses_seen, verification_state, verified_at,
         received_at, received_schema_version)
-     VALUES ($1, $2, $2, $2, 0, 'swap', 'swap', 'confirmed',
+     VALUES ($1, $2, $2, $2, 0, $6, $7, 'confirmed',
              'kyberswap', 'eip155', 8453,
              CASE WHEN $3 = 'server_priced' THEN 1.00 END, $3, '0x' || $2,
              now() - make_interval(hours => $4::int), now() - make_interval(hours => $4::int),
              ARRAY['confirmed'], $5, now(), now(), 1)`,
-    [agentHash, seed.sourceRowId, seed.pricingState, seed.confirmedHoursAgo, seed.verificationState],
+    [
+      agentHash,
+      seed.sourceRowId,
+      seed.pricingState,
+      seed.confirmedHoursAgo,
+      seed.verificationState,
+      seed.kind ?? "swap",
+      seed.eventRole ?? "swap",
+    ],
   );
 }
 
@@ -133,6 +143,20 @@ describe("GET /api/pricing-coverage", () => {
     await seedActivity(db.pool, { sourceRowId: "cov-verified", pricingState: "server_priced", verificationState: "verified_full", confirmedHoursAgo: INSIDE_THE_DAY });
     await seedActivity(db.pool, { sourceRowId: "cov-unverified", pricingState: "pending", verificationState: "none", confirmedHoursAgo: INSIDE_THE_DAY });
     await seedActivity(db.pool, { sourceRowId: "cov-mismatch", pricingState: "pending", verificationState: "mismatch", confirmedHoursAgo: INSIDE_THE_DAY });
+
+    expect(await coverageFor("24h")).toEqual({
+      pricedActivityCount: 1,
+      unpricedActivityCount: 0,
+      pendingActivityCount: 0,
+      pricedCoverage: 1,
+    });
+  });
+
+  it("measures only the legs the usd figures sum, not every verified row", async () => {
+    await resetActivities();
+    await seedActivity(db.pool, { sourceRowId: "cov-volume-leg", pricingState: "server_priced", verificationState: "verified_full", confirmedHoursAgo: INSIDE_THE_DAY });
+    await seedActivity(db.pool, { sourceRowId: "cov-fill-leg", pricingState: "unpriced", verificationState: "verified_full", confirmedHoursAgo: INSIDE_THE_DAY, kind: "bridge", eventRole: "bridge_fill_observed" });
+    await seedActivity(db.pool, { sourceRowId: "cov-launch", pricingState: "unpriced", verificationState: "verified_full", confirmedHoursAgo: INSIDE_THE_DAY, kind: "launch", eventRole: "token_launch" });
 
     expect(await coverageFor("24h")).toEqual({
       pricedActivityCount: 1,
