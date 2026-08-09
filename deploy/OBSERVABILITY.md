@@ -149,3 +149,262 @@ to the strict path) at `/healthz?strict=1` on an interval shorter than
 `WORKER_HEARTBEAT_MAX_AGE_SEC` to actually catch this.
 
 **Alert condition.** Any non-200 from `GET /healthz?strict=1`.
+
+## 4. Pricing coverage — the number read before the explorer goes public
+
+**What it means.** Every USD figure the explorer publishes is computed by the
+pricing lane (`apps/server/src/worker/pricing-loop.ts`, `runPricingPass`, one
+call per `PRICING_POLL_INTERVAL_SEC` tick); client-supplied `usd*Est` values
+are never summed into a public figure. Each pass that claimed at least one
+activity logs one `"pricing coverage"` line at info level:
+
+```json
+{
+  "processed": 50,
+  "serverPriced": 46,
+  "unpriceable": 1,
+  "nothingToPrice": 0,
+  "rescheduled": 3,
+  "byChainProtocol": [
+    { "chainSlug": "base", "chainFamily": "eip155", "chainId": "8453",
+      "protocol": "kyberswap", "serverPriced": 40, "unpriceable": 0,
+      "nothingToPrice": 0 }
+  ]
+}
+```
+
+- `serverPriced` — activities that reached `pricing_state = 'server_priced'`
+  in this pass: every present leg was priced from a gate-accepted feed point.
+- `unpriceable` — activities that reached the **terminal** `pricing_state =
+  'unpriced'` **because pricing failed**: `PRICING_MAX_ATTEMPTS` exhausted, or
+  a leg whose chain or token address has no coin key at all. This is the only
+  terminal counter that belongs in the coverage ratio.
+- `nothingToPrice` — activities that reached the same terminal
+  `pricing_state = 'unpriced'` because there was **nothing to price**. Two
+  sources: no leg carried an amount, a token address and decimals (a `launch`
+  event is the ordinary case), or the activity carries no settlement time at
+  all — neither `client_confirmed_at` nor `block_time` — so the only instant
+  left is our own `verified_at`, which is when we noticed rather than when the
+  market moved. Both are **excluded from the ratio on purpose**: counting them
+  as failures would depress the launch-gate number permanently with zero feed
+  involvement. The second source is normally zero and has its own warning line
+  (below).
+- `rescheduled` — still `pending`, backed off, and not yet on any side of
+  the ratio.
+- `byChainProtocol` — the same three counters split per `(chain, protocol)`,
+  sorted deterministically. This is where a single broken feed key shows up
+  while the global number still looks healthy.
+
+All terminal outcomes land in `pricing_state = 'unpriced'` in the database, so
+the column alone cannot tell a feed failure from a legless row from a row with
+no settlement time. The per-pass counters can, which is why the ratio is read
+from them. Anything deriving coverage from the column instead must discriminate
+with `client_confirmed_at IS NULL AND block_time IS NULL` (no settlement time)
+and the `executed_*_raw` leg predicate (nothing to price), or it will report
+both as a broken feed key.
+
+**`"pricing activity has no settlement time…"` — warn level, expected to be
+silent.** The lane refuses to price an activity whose only timestamp is our own
+`verified_at`: its `volume_usd` was booked on the settlement day by the verify
+path, so pricing it on the verification day would split one activity across two
+days permanently, and `daily_aggregates` are never recomputed. A disclosed
+missing figure is the lane's posture everywhere else. The line carries
+`activityId`, `chainSlug`, `protocol` and `verifiedDay`.
+
+The one situation that produces a burst of these is a release that lands
+migration `0011` before the new `worker` revision: `deploy/release.sh` runs the
+migration job first and then rolls the revisions, so for a minute or two the
+**old** worker verifies against the **new** schema and stamps no `block_time`.
+Those rows are terminated by the lane on sight rather than dated wrongly, and
+this warning is how you see it happened. A steady trickle **after** the new
+revision is ready is a different matter and means a reporting client is omitting
+`confirmedAt` on rows whose verification also failed to record a block time —
+worth investigating, but still never a wrong number.
+
+**Log query.**
+
+```kusto
+ContainerAppConsoleLogs_CL
+| where ContainerAppName_s == "worker"
+| where Log_s has "pricing coverage"
+| extend parsed = parse_json(Log_s)
+| project TimeGenerated,
+          processed = toint(parsed.processed),
+          serverPriced = toint(parsed.serverPriced),
+          unpriceable = toint(parsed.unpriceable),
+          nothingToPrice = toint(parsed.nothingToPrice),
+          rescheduled = toint(parsed.rescheduled)
+| extend coverage = todouble(serverPriced) / todouble(serverPriced + unpriceable)
+| order by TimeGenerated desc
+```
+
+Per chain and protocol:
+
+```kusto
+ContainerAppConsoleLogs_CL
+| where ContainerAppName_s == "worker"
+| where Log_s has "pricing coverage"
+| extend parsed = parse_json(Log_s)
+| mv-expand slice = parsed.byChainProtocol
+| summarize serverPriced = sum(toint(slice.serverPriced)),
+            unpriceable = sum(toint(slice.unpriceable)),
+            nothingToPrice = sum(toint(slice.nothingToPrice))
+          by chainSlug = tostring(slice.chainSlug), protocol = tostring(slice.protocol),
+             bin(TimeGenerated, 1h)
+| extend coverage = todouble(serverPriced) / todouble(serverPriced + unpriceable)
+| order by TimeGenerated desc
+```
+
+**What a sustained coverage drop means.** `serverPriced / (serverPriced +
+unpriceable)` falling and staying down is not a load problem — the lane retries
+on its own backoff and a transient feed outage shows up as `rescheduled`, not
+as `unpriceable`. A sustained drop means one of:
+
+- **A feed key broke.** A chain's `priceFeedKey`
+  (`packages/core/src/chain-registry/chains.ts`) no longer matches what the
+  upstream feed calls that chain, so every token on it resolves to a coin key
+  the feed does not know. Signature: one `chainSlug` at ~0 coverage while the
+  others are unchanged.
+- **A chain lost support.** The feed stopped indexing that chain, or the
+  agents moved onto a chain the registry lists without a `priceFeedKey` at
+  all. Same signature; the difference is upstream, not in our registry.
+- **A token is illiquid.** The feed answers, but below `PRICE_MIN_CONFIDENCE`
+  or further than `PRICE_MAX_DRIFT_SEC` from the activity's own timestamp.
+  Signature: coverage drops for one protocol on an otherwise healthy chain.
+  This is the gate working — the feed's nearest point for an illiquid token
+  can be days away, and publishing it would be a wrong number, not a stale one.
+
+**Alert condition.** Coverage below 0.9 over a 6 hour window, evaluated per
+chain as well as globally — a single chain at zero is invisible in the global
+ratio until it is most of the volume.
+
+**Launch gate.** This number is read **before the explorer goes public**, per
+the Stage 4a design (§8). Low coverage at that point is a launch decision —
+add a second price feed, or narrow which chains are published — not something
+to discover from users after the fact.
+
+### A one-off block of `unpriced` right after migration 0011
+
+Migration 0011 takes activities that were already verified before it ran, and
+that carry neither `client_confirmed_at` nor a recoverable block timestamp,
+straight to terminal `unpriced`. Their `volume_usd` already sits on the block
+day, and the pricing lane could only key `volume_usd_priced` on the verification
+day — two days for one activity, permanently, since `daily_aggregates` are never
+recomputed. A disclosed missing figure is the lane's posture everywhere else; a
+wrong per-day figure is not. Count what was abandoned on any deploy target:
+
+```sql
+SELECT count(*) FROM activities
+WHERE pricing_state = 'unpriced' AND client_confirmed_at IS NULL AND block_time IS NULL
+  AND verification_state IN ('verified_full','verified_basic');
+```
+
+Expect zero on an empty production database. A non-zero count on staging or a
+local dataset is the migration working as intended, not a feed problem — it does
+not indicate a broken feed key, and it must **not** be requeued by the procedure
+below, because the block timestamp those rows needed is unrecoverable.
+
+**The migration is a cleanup, not the guarantee.** `deploy/release.sh` runs the
+migration job before it rolls the revisions, so the previous `worker` keeps
+verifying against the already-migrated schema for as long as the rollout takes,
+and rows finalised in that window get no `block_time` either. The migration has
+already run by then and cannot catch them. What holds the invariant is the lane
+itself: a claimed activity with neither `client_confirmed_at` nor `block_time`
+is terminated on sight and logs `"pricing activity has no settlement time…"`
+(§4 above), whenever and by whatever code it was written. So this count can grow
+after a release, and that is expected and safe — read the warning line, not this
+query, to see it happen.
+
+### Recovering from a wrong feed key
+
+`pricing_state = 'unpriced'` is terminal and nothing in the lane requeues it.
+A chain's `priceFeedKey` was taken from the price feed's documentation rather
+than a live call, so "the key was wrong all along" is a realistic first-staging
+outcome — and by the time you read the coverage number, the affected activities
+are already terminal and `token_prices` holds negative-cache rows that suppress
+refetching for `PRICE_MISS_RETRY_HOURS`. Deploying the corrected key repairs
+future rows only. Recover the existing ones by hand, in this order, after the
+corrected key is deployed:
+
+```sql
+-- 1. drop the poisoned negative-cache rows for the affected chain, so the lane
+--    may ask upstream again before PRICE_MISS_RETRY_HOURS elapses
+DELETE FROM token_prices
+WHERE price_usd IS NULL AND chain_family = 'eip155' AND chain_id = 8453;
+
+-- 2. requeue the activities that failed against the wrong key. Both extra
+--    predicates matter. Without the leg predicate this resurrects legless rows
+--    that were correctly terminal, and they burn the whole retry budget again.
+--    Without the anchor predicate it resurrects the rows migration 0011
+--    abandoned, which would then book their volume on the wrong day.
+UPDATE activities
+SET pricing_state = 'pending', pricing_attempts = 0, pricing_next_attempt_at = NULL
+WHERE pricing_state = 'unpriced'
+  AND chain_family = 'eip155' AND chain_id = 8453
+  AND (executed_in_raw IS NOT NULL OR executed_out_raw IS NOT NULL)
+  AND (client_confirmed_at IS NOT NULL OR block_time IS NOT NULL);
+```
+
+Substitute the affected `chain_family` / `chain_id`. Requeued rows re-enter the
+lane at `PRICING_BATCH_MAX` per poll, and the next `"pricing coverage"` line
+shows whether the new key worked. `daily_aggregates.volume_usd_priced` is
+incremented only when the pricing CAS wins, and a requeued row's CAS runs again
+from `pending`, so a successful second pass adds that row's volume exactly once.
+
+## 5. Pricing divergence — server price vs client estimate
+
+**What it means.** The reporting client keeps sending `usdInEst` / `usdOutEst`
+over the ingest contract. They are no longer a publication source; they are a
+second, independent measurement. When the lane prices a leg it compares the two
+and, on a ratio outside `PRICE_DIVERGENCE_WARN_RATIO` in either direction,
+emits one `"pricing divergence"` line at warn level:
+
+```json
+{
+  "activityId": "1234",
+  "chainSlug": "base",
+  "chainFamily": "eip155",
+  "chainId": "8453",
+  "protocol": "kyberswap",
+  "leg": "in",
+  "tokenAddress": "0x4200000000000000000000000000000000000006",
+  "pricedUsd": "2500",
+  "estimateUsd": "100",
+  "ratio": 25
+}
+```
+
+The comparison is skipped when the client estimate is null or zero — there is
+nothing to disagree with. **The warning never suppresses or alters the price
+that is written:** a false positive blanking a legitimate number is worse than
+publishing a flagged one an operator can review.
+
+**Log query.**
+
+```kusto
+ContainerAppConsoleLogs_CL
+| where ContainerAppName_s == "worker"
+| where Log_s has "pricing divergence"
+| extend parsed = parse_json(Log_s)
+| project TimeGenerated,
+          chainSlug = tostring(parsed.chainSlug),
+          protocol = tostring(parsed.protocol),
+          tokenAddress = tostring(parsed.tokenAddress),
+          leg = tostring(parsed.leg),
+          pricedUsd = tostring(parsed.pricedUsd),
+          estimateUsd = tostring(parsed.estimateUsd),
+          ratio = todouble(parsed.ratio)
+| order by TimeGenerated desc
+```
+
+**Alert condition.** More than 5 divergences on the same `tokenAddress` within
+an hour. One-off divergences are expected (a client estimate taken from a quote
+rather than the settled trade); the same token disagreeing repeatedly points at
+a wrong coin key or a decimals mismatch, and both produce published numbers
+that are wrong rather than missing.
+
+A related third-party signal is `"price feed unavailable for hour bucket"` at
+warn level: the upstream feed rejected a whole batch. Those activities stay
+`pending` and nothing is written to `token_prices`, so a transient outage can
+never be mistaken for a permanent feed miss. Sustained occurrences mean the
+feed, not the data.
