@@ -77,6 +77,22 @@ describe("realizedResult", () => {
     });
   });
 
+  it("treats a zero quantity disposal as nothing to match rather than as unmatched", () => {
+    const zeroSpend = activity({
+      activityId: 1n,
+      observedAtSeconds: 1000,
+      spent: leg(USDC, 6, "0", "0"),
+      received: leg(WETH, 18, oneWeth, "1000"),
+    });
+
+    expect(realizedResult([zeroSpend])).toEqual({
+      realizedUsd: "0",
+      closedRoundTrips: 0,
+      winningRoundTrips: 0,
+      unmatchedDisposals: 0,
+    });
+  });
+
   it("carries unmatched inventory at cost instead of realizing it", () => {
     const buy = activity({
       activityId: 1n,
