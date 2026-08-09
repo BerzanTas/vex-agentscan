@@ -72,7 +72,7 @@ describe("PricingCoverageNote", () => {
     expect(markup).not.toContain("1 swaps");
   });
 
-  it("reports what coverage can see rather than claiming the window had no activity", () => {
+  it("reports what coverage can measure rather than claiming the window holds nothing", () => {
     const markup = markupOf({
       pricedActivityCount: 0,
       unpricedActivityCount: 0,
@@ -80,10 +80,23 @@ describe("PricingCoverageNote", () => {
       pricedCoverage: 0,
     });
 
-    expect(markup).toContain("It holds none for this window, so there is no coverage to report");
+    expect(markup).toContain("None remain on record for this window");
+    expect(markup).toContain("the coverage of any figure shown here cannot be measured");
     expect(markup).not.toContain("no verified activity");
     expect(markup).not.toContain("0.0%");
     expect(markup).not.toContain("left out");
+  });
+
+  it("never denies holding anything while a purged window still publishes its totals", () => {
+    const markup = markupOf({
+      pricedActivityCount: 0,
+      unpricedActivityCount: 0,
+      pendingActivityCount: 0,
+      pricedCoverage: 0,
+    });
+
+    expect(markup).not.toContain("no coverage to report");
+    expect(markup).not.toContain("It holds none");
   });
 
   it("quotes no percentage while the window has finished pricing nothing", () => {
