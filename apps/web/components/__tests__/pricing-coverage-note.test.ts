@@ -93,7 +93,19 @@ describe("PricingCoverageNote", () => {
       pricedCoverage: 0,
     });
 
-    expect(markup).toContain("None of the 5 verified activities in this window has been priced yet");
+    expect(markup).toContain("Nothing in this window is priced yet: 5 activities are still being priced");
     expect(markup).not.toContain("0.0%");
+  });
+
+  it("agrees in number when a single activity is still being priced", () => {
+    const markup = markupOf({
+      pricedActivityCount: 0,
+      unpricedActivityCount: 0,
+      pendingActivityCount: 1,
+      pricedCoverage: 0,
+    });
+
+    expect(markup).toContain("Nothing in this window is priced yet: 1 activity is still being priced");
+    expect(markup).not.toContain("1 activities");
   });
 });

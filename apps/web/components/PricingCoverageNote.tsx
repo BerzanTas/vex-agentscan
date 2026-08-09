@@ -41,18 +41,17 @@ function exclusionSentence(coverage: PricingCoverageDto): string {
   return `${activityPhrase(excludedActivityCount(coverage))} left out of every USD figure (${reasons.join(", ")}), and still counted in transaction counts.`;
 }
 
+function nothingPricedSentence(coverage: PricingCoverageDto): string {
+  return `Nothing in this window is priced yet: ${activityPhrase(coverage.pendingActivityCount)} still being priced, and still counted in transaction counts.`;
+}
+
 export function PricingCoverageNote({ coverage }: { coverage: PricingCoverageDto }) {
   if (measuredActivityCount(coverage) === 0) {
     return <p className={NOTE_CLASS}>No verified activity in this window yet.</p>;
   }
 
   if (finishedPricingCount(coverage) === 0) {
-    return (
-      <p className={NOTE_CLASS}>
-        None of the {coverage.pendingActivityCount} verified activities in this window has been
-        priced yet, so no USD figure covers them; they are still counted in transaction counts.
-      </p>
-    );
+    return <p className={NOTE_CLASS}>{nothingPricedSentence(coverage)}</p>;
   }
 
   return (
