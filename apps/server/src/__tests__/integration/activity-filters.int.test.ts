@@ -389,6 +389,7 @@ describe("GET /api/agents with a range", () => {
     expect(await agents("?range=all")).toEqual([
       {
         alias: aliasOf(agentAlpha),
+        name: null,
         volumeUsd: "245",
         txCount: 4,
         protocolCount: 3,
@@ -397,6 +398,7 @@ describe("GET /api/agents with a range", () => {
       },
       {
         alias: aliasOf(agentBravo),
+        name: null,
         volumeUsd: "10",
         txCount: 1,
         protocolCount: 1,
@@ -416,6 +418,7 @@ describe("GET /api/agents with a range", () => {
     expect(await agents("?range=24h")).toEqual([
       {
         alias: aliasOf(agentAlpha),
+        name: null,
         volumeUsd: "175",
         txCount: 3,
         protocolCount: 2,
