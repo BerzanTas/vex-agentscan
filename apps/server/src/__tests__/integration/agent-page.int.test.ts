@@ -486,6 +486,62 @@ describe("GET /api/agents/:name mixing a fully priced row with a partly priced o
   });
 });
 
+describe("GET /api/agents/:name when a row is still being priced", () => {
+  beforeAll(async () => {
+    await resetData(db.pool);
+    await seedAgent(db.pool, { agentHash: BOUND_AGENT, name: BOUND_NAME });
+    await seedActivity(db.pool, {
+      agentHash: BOUND_AGENT,
+      daysAgo: 1,
+      usdInPriced: "1000",
+      usdOutPriced: "990",
+    });
+    await seedActivity(db.pool, {
+      agentHash: BOUND_AGENT,
+      daysAgo: 1,
+      pricingState: "pending",
+      usdInPriced: null,
+      usdOutPriced: null,
+    });
+  });
+
+  it("counts the pending row apart from a share that stays a verdict about settled rows", async () => {
+    const page = (await agentPage(BOUND_NAME)).json<AgentPageDto>();
+
+    expect(page.awaitingAPriceCount).toBe(1);
+    expect(page.unpricedSharePct).toBe(0);
+    expect(page.unpriced30dSharePct).toBe(0);
+    expect(page.capitalDeployedPeak30dUsd).toBe("1000");
+    expect(page.protocolBreakdown).toEqual([
+      { protocol: "kyberswap", volumeUsd: "1000", txCount: 2 },
+    ]);
+    expect(page.activityCount).toBe(2);
+  });
+});
+
+describe("GET /api/agents/:name when nothing has been priced yet", () => {
+  beforeAll(async () => {
+    await resetData(db.pool);
+    await seedAgent(db.pool, { agentHash: BOUND_AGENT, name: BOUND_NAME });
+    await seedActivity(db.pool, {
+      agentHash: BOUND_AGENT,
+      daysAgo: 1,
+      pricingState: "pending",
+      usdInPriced: null,
+      usdOutPriced: null,
+    });
+  });
+
+  it("reports the whole read set as awaiting a price rather than as a settled zero", async () => {
+    const page = (await agentPage(BOUND_NAME)).json<AgentPageDto>();
+
+    expect(page.awaitingAPriceCount).toBe(1);
+    expect(page.unpricedSharePct).toBe(0);
+    expect(page.capitalDeployedPeak30dUsd).toBe("0");
+    expect(page.activityCount).toBe(1);
+  });
+});
+
 describe("GET /api/agents/:name when the client sent no confirmation time", () => {
   beforeAll(async () => {
     await resetData(db.pool);

@@ -17,6 +17,8 @@ type TaxonomyCase = {
   tokenOutAddress: string | null;
   usdOutPriced: string | null;
   contribution: UsdContribution;
+  kind?: string;
+  verificationState?: string;
 };
 
 const taxonomyCases: TaxonomyCase[] = [
@@ -101,6 +103,35 @@ const taxonomyCases: TaxonomyCase[] = [
     usdOutPriced: null,
     contribution: "outside_usd_figures",
   },
+  {
+    label: "an unpriced bridge fill, where the role decides before that pricing state too",
+    eventRole: "bridge_fill_observed",
+    pricingState: "unpriced",
+    usdInPriced: null,
+    tokenOutAddress: WETH,
+    usdOutPriced: null,
+    contribution: "outside_usd_figures",
+  },
+  {
+    label: "a priced token launch, a role neither surface publishes USD for",
+    eventRole: "token_launch",
+    kind: "launch",
+    pricingState: "server_priced",
+    usdInPriced: "100",
+    tokenOutAddress: WETH,
+    usdOutPriced: "90",
+    contribution: "outside_usd_figures",
+  },
+  {
+    label: "a priced swap verified on a basic tier chain",
+    eventRole: "swap",
+    verificationState: "verified_basic",
+    pricingState: "server_priced",
+    usdInPriced: "100",
+    tokenOutAddress: WETH,
+    usdOutPriced: "90",
+    contribution: "contributes_usd",
+  },
 ];
 
 let db: Awaited<ReturnType<typeof startTestDb>>;
@@ -121,15 +152,25 @@ async function seedOnly(pool: pg.Pool, seed: TaxonomyCase): Promise<void> {
         usd_in_priced, usd_out_priced, pricing_state,
         client_created_at, client_confirmed_at, statuses_seen, verification_state,
         received_schema_version)
-     VALUES ($1, 'taxonomy-row', 'taxonomy-row', 'taxonomy-row', 0, 'swap', $2, 'confirmed',
+     VALUES ($1, 'taxonomy-row', 'taxonomy-row', 'taxonomy-row', 0, $8, $2, 'confirmed',
              'kyberswap', 'eip155', 8453,
              $3, 6, '1000000000',
              $4, CASE WHEN $4::text IS NULL THEN NULL ELSE 18 END,
              CASE WHEN $4::text IS NULL THEN NULL ELSE '1000000000000000000' END,
              $5::numeric, $6::numeric, $7,
              now() - interval '2 hours', now() - interval '1 hour',
-             ARRAY['confirmed'], 'verified_full', 1)`,
-    [AGENT, seed.eventRole, USDC, seed.tokenOutAddress, seed.usdInPriced, seed.usdOutPriced, seed.pricingState],
+             ARRAY['confirmed'], $9, 1)`,
+    [
+      AGENT,
+      seed.eventRole,
+      USDC,
+      seed.tokenOutAddress,
+      seed.usdInPriced,
+      seed.usdOutPriced,
+      seed.pricingState,
+      seed.kind ?? "swap",
+      seed.verificationState ?? "verified_full",
+    ],
   );
 }
 
@@ -164,7 +205,7 @@ describe("the priced/unpriced taxonomy is the same rule in SQL and in core", () 
   it.each(taxonomyCases)("classifies $label the same way on both surfaces", async (seed) => {
     await seedOnly(db.pool, seed);
 
-    expect(await sqlContributionOf(db.pool)).toBe(seed.contribution);
-    expect(await coreContributionOf(db.pool)).toBe(seed.contribution);
+    expect(await sqlContributionOf(db.pool), "the SQL coverage counters").toBe(seed.contribution);
+    expect(await coreContributionOf(db.pool), "core usdContributionOf").toBe(seed.contribution);
   });
 });
