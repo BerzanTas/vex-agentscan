@@ -248,6 +248,7 @@ export async function tokenChainCandidates(
             array_agg(DISTINCT a.protocol ORDER BY a.protocol) AS protocols
      FROM activities a
      WHERE a.verification_state IN ${VERIFIED_STATES}
+       AND ${VOLUME_LEG}
        AND (lower(a.token_in_address) = $1 OR lower(a.token_out_address) = $1)
      GROUP BY a.chain_family, a.chain_id`,
     [address],
@@ -365,6 +366,7 @@ async function tokenPairs(
      SELECT a.token_in_symbol, a.token_out_symbol, COUNT(*)::int AS tx_count
      FROM activities a
      WHERE a.verification_state IN ${VERIFIED_STATES}
+       AND ${VOLUME_LEG}
        AND a.chain_family = $3 AND a.chain_id = $4::bigint
        AND (lower(a.token_in_address) = $5 OR lower(a.token_out_address) = $5)
        AND ${IN_WINDOW}

@@ -8,11 +8,13 @@ import type {
   AgentStatDto,
   BridgeRouteDto,
   ChartPointDto,
+  NetworkDetailDto,
   NetworkStatDto,
   PricingCoverageDto,
   ProtocolRankingDto,
   ProtocolStatDto,
   StatsDto,
+  TokenDetailDto,
   TokenStatDto,
 } from "../../public-dto.js";
 import { startTestDb } from "../../testing/pg-harness.js";
@@ -428,6 +430,57 @@ describe("windows where the coverage note must not claim the window was empty", 
       totalTx: 1,
     });
     expect(await getJson<TokenStatDto[]>("/api/tokens?range=24h")).toEqual([]);
+  });
+
+  it("keeps a fill leg out of every token panel that publishes its usd", async () => {
+    await seedWindow(db.pool, []);
+    await seedActivity(db.pool, {
+      ...pricedSwap,
+      sourceRowId: "priced-fill-leg-token-panels",
+      kind: "bridge",
+      eventRole: "bridge_fill_observed",
+      usdInPriced: "5000.00",
+      usdOutPriced: "4900.00",
+    });
+    await bookAggregatesForSeededActivities(db.pool);
+
+    const network = await getJson<NetworkDetailDto>("/api/networks/base?range=24h");
+    const detail = await app.inject({ method: "GET", url: `/api/tokens/base/${usdcAddress}` });
+
+    expect(network.tokens).toEqual([]);
+    expect(await getJson<TokenStatDto[]>("/api/tokens?range=24h")).toEqual([]);
+    expect(detail.statusCode).toBe(404);
+  });
+
+  it("counts only the volume leg of a token that also moved through a fill", async () => {
+    await seedWindow(db.pool, [pricedSwap]);
+    await seedActivity(db.pool, {
+      ...pricedSwap,
+      sourceRowId: "fill-leg-beside-a-swap",
+      kind: "bridge",
+      eventRole: "bridge_fill_observed",
+      usdInPriced: "5000.00",
+      usdOutPriced: "4900.00",
+    });
+    await bookAggregatesForSeededActivities(db.pool);
+
+    const network = await getJson<NetworkDetailDto>("/api/networks/base?range=24h");
+    const listing = await getJson<TokenStatDto[]>("/api/tokens?range=24h");
+    const detail = await getJson<TokenDetailDto>(`/api/tokens/base/${usdcAddress}`);
+
+    expect(
+      network.tokens.map(({ symbol, volumeUsd, txCount }) => ({ symbol, volumeUsd, txCount })),
+    ).toEqual([
+      { symbol: "USDC", volumeUsd: "100.00", txCount: 1 },
+      { symbol: "WETH", volumeUsd: "90.00", txCount: 1 },
+    ]);
+    expect(listing.map(({ symbol, volumeUsd, txCount }) => ({ symbol, volumeUsd, txCount }))).toEqual([
+      { symbol: "USDC", volumeUsd: "100.00", txCount: 1 },
+      { symbol: "WETH", volumeUsd: "90.00", txCount: 1 },
+    ]);
+    expect(detail.pairs).toEqual([
+      { tokenInSymbol: "USDC", tokenOutSymbol: "WETH", txCount: 1 },
+    ]);
   });
 
   it("discloses a priced swap whose in leg never arrived as one it could not price", async () => {

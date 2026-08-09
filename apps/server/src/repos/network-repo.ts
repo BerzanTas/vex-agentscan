@@ -17,6 +17,7 @@ import { serverPricedUsdIn, serverPricedUsdInSumOf, serverPricedUsdOut } from ".
 const DAY_SECONDS = 86_400;
 const VERIFIED_STATES = "('verified_full','verified_basic')";
 const VOLUME_ROLES = "('swap','bridge_deposit')";
+const VOLUME_LEG = `a.event_role IN ${VOLUME_ROLES}`;
 const OBSERVED_AT = activityTimeAnchorSql("a");
 const NETWORK_CHAINS = "a.chain_family = $1 AND a.chain_id = ANY($2::bigint[])";
 const VOLUME_SUM = serverPricedUsdInSumOf("a", `a.event_role IN ${VOLUME_ROLES}`);
@@ -400,6 +401,7 @@ async function networkTokens(
               COALESCE(${serverPricedUsdIn("a")}, 0) AS usd
        FROM activities a
        WHERE a.verification_state IN ${VERIFIED_STATES}
+         AND ${VOLUME_LEG}
          AND ${NETWORK_CHAINS}
          AND ${withinWindow("$3")}
          AND a.token_in_address IS NOT NULL
@@ -409,6 +411,7 @@ async function networkTokens(
               COALESCE(${serverPricedUsdOut("a")}, 0) AS usd
        FROM activities a
        WHERE a.verification_state IN ${VERIFIED_STATES}
+         AND ${VOLUME_LEG}
          AND ${NETWORK_CHAINS}
          AND ${withinWindow("$3")}
          AND a.token_out_address IS NOT NULL
