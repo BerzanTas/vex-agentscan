@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { activitiesPerDay30d } from "../agent-metrics/activity-cadence.js";
 import { unpriced30dSharePct, unpricedSharePct } from "../agent-metrics/unpriced-share.js";
-import { activity, leg } from "./agent-activity-fixture.js";
+import { absentLeg, activity, leg } from "./agent-activity-fixture.js";
 
 const USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
@@ -12,15 +12,29 @@ type SeenShape = {
   activityId: bigint;
   day: string;
   pricingState?: "pending" | "server_priced" | "unpriced";
+  eventRole?: string;
+  spentUsd?: string | null;
+  receivedUsd?: string | null;
+  receivedToken?: string | null;
 };
 
 function seen(shape: SeenShape) {
+  const receivedToken = shape.receivedToken === undefined ? WETH : shape.receivedToken;
   return activity({
     activityId: shape.activityId,
     observedAtSeconds: Date.parse(`${shape.day}T09:00:00Z`) / 1000,
     pricingState: shape.pricingState ?? "server_priced",
-    spent: leg(USDC, 6, "1000000000", "1000"),
-    received: leg(WETH, 18, "1000000000000000000", "995"),
+    eventRole: shape.eventRole ?? "swap",
+    spent: leg(USDC, 6, "1000000000", shape.spentUsd === undefined ? "1000" : shape.spentUsd),
+    received:
+      receivedToken === null
+        ? absentLeg
+        : leg(
+            receivedToken,
+            18,
+            "1000000000000000000",
+            shape.receivedUsd === undefined ? "995" : shape.receivedUsd,
+          ),
   });
 }
 
@@ -86,6 +100,45 @@ describe("unpricedSharePct", () => {
     expect(unpricedSharePct(activities)).toBe(50);
   });
 
+  it("counts a priced row whose spent leg carries no value as one it could not price", () => {
+    const activities = [seen({ activityId: 1n, day: "2026-08-02", spentUsd: null })];
+
+    expect(unpricedSharePct(activities)).toBe(100);
+  });
+
+  it("counts a priced row whose declared received leg carries no value as one it could not price", () => {
+    const activities = [seen({ activityId: 1n, day: "2026-08-02", receivedUsd: null })];
+
+    expect(unpricedSharePct(activities)).toBe(100);
+  });
+
+  it("counts a row that declares no received leg as priced, since no leg went unpriced", () => {
+    const activities = [seen({ activityId: 1n, day: "2026-08-02", receivedToken: null })];
+
+    expect(unpricedSharePct(activities)).toBe(0);
+  });
+
+  it("measures only the roles that can carry a USD figure on the page", () => {
+    const activities = [
+      seen({ activityId: 1n, day: "2026-08-01", eventRole: "bridge_fill_observed" }),
+      seen({ activityId: 2n, day: "2026-08-01", eventRole: "bridge_fill_observed" }),
+      seen({ activityId: 3n, day: "2026-08-01", eventRole: "bridge_fill_observed" }),
+      seen({ activityId: 4n, day: "2026-08-01", eventRole: "bridge_fill_observed" }),
+      seen({ activityId: 5n, day: "2026-08-02", pricingState: "unpriced" }),
+    ];
+
+    expect(unpricedSharePct(activities)).toBe(100);
+  });
+
+  it("keeps a bridge deposit in the population it shares with the deployed figures", () => {
+    const activities = [
+      seen({ activityId: 1n, day: "2026-08-01", eventRole: "bridge_deposit" }),
+      seen({ activityId: 2n, day: "2026-08-02", eventRole: "bridge_deposit", pricingState: "unpriced" }),
+    ];
+
+    expect(unpricedSharePct(activities)).toBe(50);
+  });
+
   it("rounds the share to one decimal", () => {
     const activities = [
       seen({ activityId: 1n, day: "2026-08-01", pricingState: "unpriced" }),
@@ -143,5 +196,15 @@ describe("unpriced30dSharePct", () => {
     const activities = [seen({ activityId: 1n, day: "2026-01-05", pricingState: "unpriced" })];
 
     expect(unpriced30dSharePct(activities, nowSeconds)).toBe(0);
+  });
+
+  it("measures the same population the whole-set share does", () => {
+    const activities = [
+      seen({ activityId: 1n, day: "2026-08-01", eventRole: "bridge_fill_observed" }),
+      seen({ activityId: 2n, day: "2026-08-01", eventRole: "bridge_fill_observed" }),
+      seen({ activityId: 3n, day: "2026-08-02", receivedUsd: null }),
+    ];
+
+    expect(unpriced30dSharePct(activities, nowSeconds)).toBe(100);
   });
 });

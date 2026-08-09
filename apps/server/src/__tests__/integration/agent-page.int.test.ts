@@ -178,6 +178,44 @@ describe("GET /api/agents/:name returning 404", () => {
   });
 });
 
+describe("GET /api/agents/:name with the gate cached", () => {
+  const cachedConfig = loadConfig({
+    DATABASE_URL: "postgres://unused-in-tests",
+    READ_CACHE_TTL_SEC: "300",
+  });
+  let cachedApp: FastifyInstance;
+
+  beforeAll(async () => {
+    await resetData(db.pool);
+    cachedApp = await buildApp({ pool: db.pool, config: cachedConfig, resolveChain });
+  });
+
+  afterAll(async () => {
+    await cachedApp.close();
+  });
+
+  it("never caches a miss, so an agent bound after the first look appears at once", async () => {
+    const before = await cachedApp.inject({ method: "GET", url: `/api/agents/${BOUND_NAME}` });
+    expect(before.statusCode).toBe(404);
+
+    await seedAgent(db.pool, { agentHash: BOUND_AGENT, name: BOUND_NAME });
+    await seedActivity(db.pool, { agentHash: BOUND_AGENT, daysAgo: 1 });
+
+    const after = await cachedApp.inject({ method: "GET", url: `/api/agents/${BOUND_NAME}` });
+    expect(after.statusCode).toBe(200);
+  });
+
+  it("holds a hit for the read cache window, so revocation lands within it and not sooner", async () => {
+    await db.pool.query("UPDATE agents SET status = 'revoked' WHERE agent_hash = $1", [BOUND_AGENT]);
+
+    const cached = await cachedApp.inject({ method: "GET", url: `/api/agents/${BOUND_NAME}` });
+    expect(cached.statusCode).toBe(200);
+
+    const uncached = await agentPage(BOUND_NAME);
+    expect(uncached.statusCode).toBe(404);
+  });
+});
+
 describe("GET /api/agents/:name over two protocols and two chains", () => {
   beforeAll(async () => {
     await resetData(db.pool);
