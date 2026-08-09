@@ -6,7 +6,7 @@ const SERVER_SRC = new URL("../", import.meta.url);
 
 const CLIENT_ESTIMATE_COLUMN = /usd_(in|out)_est/;
 const SERVER_PRICED_COLUMN = /usd_(in|out)_priced/;
-const CLIENT_ESTIMATE_DAILY_SUM = /SUM\((?:\w+\.)?volume_usd\)/;
+const CLIENT_ESTIMATE_DAILY_SUM = /sum\(\s*(?:\w+\.)?volume_usd\s*\)/is;
 const PRICING_STATE_GUARD = /pricing_state/;
 
 const PRICED_COLUMN_OWNER = "repos/server-priced-usd.ts";
@@ -14,7 +14,6 @@ const PRICED_COLUMN_OWNER = "repos/server-priced-usd.ts";
 const NON_AGGREGATE_REPOS: readonly string[] = [
   "activities-ingest-repo.ts",
   "activities-verify-repo.ts",
-  "activity-pricing-repo.ts",
   "agents-repo.ts",
   "handshake-repo.ts",
   "purge-repo.ts",
@@ -33,9 +32,21 @@ const PER_ROW_DETAIL_LINES: Record<string, readonly string[]> = {
     "usd_out_est: raw.usd_out_est,",
   ],
   "public-dto.ts": ["usdInEst: row.usd_in_est,", "usdOutEst: row.usd_out_est,"],
+  "repos/activity-pricing-repo.ts": [
+    "usd_in_est: string | null;",
+    "usd_out_est: string | null;",
+    "executed_in_raw, token_in_address, token_in_decimals, usd_in_est,",
+    "executed_out_raw, token_out_address, token_out_decimals, usd_out_est`,",
+    "usdInEst: row.usd_in_est,",
+    "usdOutEst: row.usd_out_est,",
+  ],
 };
 
 const PER_ROW_PRICED_LINES: Record<string, readonly string[]> = {
+  "repos/activity-pricing-repo.ts": [
+    "usd_in_priced = $2::numeric,",
+    "usd_out_priced = $3::numeric,",
+  ],
   "repos/agent-page-repo.ts": [
     "usd_in_priced: string | null;",
     "usd_out_priced: string | null;",
@@ -60,9 +71,12 @@ function aggregateSources(): string[] {
   return [...repos, ...dtos];
 }
 
+function sourceOf(sourcePath: string): string {
+  return readFileSync(fileURLToPath(new URL(sourcePath, SERVER_SRC)), "utf8");
+}
+
 function linesOf(sourcePath: string): string[] {
-  const path = fileURLToPath(new URL(sourcePath, SERVER_SRC));
-  return readFileSync(path, "utf8")
+  return sourceOf(sourcePath)
     .split("\n")
     .map((line) => line.trim());
 }
@@ -110,7 +124,7 @@ describe("public aggregate sources", () => {
     });
 
     it(`sums no client estimate column of daily_aggregates in ${sourcePath}`, () => {
-      expect(linesMatching(sourcePath, CLIENT_ESTIMATE_DAILY_SUM)).toEqual([]);
+      expect(CLIENT_ESTIMATE_DAILY_SUM.test(sourceOf(sourcePath))).toBe(false);
     });
 
     if (sourcePath === PRICED_COLUMN_OWNER) continue;
