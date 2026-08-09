@@ -431,6 +431,61 @@ describe("GET /api/agents/:name win rate at the floor", () => {
   });
 });
 
+describe("GET /api/agents/:name when a priced row has a leg the lane could not value", () => {
+  beforeAll(async () => {
+    await resetData(db.pool);
+    await seedAgent(db.pool, { agentHash: BOUND_AGENT, name: BOUND_NAME });
+    await seedActivity(db.pool, {
+      agentHash: BOUND_AGENT,
+      daysAgo: 1,
+      usdInPriced: "100",
+      usdOutPriced: null,
+    });
+  });
+
+  it("counts the row as unpriced while still publishing the dollars it did price", async () => {
+    const page = (await agentPage(BOUND_NAME)).json<AgentPageDto>();
+
+    expect(page.unpricedSharePct).toBe(100);
+    expect(page.unpriced30dSharePct).toBe(100);
+    expect(page.capitalDeployedPeak30dUsd).toBe("100");
+    expect(page.protocolBreakdown).toEqual([
+      { protocol: "kyberswap", volumeUsd: "100", txCount: 1 },
+    ]);
+    expect(page.chainBreakdown).toEqual([{ chainSlug: "base", volumeUsd: "100", txCount: 1 }]);
+  });
+});
+
+describe("GET /api/agents/:name mixing a fully priced row with a partly priced one", () => {
+  beforeAll(async () => {
+    await resetData(db.pool);
+    await seedAgent(db.pool, { agentHash: BOUND_AGENT, name: BOUND_NAME });
+    await seedActivity(db.pool, {
+      agentHash: BOUND_AGENT,
+      daysAgo: 1,
+      usdInPriced: "1000",
+      usdOutPriced: "990",
+    });
+    await seedActivity(db.pool, {
+      agentHash: BOUND_AGENT,
+      daysAgo: 1,
+      usdInPriced: "2000",
+      usdOutPriced: null,
+    });
+  });
+
+  it("publishes a volume two thirds of which comes from the row the share calls unpriced", async () => {
+    const page = (await agentPage(BOUND_NAME)).json<AgentPageDto>();
+
+    expect(page.unpricedSharePct).toBe(50);
+    expect(page.unpriced30dSharePct).toBe(50);
+    expect(page.capitalDeployedPeak30dUsd).toBe("3000");
+    expect(page.protocolBreakdown).toEqual([
+      { protocol: "kyberswap", volumeUsd: "3000", txCount: 2 },
+    ]);
+  });
+});
+
 describe("GET /api/agents/:name when the client sent no confirmation time", () => {
   beforeAll(async () => {
     await resetData(db.pool);
