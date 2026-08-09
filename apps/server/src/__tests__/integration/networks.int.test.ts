@@ -224,6 +224,38 @@ function bridgeCountsOf(row: NetworkStatDto): { bridgeInCount: number; bridgeOut
   return { bridgeInCount: row.bridgeInCount, bridgeOutCount: row.bridgeOutCount };
 }
 
+describe("the fixture the volume assertions rely on", () => {
+  it("carries a stale server price on every row the server has not priced", async () => {
+    const stale = await db.pool.query<{
+      public_id: string;
+      usd_in_priced: string | null;
+      usd_out_priced: string | null;
+      pricing_state: string;
+    }>(
+      `SELECT public_id, usd_in_priced::text AS usd_in_priced, usd_out_priced::text AS usd_out_priced,
+              pricing_state
+       FROM activities
+       WHERE pricing_state <> 'server_priced'
+       ORDER BY public_id`,
+    );
+
+    expect(stale.rows).toEqual([
+      {
+        public_id: "base-stale-priced-deposit",
+        usd_in_priced: "900.00",
+        usd_out_priced: null,
+        pricing_state: "pending",
+      },
+      {
+        public_id: "base-stale-priced-swap",
+        usd_in_priced: "700.00",
+        usd_out_priced: "600.00",
+        pricing_state: "unpriced",
+      },
+    ]);
+  });
+});
+
 describe("GET /api/networks", () => {
   it("lists one row per network in the chain registry", async () => {
     const rows = await listNetworks();
@@ -262,15 +294,6 @@ describe("GET /api/networks", () => {
 
     expect(base.volumeUsd).toBe("125.50");
     expect(base.txCount).toBe(5);
-  });
-
-  it("counts rows the server has not priced without letting their stale prices into the volume", async () => {
-    const base = await networkNamed("base");
-
-    expect({ volumeUsd: base.volumeUsd, txCount: base.txCount }).toEqual({
-      volumeUsd: "125.50",
-      txCount: 5,
-    });
   });
 
   it("leaves a network whose only activity is unverified at zero with no last seen", async () => {
@@ -355,17 +378,6 @@ describe("GET /api/networks/:slug", () => {
         volumeUsd: "100.00",
         txCount: 2,
       },
-    ]);
-  });
-
-  it("keeps a stale priced leg out of the token volumes and inside their counts", async () => {
-    const detail = await detailOf("base");
-
-    expect(
-      detail.tokens.map(({ symbol, volumeUsd, txCount }) => ({ symbol, volumeUsd, txCount })),
-    ).toEqual([
-      { symbol: "USDC", volumeUsd: "100.50", txCount: 2 },
-      { symbol: "WETH", volumeUsd: "100.00", txCount: 2 },
     ]);
   });
 
