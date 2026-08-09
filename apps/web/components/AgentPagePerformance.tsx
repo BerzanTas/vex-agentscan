@@ -41,7 +41,6 @@ export function AgentPagePerformance({ agent }: { agent: AgentPageDto }) {
           label="Realized result"
           value={signedUsd(agent.realizedResultUsd, formatUsdCompact)}
           exactValue={signedUsd(agent.realizedResultUsd, formatUsdAmount)}
-          unit="est."
         />
         <AgentPageStatCard
           label="Closed round trips"

@@ -12,7 +12,6 @@ export function AgentPageHeadline({ agent }: { agent: AgentPageDto }) {
         window="PEAK 30D"
         value={`$${formatUsdCompact(agent.capitalDeployedPeak30dUsd)}`}
         exactValue={`$${formatUsdAmount(agent.capitalDeployedPeak30dUsd)}`}
-        unit="est."
         note="deployed through agent activity"
       />
       <AgentPageStatCard
