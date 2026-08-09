@@ -1,8 +1,13 @@
 const integerPattern = /^\d+$/;
 const decimalPattern = /^\d+(\.\d+)?$/;
 const MAX_TOKEN_DECIMALS = 255;
+const nonZeroDigitPattern = /[1-9]/;
 
 type ScaledInteger = { mantissa: bigint; scale: number };
+
+export function isPositiveDecimalText(text: string): boolean {
+  return decimalPattern.test(text) && nonZeroDigitPattern.test(text);
+}
 
 function scaledIntegerFrom(decimalText: string): ScaledInteger | null {
   if (!decimalPattern.test(decimalText)) return null;

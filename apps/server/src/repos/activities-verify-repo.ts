@@ -1,6 +1,7 @@
 import type pg from "pg";
 import { isLaunchShaped, type Verdict, type VerificationKind } from "@agentscan/core";
 import type { Config } from "../config.js";
+import { ACTIVITY_AGGREGATE_DAY_SQL } from "./activity-time-anchor.js";
 
 export type SqlExecutor = Pick<pg.PoolClient, "query">;
 
@@ -114,8 +115,12 @@ type FinalizedActivityRow = {
   kind: VerificationKind;
   event_role: string;
   usd_in_est: string | null;
-  client_confirmed_at: Date | null;
+  aggregate_day: string;
 };
+
+function blockTimeOf(verdict: TerminalVerdict): Date | null {
+  return verdict.result === "strike" ? null : verdict.blockTimestamp;
+}
 
 export async function finalizeVerification(
   client: SqlExecutor,
@@ -125,17 +130,18 @@ export async function finalizeVerification(
 ): Promise<void> {
   const state = verdict.result === "strike" ? "mismatch" : verdict.result;
   const finalized = await client.query<FinalizedActivityRow>(
-    `UPDATE activities SET verification_state = $2, verified_at = now()
+    `UPDATE activities SET verification_state = $2, verified_at = now(), block_time = $3::timestamptz
      WHERE id = $1 AND verification_state = 'queued'
-     RETURNING agent_hash, protocol, kind, event_role, usd_in_est, client_confirmed_at`,
-    [activityId.toString(), state],
+     RETURNING agent_hash, protocol, kind, event_role, usd_in_est,
+               ${ACTIVITY_AGGREGATE_DAY_SQL}::text AS aggregate_day`,
+    [activityId.toString(), state, blockTimeOf(verdict)],
   );
   const activity = finalized.rows[0];
   if (activity === undefined) return;
   if (verdict.result === "strike" && !isLaunchShaped(activity.kind, activity.event_role)) {
     await recordStrike(client, activityId, activity.agent_hash, verdict.reason, config);
   } else if (verdict.result !== "strike") {
-    await recordVerifiedSuccess(client, activity, verdict.blockTimestamp);
+    await recordVerifiedSuccess(client, activity);
   }
   await deleteJob(client, activityId);
 }
@@ -164,22 +170,18 @@ export async function closeUnverifiable(client: SqlExecutor, activityId: bigint)
   await deleteJob(client, activityId);
 }
 
-async function recordVerifiedSuccess(
-  client: SqlExecutor,
-  activity: FinalizedActivityRow,
-  blockTimestamp: Date,
-): Promise<void> {
+async function recordVerifiedSuccess(client: SqlExecutor, activity: FinalizedActivityRow): Promise<void> {
   await client.query(
     "UPDATE agents SET first_verified_at = COALESCE(first_verified_at, now()), updated_at = now() WHERE agent_hash = $1",
     [activity.agent_hash],
   );
   await client.query(
     `INSERT INTO daily_aggregates (day, protocol, kind, volume_usd, tx_count)
-     VALUES (($1::timestamptz AT TIME ZONE 'utc')::date, $2, $3, $4::numeric, 1)
+     VALUES ($1::date, $2, $3, $4::numeric, 1)
      ON CONFLICT (day, protocol, kind)
      DO UPDATE SET volume_usd = daily_aggregates.volume_usd + EXCLUDED.volume_usd,
                    tx_count = daily_aggregates.tx_count + 1`,
-    [activity.client_confirmed_at ?? blockTimestamp, activity.protocol, activity.kind, volumeContribution(activity)],
+    [activity.aggregate_day, activity.protocol, activity.kind, volumeContribution(activity)],
   );
 }
 

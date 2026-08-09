@@ -162,26 +162,38 @@ activity logs one `"pricing coverage"` line at info level:
 {
   "processed": 50,
   "serverPriced": 46,
-  "unpriced": 1,
+  "unpriceable": 1,
+  "nothingToPrice": 0,
   "rescheduled": 3,
   "byChainProtocol": [
     { "chainSlug": "base", "chainFamily": "eip155", "chainId": "8453",
-      "protocol": "kyberswap", "serverPriced": 40, "unpriced": 0 }
+      "protocol": "kyberswap", "serverPriced": 40, "unpriceable": 0,
+      "nothingToPrice": 0 }
   ]
 }
 ```
 
 - `serverPriced` — activities that reached `pricing_state = 'server_priced'`
   in this pass: every present leg was priced from a gate-accepted feed point.
-- `unpriced` — activities that reached the **terminal** `pricing_state =
-  'unpriced'`: either nothing to price (no leg carried an amount, a token
-  address and decimals) or `PRICING_MAX_ATTEMPTS` exhausted. Terminal rows are
-  disclosed by `/api/pricing-coverage`, never collapsed into a zero.
-- `rescheduled` — still `pending`, backed off, and not yet on either side of
+- `unpriceable` — activities that reached the **terminal** `pricing_state =
+  'unpriced'` **because pricing failed**: `PRICING_MAX_ATTEMPTS` exhausted, or
+  a leg whose chain or token address has no coin key at all. This is the only
+  terminal counter that belongs in the coverage ratio.
+- `nothingToPrice` — activities that reached the same terminal
+  `pricing_state = 'unpriced'` because there was **nothing to price**: no leg
+  carried an amount, a token address and decimals. A `launch` event is the
+  ordinary case. These are **excluded from the ratio on purpose** — counting
+  them as failures would depress the launch-gate number permanently with zero
+  feed involvement.
+- `rescheduled` — still `pending`, backed off, and not yet on any side of
   the ratio.
-- `byChainProtocol` — the same two counters split per `(chain, protocol)`,
+- `byChainProtocol` — the same three counters split per `(chain, protocol)`,
   sorted deterministically. This is where a single broken feed key shows up
   while the global number still looks healthy.
+
+Both terminal counters land in `pricing_state = 'unpriced'` in the database and
+both are disclosed by `/api/pricing-coverage`; the split exists so the operator
+can tell a feed problem from a legless row.
 
 **Log query.**
 
@@ -193,8 +205,10 @@ ContainerAppConsoleLogs_CL
 | project TimeGenerated,
           processed = toint(parsed.processed),
           serverPriced = toint(parsed.serverPriced),
-          unpriced = toint(parsed.unpriced),
+          unpriceable = toint(parsed.unpriceable),
+          nothingToPrice = toint(parsed.nothingToPrice),
           rescheduled = toint(parsed.rescheduled)
+| extend coverage = todouble(serverPriced) / todouble(serverPriced + unpriceable)
 | order by TimeGenerated desc
 ```
 
@@ -207,17 +221,18 @@ ContainerAppConsoleLogs_CL
 | extend parsed = parse_json(Log_s)
 | mv-expand slice = parsed.byChainProtocol
 | summarize serverPriced = sum(toint(slice.serverPriced)),
-            unpriced = sum(toint(slice.unpriced))
+            unpriceable = sum(toint(slice.unpriceable)),
+            nothingToPrice = sum(toint(slice.nothingToPrice))
           by chainSlug = tostring(slice.chainSlug), protocol = tostring(slice.protocol),
              bin(TimeGenerated, 1h)
-| extend coverage = todouble(serverPriced) / todouble(serverPriced + unpriced)
+| extend coverage = todouble(serverPriced) / todouble(serverPriced + unpriceable)
 | order by TimeGenerated desc
 ```
 
 **What a sustained coverage drop means.** `serverPriced / (serverPriced +
-unpriced)` falling and staying down is not a load problem — the lane retries
+unpriceable)` falling and staying down is not a load problem — the lane retries
 on its own backoff and a transient feed outage shows up as `rescheduled`, not
-as `unpriced`. A sustained drop means one of:
+as `unpriceable`. A sustained drop means one of:
 
 - **A feed key broke.** A chain's `priceFeedKey`
   (`packages/core/src/chain-registry/chains.ts`) no longer matches what the
@@ -241,6 +256,39 @@ ratio until it is most of the volume.
 the Stage 4a design (§8). Low coverage at that point is a launch decision —
 add a second price feed, or narrow which chains are published — not something
 to discover from users after the fact.
+
+### Recovering from a wrong feed key
+
+`pricing_state = 'unpriced'` is terminal and nothing in the lane requeues it.
+A chain's `priceFeedKey` was taken from the price feed's documentation rather
+than a live call, so "the key was wrong all along" is a realistic first-staging
+outcome — and by the time you read the coverage number, the affected activities
+are already terminal and `token_prices` holds negative-cache rows that suppress
+refetching for `PRICE_MISS_RETRY_HOURS`. Deploying the corrected key repairs
+future rows only. Recover the existing ones by hand, in this order, after the
+corrected key is deployed:
+
+```sql
+-- 1. drop the poisoned negative-cache rows for the affected chain, so the lane
+--    may ask upstream again before PRICE_MISS_RETRY_HOURS elapses
+DELETE FROM token_prices
+WHERE price_usd IS NULL AND chain_family = 'eip155' AND chain_id = 8453;
+
+-- 2. requeue the activities that failed against the wrong key. The leg
+--    predicate matters: without it this also resurrects legless rows that were
+--    correctly terminal, and they would burn the whole retry budget again.
+UPDATE activities
+SET pricing_state = 'pending', pricing_attempts = 0, pricing_next_attempt_at = NULL
+WHERE pricing_state = 'unpriced'
+  AND chain_family = 'eip155' AND chain_id = 8453
+  AND (executed_in_raw IS NOT NULL OR executed_out_raw IS NOT NULL);
+```
+
+Substitute the affected `chain_family` / `chain_id`. Requeued rows re-enter the
+lane at `PRICING_BATCH_MAX` per poll, and the next `"pricing coverage"` line
+shows whether the new key worked. `daily_aggregates.volume_usd_priced` is
+incremented only when the pricing CAS wins, and a requeued row's CAS runs again
+from `pending`, so a successful second pass adds that row's volume exactly once.
 
 ## 5. Pricing divergence — server price vs client estimate
 

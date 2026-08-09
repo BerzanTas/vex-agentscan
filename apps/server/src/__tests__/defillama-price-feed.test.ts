@@ -83,8 +83,34 @@ describe("makeDefiLlamaPriceFeed", () => {
     expect(points.get("base:0xaaa")).toEqual({ priceUsd: "2500", confidence: 0, atSecond });
   });
 
-  it("omits a coin whose quote does not match the expected shape", async () => {
+  it("omits a single unrecognised quote while keeping the rest of the batch", async () => {
+    stubFetch(() =>
+      jsonResponse({
+        coins: {
+          "base:0xaaa": { price: "2500", timestamp: atSecond },
+          "base:0xbbb": { price: 1, timestamp: atSecond, confidence: 0.99 },
+        },
+      }),
+    );
+
+    const points = await makeDefiLlamaPriceFeed(config).historical([
+      { coinKey: "base:0xaaa", atSecond },
+      { coinKey: "base:0xbbb", atSecond },
+    ]);
+
+    expect([...points.keys()]).toEqual(["base:0xbbb"]);
+  });
+
+  it("reports an unavailable feed when the answer holds quotes but none match the documented shape", async () => {
     stubFetch(() => jsonResponse({ coins: { "base:0xaaa": { price: "2500", timestamp: atSecond } } }));
+
+    await expect(
+      makeDefiLlamaPriceFeed(config).historical([{ coinKey: "base:0xaaa", atSecond }]),
+    ).rejects.toBeInstanceOf(PriceFeedUnavailableError);
+  });
+
+  it("treats an empty coins object as a genuine miss rather than an outage", async () => {
+    stubFetch(() => jsonResponse({ coins: {} }));
 
     const points = await makeDefiLlamaPriceFeed(config).historical([{ coinKey: "base:0xaaa", atSecond }]);
 

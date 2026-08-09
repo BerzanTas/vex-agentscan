@@ -108,11 +108,14 @@ async function seedQueuedActivity(seed: QueuedActivitySeed): Promise<bigint> {
   return activityId;
 }
 
-async function activityStateOf(activityId: bigint): Promise<{ verification_state: string; verified_at: Date | null }> {
-  const result = await db.pool.query<{ verification_state: string; verified_at: Date | null }>(
-    "SELECT verification_state, verified_at FROM activities WHERE id = $1",
-    [activityId.toString()],
-  );
+async function activityStateOf(
+  activityId: bigint,
+): Promise<{ verification_state: string; verified_at: Date | null; block_time: Date | null }> {
+  const result = await db.pool.query<{
+    verification_state: string;
+    verified_at: Date | null;
+    block_time: Date | null;
+  }>("SELECT verification_state, verified_at, block_time FROM activities WHERE id = $1", [activityId.toString()]);
   return onlyRow(result.rows);
 }
 
@@ -194,6 +197,44 @@ describe("verification worker", () => {
       tx_count: 1,
     });
     expect((await agentRowOf(agent)).first_verified_at).not.toBeNull();
+  });
+
+  it("persists the on-chain block time and books volume under it when the client sent no confirmation time", async () => {
+    const agent = "c".repeat(64);
+    await seedAgent(agent);
+    const blockTimestamp = new Date("2026-07-26T23:30:00.000Z");
+    const activityId = await seedQueuedActivity({
+      agentHash: agent,
+      protocol: "p-block-time",
+      usdInEst: "40",
+      clientConfirmedAt: null,
+    });
+
+    await runVerificationPass(
+      depsWithReader(readerReturning({ status: "success", blockTimestamp, erc20Transfers: [] })),
+    );
+
+    expect((await activityStateOf(activityId)).block_time).toEqual(blockTimestamp);
+    expect(await aggregateOf("p-block-time")).toEqual({
+      day: "2026-07-26",
+      kind: "swap",
+      volume_usd: "40",
+      tx_count: 1,
+    });
+  });
+
+  it("leaves block_time null on a mismatch verdict, which carries no block timestamp", async () => {
+    const agent = "d".repeat(64);
+    await seedAgent(agent);
+    const activityId = await seedQueuedActivity({ agentHash: agent, protocol: "p-reverted" });
+
+    await runVerificationPass(
+      depsWithReader(readerReturning({ status: "reverted", blockTimestamp: new Date(), erc20Transfers: [] })),
+    );
+
+    const activity = await activityStateOf(activityId);
+    expect(activity.verification_state).toBe("mismatch");
+    expect(activity.block_time).toBeNull();
   });
 
   it("adds bridge volume only for the bridge_deposit leg while counting every verified leg", async () => {

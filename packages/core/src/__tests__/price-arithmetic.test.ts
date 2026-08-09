@@ -70,6 +70,30 @@ const gate = { minConfidence: 0.9, maxDriftSec: 3600 };
 const anchorSecond = 1_770_000_000;
 
 describe("isPriceAcceptable", () => {
+  it("rejects a zero price so it can never be published as a settled figure of zero", () => {
+    expect(isPriceAcceptable({ priceUsd: "0", confidence: 1, atSecond: anchorSecond }, anchorSecond, gate)).toBe(
+      false,
+    );
+  });
+
+  it("rejects a zero price written with fractional digits", () => {
+    expect(
+      isPriceAcceptable({ priceUsd: "0.000", confidence: 1, atSecond: anchorSecond }, anchorSecond, gate),
+    ).toBe(false);
+  });
+
+  it("accepts a genuinely tiny but non-zero price", () => {
+    expect(
+      isPriceAcceptable({ priceUsd: "0.00000001", confidence: 1, atSecond: anchorSecond }, anchorSecond, gate),
+    ).toBe(true);
+  });
+
+  it("rejects a price that is not a decimal string", () => {
+    expect(isPriceAcceptable({ priceUsd: "NaN", confidence: 1, atSecond: anchorSecond }, anchorSecond, gate)).toBe(
+      false,
+    );
+  });
+
   it("accepts a point at the confidence threshold", () => {
     expect(isPriceAcceptable({ priceUsd: "1", confidence: 0.9, atSecond: anchorSecond }, anchorSecond, gate)).toBe(
       true,

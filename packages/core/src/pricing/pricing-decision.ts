@@ -5,13 +5,22 @@ export type ActivityLeg = { executedRaw: string; tokenAddress: string; decimals:
 export type LegPricing =
   | { state: "absent" }
   | { state: "priced"; usd: string }
-  | { state: "unpriceable" };
+  | { state: "unpriceable"; notBefore: Date | null }
+  | { state: "unmappable" };
 
 export type PricingOutcome =
   | { kind: "priced"; usdIn: string | null; usdOut: string | null }
   | { kind: "reschedule"; delayMs: number }
   | { kind: "nothing_to_price" }
+  | { kind: "unmappable" }
   | { kind: "attempts_exhausted" };
+
+export type PricingRetryBudget = {
+  attempts: number;
+  maxAttempts: number;
+  schedule: readonly string[];
+  now: Date;
+};
 
 export function presentLeg(args: {
   executedRaw: string | null;
@@ -26,20 +35,32 @@ function usdOf(leg: LegPricing): string | null {
   return leg.state === "priced" ? leg.usd : null;
 }
 
-export type PricingRetryBudget = { attempts: number; maxAttempts: number; schedule: readonly string[] };
+function latestNotBefore(legs: readonly LegPricing[]): Date | null {
+  let latest: Date | null = null;
+  for (const leg of legs) {
+    if (leg.state !== "unpriceable" || leg.notBefore === null) continue;
+    if (latest === null || leg.notBefore > latest) latest = leg.notBefore;
+  }
+  return latest;
+}
 
 export function pricingRetryOutcome(
   budget: PricingRetryBudget,
+  notBefore: Date | null,
 ): Extract<PricingOutcome, { kind: "reschedule" } | { kind: "attempts_exhausted" }> {
   if (budget.attempts + 1 >= budget.maxAttempts) return { kind: "attempts_exhausted" };
-  return { kind: "reschedule", delayMs: backoffDelayMs(budget.attempts, budget.schedule) };
+  const scheduledMs = backoffDelayMs(budget.attempts, budget.schedule);
+  const blockedMs = notBefore === null ? 0 : notBefore.getTime() - budget.now.getTime();
+  return { kind: "reschedule", delayMs: Math.max(scheduledMs, blockedMs) };
 }
 
 export function decidePricingOutcome(
   args: PricingRetryBudget & { legIn: LegPricing; legOut: LegPricing },
 ): PricingOutcome {
-  if (args.legIn.state === "absent" && args.legOut.state === "absent") return { kind: "nothing_to_price" };
-  if (args.legIn.state === "unpriceable" || args.legOut.state === "unpriceable") return pricingRetryOutcome(args);
+  const legs = [args.legIn, args.legOut];
+  if (legs.every((leg) => leg.state === "absent")) return { kind: "nothing_to_price" };
+  if (legs.some((leg) => leg.state === "unmappable")) return { kind: "unmappable" };
+  if (legs.some((leg) => leg.state === "unpriceable")) return pricingRetryOutcome(args, latestNotBefore(legs));
   return { kind: "priced", usdIn: usdOf(args.legIn), usdOut: usdOf(args.legOut) };
 }
 

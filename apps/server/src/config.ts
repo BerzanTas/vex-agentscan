@@ -74,9 +74,9 @@ const envSchema = z.object({
   PRICE_FEED_TIMEOUT_MS: z.coerce.number().int().min(1).default(10_000),
   PRICE_DIVERGENCE_WARN_RATIO: z.coerce.number().min(1).default(5),
   PRICING_BATCH_MAX: z.coerce.number().int().min(1).default(50),
-  PRICING_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(5),
+  PRICING_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(6),
   PRICING_POLL_INTERVAL_SEC: z.coerce.number().int().min(1).default(30),
-  PRICING_LEASE_SEC: z.coerce.number().int().min(1).default(120),
+  PRICING_LEASE_SEC: z.coerce.number().int().min(1).default(600),
   PRICING_BACKOFF_SCHEDULE: z.string().default("1m,5m,30m,2h,12h").transform(commaSeparated),
   WIN_RATE_MIN_ROUND_TRIPS: z.coerce.number().int().min(1).default(5),
 });

@@ -1,14 +1,22 @@
 import type pg from "pg";
 import type { ChainFamily } from "@agentscan/core";
+import {
+  ACTIVITY_AGGREGATE_DAY_SQL,
+  ACTIVITY_PRICE_HOUR_SQL,
+  ACTIVITY_TIME_ANCHOR_SQL,
+} from "./activity-time-anchor.js";
 
 export type SqlExecutor = Pick<pg.PoolClient, "query">;
 
 export type ClaimedPricingRow = {
   activityId: bigint;
   protocol: string;
+  kind: string;
+  eventRole: string;
   chainFamily: ChainFamily;
   chainId: bigint;
   priceHour: Date;
+  aggregateDay: string;
   attempts: number;
   executedInRaw: string | null;
   tokenInAddress: string | null;
@@ -23,9 +31,12 @@ export type ClaimedPricingRow = {
 type ClaimedPricingRowShape = {
   id: string;
   protocol: string;
+  kind: string;
+  event_role: string;
   chain_family: ChainFamily;
   chain_id: string;
   price_hour: Date;
+  aggregate_day: string;
   pricing_attempts: number;
   executed_in_raw: string | null;
   token_in_address: string | null;
@@ -50,13 +61,14 @@ export async function claimDuePricingRows(
        WHERE pricing_state = 'pending'
          AND verification_state IN ('verified_full','verified_basic')
          AND (pricing_next_attempt_at IS NULL OR pricing_next_attempt_at <= now())
-         AND COALESCE(client_confirmed_at, verified_at) IS NOT NULL
+         AND ${ACTIVITY_TIME_ANCHOR_SQL} IS NOT NULL
        ORDER BY id
        LIMIT $1
        FOR UPDATE SKIP LOCKED
      )
-     RETURNING id, protocol, chain_family, chain_id,
-               date_trunc('hour', COALESCE(client_confirmed_at, verified_at)) AS price_hour,
+     RETURNING id, protocol, kind, event_role, chain_family, chain_id,
+               ${ACTIVITY_PRICE_HOUR_SQL} AS price_hour,
+               ${ACTIVITY_AGGREGATE_DAY_SQL}::text AS aggregate_day,
                pricing_attempts,
                executed_in_raw, token_in_address, token_in_decimals, usd_in_est,
                executed_out_raw, token_out_address, token_out_decimals, usd_out_est`,
@@ -65,9 +77,12 @@ export async function claimDuePricingRows(
   return result.rows.map((row) => ({
     activityId: BigInt(row.id),
     protocol: row.protocol,
+    kind: row.kind,
+    eventRole: row.event_role,
     chainFamily: row.chain_family,
     chainId: BigInt(row.chain_id),
     priceHour: row.price_hour,
+    aggregateDay: row.aggregate_day,
     attempts: row.pricing_attempts,
     executedInRaw: row.executed_in_raw,
     tokenInAddress: row.token_in_address,
@@ -163,8 +178,8 @@ export async function markServerPriced(
   activityId: bigint,
   usdIn: string | null,
   usdOut: string | null,
-): Promise<void> {
-  await exec.query(
+): Promise<boolean> {
+  const result = await exec.query(
     `UPDATE activities
      SET pricing_state = 'server_priced',
          usd_in_priced = $2::numeric,
@@ -173,6 +188,20 @@ export async function markServerPriced(
          pricing_next_attempt_at = NULL
      WHERE id = $1 AND pricing_state = 'pending'`,
     [activityId.toString(), usdIn, usdOut],
+  );
+  return result.rowCount === 1;
+}
+
+export async function addPricedVolume(
+  exec: SqlExecutor,
+  entry: { day: string; protocol: string; kind: string; volumeUsd: string },
+): Promise<void> {
+  await exec.query(
+    `INSERT INTO daily_aggregates (day, protocol, kind, volume_usd, tx_count, volume_usd_priced)
+     VALUES ($1::date, $2, $3, 0, 0, $4::numeric)
+     ON CONFLICT (day, protocol, kind)
+     DO UPDATE SET volume_usd_priced = daily_aggregates.volume_usd_priced + EXCLUDED.volume_usd_priced`,
+    [entry.day, entry.protocol, entry.kind, entry.volumeUsd],
   );
 }
 

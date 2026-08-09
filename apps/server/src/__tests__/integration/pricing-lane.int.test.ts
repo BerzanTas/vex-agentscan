@@ -17,6 +17,8 @@ const logger = pino({ level: "silent" });
 const PRICE_HOUR = "2026-08-04T10:00:00Z";
 const PRICE_HOUR_SECOND = Math.floor(Date.parse(PRICE_HOUR) / 1000);
 const CONFIRMED_AT = "2026-08-04T10:41:00Z";
+const AGGREGATE_DAY = "2026-08-04";
+const VERIFIED_AT = "2026-08-06T09:15:00Z";
 const WETH = "0x4200000000000000000000000000000000000006";
 const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const NATIVE_SENTINEL = `0x${"E".repeat(40)}`;
@@ -41,6 +43,9 @@ type SeedPricingActivity = {
   usdOutEst?: string | null;
   chainId?: number;
   protocol?: string;
+  eventRole?: string;
+  blockTime?: string | null;
+  verifiedAt?: string;
 };
 
 async function seedPricingActivity(options: SeedPricingActivity): Promise<bigint> {
@@ -52,15 +57,15 @@ async function seedPricingActivity(options: SeedPricingActivity): Promise<bigint
        kind, event_role, status, protocol, chain_family, chain_id, tx_hash,
        token_in_address, token_in_decimals, executed_in_raw, usd_in_est,
        token_out_address, token_out_decimals, executed_out_raw, usd_out_est,
-       client_created_at, client_confirmed_at, verified_at, statuses_seen,
+       client_created_at, client_confirmed_at, block_time, verified_at, statuses_seen,
        verification_state, received_schema_version,
        pricing_state, pricing_attempts, pricing_next_attempt_at
      ) VALUES (
        $1, $2, $2, $2, 0,
-       'swap', 'swap', 'confirmed', $16, 'eip155', $15, '0x' || repeat('a', 64),
+       'swap', $18, 'confirmed', $16, 'eip155', $15, '0x' || repeat('a', 64),
        $3, $4, $5, $6::numeric,
        $7, $8, $9, $10::numeric,
-       now(), $11::timestamptz, now(), ARRAY['confirmed'],
+       now(), $11::timestamptz, $19::timestamptz, $20::timestamptz, ARRAY['confirmed'],
        $12, 1,
        $13, $14, $17::timestamptz
      )
@@ -83,9 +88,19 @@ async function seedPricingActivity(options: SeedPricingActivity): Promise<bigint
       options.chainId ?? 8453,
       options.protocol ?? "kyberswap",
       options.pricingNextAttemptAt ?? null,
+      options.eventRole ?? "swap",
+      options.blockTime ?? null,
+      options.verifiedAt ?? VERIFIED_AT,
     ],
   );
   return BigInt(result.rows[0]!.id);
+}
+
+async function pricedVolumeRows(): Promise<{ day: string; volume_usd_priced: string; tx_count: number }[]> {
+  const result = await pool.query<{ day: string; volume_usd_priced: string; tx_count: number }>(
+    "SELECT day::text AS day, volume_usd_priced, tx_count FROM daily_aggregates ORDER BY day",
+  );
+  return result.rows;
 }
 
 type PricingStateRow = {
@@ -163,6 +178,7 @@ beforeEach(async () => {
   await pool.query("DELETE FROM verification_jobs");
   await pool.query("DELETE FROM activities");
   await pool.query("DELETE FROM token_prices");
+  await pool.query("DELETE FROM daily_aggregates");
 });
 
 describe("claimDuePricingRows", () => {
@@ -173,6 +189,48 @@ describe("claimDuePricingRows", () => {
 
     expect(claimed.map((row) => row.activityId)).toEqual([activityId]);
     expect(claimed[0]!.priceHour.toISOString()).toBe("2026-08-04T10:00:00.000Z");
+    expect(claimed[0]!.aggregateDay).toBe(AGGREGATE_DAY);
+  });
+
+  it("anchors the hour and day buckets in UTC whatever the session timezone is", async () => {
+    await seedPricingActivity({ publicId: "kathmandu-session" });
+    const sessionClient = await pool.connect();
+    try {
+      await sessionClient.query("SET TIME ZONE 'Asia/Kathmandu'");
+      const claimed = await sessionClient.query<{ price_hour: Date; aggregate_day: string }>(
+        `SELECT date_trunc('hour', COALESCE(client_confirmed_at, block_time, verified_at) AT TIME ZONE 'utc')
+                  AT TIME ZONE 'utc' AS price_hour,
+                (COALESCE(client_confirmed_at, block_time, verified_at) AT TIME ZONE 'utc')::date::text
+                  AS aggregate_day
+         FROM activities`,
+      );
+      expect(claimed.rows[0]!.price_hour.toISOString()).toBe("2026-08-04T10:00:00.000Z");
+      expect(claimed.rows[0]!.aggregate_day).toBe(AGGREGATE_DAY);
+    } finally {
+      sessionClient.release();
+    }
+  });
+
+  it("falls back to the on-chain block time when the client sent no confirmation time", async () => {
+    await seedPricingActivity({
+      publicId: "block-time-anchor",
+      confirmedAt: null,
+      blockTime: "2026-08-05T22:30:00Z",
+    });
+
+    const claimed = await claimDuePricingRows(pool, 10, 60);
+
+    expect(claimed[0]!.priceHour.toISOString()).toBe("2026-08-05T22:00:00.000Z");
+    expect(claimed[0]!.aggregateDay).toBe("2026-08-05");
+  });
+
+  it("falls back to the verification time only when neither client nor chain time is known", async () => {
+    await seedPricingActivity({ publicId: "verified-at-anchor", confirmedAt: null, blockTime: null });
+
+    const claimed = await claimDuePricingRows(pool, 10, 60);
+
+    expect(claimed[0]!.priceHour.toISOString()).toBe("2026-08-06T09:00:00.000Z");
+    expect(claimed[0]!.aggregateDay).toBe("2026-08-06");
   });
 
   it("skips an activity that is not verified", async () => {
@@ -228,7 +286,7 @@ describe("claimDuePricingRows", () => {
        WHERE pricing_state = 'pending'
          AND verification_state IN ('verified_full','verified_basic')
          AND (pricing_next_attempt_at IS NULL OR pricing_next_attempt_at <= now())
-         AND COALESCE(client_confirmed_at, verified_at) IS NOT NULL
+         AND COALESCE(client_confirmed_at, block_time, verified_at) IS NOT NULL
        ORDER BY id LIMIT 50`,
     );
     const plan = explained.rows.map((row) => row["QUERY PLAN"]).join("\n");
@@ -276,6 +334,56 @@ describe("runPricingPass", () => {
     expect(state.priced_at).not.toBeNull();
   });
 
+  it("adds the IN leg to the priced daily volume under the shared UTC day key", async () => {
+    await seedPricingActivity({ publicId: "volume-in" });
+    const feed = recordingFeed({ [`base:${WETH.toLowerCase()}`]: wethPoint, [`base:${USDC.toLowerCase()}`]: usdcPoint });
+
+    await runPricingPass(depsWith(feed.feed));
+
+    expect(await pricedVolumeRows()).toEqual([
+      { day: AGGREGATE_DAY, volume_usd_priced: "2500", tx_count: 0 },
+    ]);
+  });
+
+  it("adds no priced volume for a role that carries none", async () => {
+    await seedPricingActivity({ publicId: "volume-role", eventRole: "bridge_fill_observed" });
+    const feed = recordingFeed({ [`base:${WETH.toLowerCase()}`]: wethPoint, [`base:${USDC.toLowerCase()}`]: usdcPoint });
+
+    await runPricingPass(depsWith(feed.feed));
+
+    expect(await pricedVolumeRows()).toEqual([{ day: AGGREGATE_DAY, volume_usd_priced: "0", tx_count: 0 }]);
+  });
+
+  it("counts an activity's priced volume once even if a lease expiry re-runs the pass over it", async () => {
+    const activityId = await seedPricingActivity({ publicId: "volume-once" });
+    const feed = recordingFeed({ [`base:${WETH.toLowerCase()}`]: wethPoint, [`base:${USDC.toLowerCase()}`]: usdcPoint });
+
+    await runPricingPass(depsWith(feed.feed));
+    await pool.query("UPDATE activities SET pricing_next_attempt_at = NULL WHERE id = $1", [
+      activityId.toString(),
+    ]);
+    await runPricingPass(depsWith(feed.feed));
+
+    expect(await pricedVolumeRows()).toEqual([
+      { day: AGGREGATE_DAY, volume_usd_priced: "2500", tx_count: 0 },
+    ]);
+  });
+
+  it("leaves the priced volume untouched when the pricing write is rolled back", async () => {
+    await seedPricingActivity({
+      publicId: "rollback-volume",
+      executedInRaw: "9".repeat(200_000),
+      tokenOutAddress: null,
+      tokenOutDecimals: null,
+      executedOutRaw: null,
+    });
+    const feed = recordingFeed({ [`base:${WETH.toLowerCase()}`]: wethPoint });
+
+    await runPricingPass(depsWith(feed.feed));
+
+    expect(await pricedVolumeRows()).toEqual([]);
+  });
+
   it("prices the EVM native sentinel leg under the chain native coin key", async () => {
     const activityId = await seedPricingActivity({
       publicId: "native-leg",
@@ -314,23 +422,68 @@ describe("runPricingPass", () => {
     expect(feed.calls).toHaveLength(0);
   });
 
-  it("reschedules a row whose chain has no price feed key and terminates it at the attempt ceiling", async () => {
+  it("is terminally unpriced on the first pass when the chain has no price feed key", async () => {
     const activityId = await seedPricingActivity({ publicId: "no-feed-key", chainId: 4663 });
     const feed = recordingFeed({});
 
     await runPricingPass(depsWith(feed.feed));
-    expect((await pricingStateOf(activityId)).pricing_state).toBe("pending");
-    expect((await pricingStateOf(activityId)).pricing_attempts).toBe(1);
 
-    await pool.query("UPDATE activities SET pricing_attempts = 4, pricing_next_attempt_at = NULL WHERE id = $1", [
-      activityId.toString(),
-    ]);
+    const state = await pricingStateOf(activityId);
+    expect(state.pricing_state).toBe("unpriced");
+    expect(state.pricing_attempts).toBe(0);
+    expect(feed.calls).toHaveLength(0);
+  });
+
+  it("is terminally unpriced on the first pass when the token address cannot be mapped to a coin", async () => {
+    const activityId = await seedPricingActivity({
+      publicId: "unmappable-address",
+      tokenInAddress: "0xdeadbeef",
+      tokenOutAddress: null,
+      tokenOutDecimals: null,
+      executedOutRaw: null,
+    });
+    const feed = recordingFeed({});
+
+    await runPricingPass(depsWith(feed.feed));
+
+    expect((await pricingStateOf(activityId)).pricing_state).toBe("unpriced");
+    expect(feed.calls).toHaveLength(0);
+  });
+
+  it("becomes terminally unpriced once the attempt ceiling is reached", async () => {
+    const activityId = await seedPricingActivity({
+      publicId: "ceiling",
+      pricingAttempts: config.PRICING_MAX_ATTEMPTS - 1,
+      tokenOutAddress: null,
+      tokenOutDecimals: null,
+      executedOutRaw: null,
+    });
+    const feed = recordingFeed({});
+
     await runPricingPass(depsWith(feed.feed));
 
     const state = await pricingStateOf(activityId);
     expect(state.pricing_state).toBe("unpriced");
-    expect(state.pricing_attempts).toBe(5);
-    expect(feed.calls).toHaveLength(0);
+    expect(state.pricing_attempts).toBe(config.PRICING_MAX_ATTEMPTS);
+  });
+
+  it("rejects a zero price rather than publishing it as a settled figure of zero", async () => {
+    const activityId = await seedPricingActivity({
+      publicId: "zero-price",
+      tokenOutAddress: null,
+      tokenOutDecimals: null,
+      executedOutRaw: null,
+    });
+    const feed = recordingFeed({
+      [`base:${WETH.toLowerCase()}`]: { priceUsd: "0", confidence: 0.99, atSecond: PRICE_HOUR_SECOND },
+    });
+
+    await runPricingPass(depsWith(feed.feed));
+
+    const state = await pricingStateOf(activityId);
+    expect(state.pricing_state).toBe("pending");
+    expect(state.usd_in_priced).toBeNull();
+    expect(await pricedVolumeRows()).toEqual([]);
   });
 
   it("rejects a feed point below the confidence gate and caches it as a miss", async () => {
@@ -436,7 +589,7 @@ describe("runPricingPass", () => {
   });
 
   it("does not refetch a cached miss before the retry window expires", async () => {
-    await seedPricingActivity({
+    const activityId = await seedPricingActivity({
       publicId: "fresh-miss",
       tokenOutAddress: null,
       tokenOutDecimals: null,
@@ -452,6 +605,46 @@ describe("runPricingPass", () => {
     await runPricingPass(depsWith(feed.feed));
 
     expect(feed.calls).toHaveLength(0);
+    expect((await pricingStateOf(activityId)).pricing_state).toBe("pending");
+  });
+
+  it("sleeps a miss-blocked row until the cached miss is refetchable, not on the transient ladder", async () => {
+    const activityId = await seedPricingActivity({
+      publicId: "miss-blocked-wake-up",
+      tokenOutAddress: null,
+      tokenOutDecimals: null,
+      executedOutRaw: null,
+    });
+    const seeded = await pool.query<{ refetchable_at: Date }>(
+      `INSERT INTO token_prices (chain_family, chain_id, token_address, price_hour, price_usd, confidence, source, fetched_at)
+       VALUES ('eip155', 8453, $1, $2::timestamptz, NULL, NULL, 'seed', now() - make_interval(hours => $3::int))
+       RETURNING fetched_at + make_interval(hours => $4::int) AS refetchable_at`,
+      [WETH.toLowerCase(), PRICE_HOUR, config.PRICE_MISS_RETRY_HOURS - 1, config.PRICE_MISS_RETRY_HOURS],
+    );
+    const refetchableAt = seeded.rows[0]!.refetchable_at;
+
+    await runPricingPass(depsWith(recordingFeed({}).feed));
+
+    const state = await pricingStateOf(activityId);
+    expect(state.pricing_state).toBe("pending");
+    expect(state.pricing_attempts).toBe(1);
+    expect(state.pricing_next_attempt_at!.getTime()).toBeGreaterThanOrEqual(refetchableAt.getTime() - 60_000);
+  });
+
+  it("keeps the short transient ladder when the feed is unavailable rather than cache-blocked", async () => {
+    const activityId = await seedPricingActivity({
+      publicId: "transient-ladder",
+      tokenOutAddress: null,
+      tokenOutDecimals: null,
+      executedOutRaw: null,
+    });
+    const before = Date.now();
+
+    await runPricingPass(depsWith(rejectingFeed().feed));
+
+    const state = await pricingStateOf(activityId);
+    expect(state.pricing_attempts).toBe(1);
+    expect(state.pricing_next_attempt_at!.getTime() - before).toBeLessThan(10 * 60_000);
   });
 
   it("refetches a cached miss once the retry window has passed", async () => {
@@ -588,7 +781,7 @@ describe("runPricingPass", () => {
     const coverage: Record<string, unknown>[] = [];
     await seedPricingActivity({ publicId: "covered-priced" });
     await seedPricingActivity({
-      publicId: "covered-unpriced",
+      publicId: "covered-legless",
       protocol: "relay",
       tokenInAddress: null,
       tokenInDecimals: null,
@@ -611,7 +804,8 @@ describe("runPricingPass", () => {
       {
         processed: 2,
         serverPriced: 1,
-        unpriced: 1,
+        unpriceable: 0,
+        nothingToPrice: 1,
         rescheduled: 0,
         byChainProtocol: [
           {
@@ -620,7 +814,8 @@ describe("runPricingPass", () => {
             chainId: "8453",
             protocol: "kyberswap",
             serverPriced: 1,
-            unpriced: 0,
+            unpriceable: 0,
+            nothingToPrice: 0,
           },
           {
             chainSlug: "base",
@@ -628,10 +823,43 @@ describe("runPricingPass", () => {
             chainId: "8453",
             protocol: "relay",
             serverPriced: 0,
-            unpriced: 1,
+            unpriceable: 0,
+            nothingToPrice: 1,
           },
         ],
       },
     ]);
+  });
+
+  it("keeps a legless activity out of the coverage ratio and counts a feed failure in it", async () => {
+    const coverage: Record<string, unknown>[] = [];
+    await seedPricingActivity({ publicId: "ratio-priced" });
+    await seedPricingActivity({
+      publicId: "ratio-legless",
+      tokenInAddress: null,
+      tokenInDecimals: null,
+      executedInRaw: null,
+      tokenOutAddress: null,
+      tokenOutDecimals: null,
+      executedOutRaw: null,
+    });
+    await seedPricingActivity({ publicId: "ratio-unmappable", chainId: 4663 });
+    const feed = recordingFeed({ [`base:${WETH.toLowerCase()}`]: wethPoint, [`base:${USDC.toLowerCase()}`]: usdcPoint });
+    const capturingLogger = {
+      ...logger,
+      info: (payload: Record<string, unknown>, message: string) => {
+        if (message === "pricing coverage") coverage.push(payload);
+      },
+    } as unknown as PricingLoopDeps["logger"];
+
+    await runPricingPass(depsWith(feed.feed, { logger: capturingLogger }));
+
+    expect(coverage[0]).toMatchObject({
+      processed: 3,
+      serverPriced: 1,
+      unpriceable: 1,
+      nothingToPrice: 1,
+      rescheduled: 0,
+    });
   });
 });

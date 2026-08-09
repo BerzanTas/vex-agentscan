@@ -49,9 +49,16 @@ export function makeDefiLlamaPriceFeed(config: Config): PriceFeed {
     const response = await requestJson(url);
     const parsed = historicalResponseSchema.safeParse(response);
     if (!parsed.success) throw new PriceFeedUnavailableError("unexpected response body");
-    for (const [coinKey, quote] of Object.entries(parsed.data.coins)) {
+    const quotes = Object.entries(parsed.data.coins);
+    let recognisedQuotes = 0;
+    for (const [coinKey, quote] of quotes) {
       const point = pricePointFrom(quote);
-      if (point !== null) into.set(coinKey, point);
+      if (point === null) continue;
+      recognisedQuotes += 1;
+      into.set(coinKey, point);
+    }
+    if (quotes.length > 0 && recognisedQuotes === 0) {
+      throw new PriceFeedUnavailableError("no quote matched the documented shape");
     }
   }
 
