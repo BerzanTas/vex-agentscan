@@ -257,10 +257,10 @@ describe("GET /api/agents/:name over two protocols and two chains", () => {
     expect(page.activityCount).toBe(4);
     expect(page.activitiesPerDay30d).toBe(0.13);
     expect(page.unpricedSharePct).toBe(25);
+    expect(page.unpriced30dSharePct).toBe(25);
     expect(page.truncated).toBe(false);
-    expect(page.firstSeenSeconds).toBeGreaterThan(page.lastSeenSeconds);
-    expect(Math.round(page.firstSeenSeconds / 86_400)).toBe(3);
-    expect(Math.round(page.lastSeenSeconds / 86_400)).toBe(1);
+    expect(page.firstSeenSeconds).toBe(3 * 86_400);
+    expect(page.lastSeenSeconds).toBe(86_400);
   });
 
   it("labels a hit as cacheable for the read cache window", async () => {
@@ -322,7 +322,14 @@ describe("GET /api/agents/:name past the row cap", () => {
     expect(page.activityCount).toBe(3);
     expect(page.capitalDeployedPeak30dUsd).toBe("100");
     expect(page.dailyDeployedUsd.filter((point) => point.usd !== "0")).toHaveLength(3);
-    expect(Math.round(page.firstSeenSeconds / 86_400)).toBe(3);
+  });
+
+  it("dates first seen from the agent's whole history, not from the capped read", async () => {
+    const response = await cappedApp.inject({ method: "GET", url: `/api/agents/${BOUND_NAME}` });
+    const page = response.json<AgentPageDto>();
+
+    expect(page.firstSeenSeconds).toBe(5 * 86_400);
+    expect(page.lastSeenSeconds).toBe(86_400);
   });
 });
 
@@ -375,5 +382,62 @@ describe("GET /api/agents/:name win rate at the floor", () => {
     const page = (await agentPage(BOUND_NAME)).json<AgentPageDto>();
     expect(page.closedRoundTrips).toBe(5);
     expect(page.winRate).toBe(1);
+  });
+});
+
+describe("GET /api/agents/:name resolution of published figures", () => {
+  beforeAll(async () => {
+    await resetData(db.pool);
+    await seedAgent(db.pool, { agentHash: BOUND_AGENT, name: BOUND_NAME });
+    await seedActivity(db.pool, {
+      agentHash: BOUND_AGENT,
+      daysAgo: 2,
+      usdInPriced: "1013.478912345678901234",
+      usdOutPriced: "1009.111111111111111111",
+    });
+    await seedActivity(db.pool, {
+      agentHash: BOUND_AGENT,
+      daysAgo: 1,
+      usdInPriced: "0.004999999999999999",
+      usdOutPriced: "0.004999999999999999",
+    });
+  });
+
+  it("stores the sub-cent figures the page is built from", async () => {
+    const stored = await db.pool.query<{ usd_in_priced: string }>(
+      "SELECT usd_in_priced::text FROM activities WHERE agent_hash = $1 ORDER BY id LIMIT 1",
+      [BOUND_AGENT],
+    );
+    expect(stored.rows[0]?.usd_in_priced).toBe("1013.478912345678901234");
+  });
+
+  it("rounds every published USD figure to cents", async () => {
+    const page = (await agentPage(BOUND_NAME)).json<AgentPageDto>();
+    const published = [
+      page.capitalDeployedPeak30dUsd,
+      page.realizedResultUsd,
+      ...page.dailyDeployedUsd.map((point) => point.usd),
+      ...page.protocolBreakdown.map((entry) => entry.volumeUsd),
+      ...page.chainBreakdown.map((entry) => entry.volumeUsd),
+    ];
+
+    for (const value of published) expect(value).toMatch(/^-?\d+(\.\d{1,2})?$/);
+    expect(page.capitalDeployedPeak30dUsd).toBe("1013.48");
+    expect(page.protocolBreakdown).toEqual([
+      { protocol: "kyberswap", volumeUsd: "1013.48", txCount: 2 },
+    ]);
+    expect(page.dailyDeployedUsd.filter((point) => point.usd !== "0").map((point) => point.usd)).toEqual([
+      "1013.48",
+    ]);
+    expect(page.dailyDeployedUsd[28]?.usd).toBe("0");
+  });
+
+  it("coarsens both seen ages to whole hours", async () => {
+    const page = (await agentPage(BOUND_NAME)).json<AgentPageDto>();
+
+    expect(page.firstSeenSeconds % 3600).toBe(0);
+    expect(page.lastSeenSeconds % 3600).toBe(0);
+    expect(page.firstSeenSeconds).toBe(2 * 86_400);
+    expect(page.lastSeenSeconds).toBe(86_400);
   });
 });

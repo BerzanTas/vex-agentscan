@@ -3,13 +3,17 @@ import {
   capitalDeployed,
   chainBreakdown,
   protocolBreakdown,
+  publishedUsd,
   realizedResult,
+  unpriced30dSharePct,
   unpricedSharePct,
   winRate,
   type AgentActivity,
   type ChainVolume,
 } from "@agentscan/core";
 import type { ResolveChain } from "./app.js";
+
+const SEEN_RESOLUTION_SECONDS = 3600;
 
 export type DailyDeployedDto = { day: string; usd: string };
 
@@ -32,12 +36,14 @@ export type AgentPageDto = {
   firstSeenSeconds: number;
   lastSeenSeconds: number;
   unpricedSharePct: number;
+  unpriced30dSharePct: number;
   truncated: boolean;
 };
 
 export type AgentPageInput = {
   name: string;
   activities: readonly AgentActivity[];
+  firstObservedAtSeconds: number;
   truncated: boolean;
   minimumRoundTrips: number;
   nowSeconds: number;
@@ -55,19 +61,16 @@ function chainSlugOf(chain: ChainVolume, resolveChain: ResolveChain): string | n
   return null;
 }
 
-function ageSecondsOf(observedAtSeconds: number, nowSeconds: number): number {
-  return Math.max(0, Math.floor(nowSeconds - observedAtSeconds));
+function seenAgeSecondsOf(observedAtSeconds: number, nowSeconds: number): number {
+  const age = Math.max(0, Math.floor(nowSeconds - observedAtSeconds));
+  return Math.floor(age / SEEN_RESOLUTION_SECONDS) * SEEN_RESOLUTION_SECONDS;
 }
 
-type SeenSpan = { firstSeenSeconds: number; lastSeenSeconds: number };
-
-function seenSpanOf(activities: readonly AgentActivity[], nowSeconds: number): SeenSpan {
-  const observed = activities.map((activity) => activity.observedAtSeconds);
-  if (observed.length === 0) return { firstSeenSeconds: 0, lastSeenSeconds: 0 };
-  return {
-    firstSeenSeconds: ageSecondsOf(Math.min(...observed), nowSeconds),
-    lastSeenSeconds: ageSecondsOf(Math.max(...observed), nowSeconds),
-  };
+function latestObservedAtSecondsOf(activities: readonly AgentActivity[], fallback: number): number {
+  return activities.reduce(
+    (latest, activity) => Math.max(latest, activity.observedAtSeconds),
+    fallback,
+  );
 }
 
 export function toAgentPageDto(input: AgentPageInput, resolveChain: ResolveChain): AgentPageDto {
@@ -75,22 +78,34 @@ export function toAgentPageDto(input: AgentPageInput, resolveChain: ResolveChain
   const realized = realizedResult(input.activities);
   return {
     name: input.name,
-    capitalDeployedPeak30dUsd: deployed.peakUsd,
-    dailyDeployedUsd: deployed.daily,
-    realizedResultUsd: realized.realizedUsd,
+    capitalDeployedPeak30dUsd: publishedUsd(deployed.peakUsd),
+    dailyDeployedUsd: deployed.daily.map((point) => ({
+      day: point.day,
+      usd: publishedUsd(point.usd),
+    })),
+    realizedResultUsd: publishedUsd(realized.realizedUsd),
     closedRoundTrips: realized.closedRoundTrips,
     unmatchedDisposals: realized.unmatchedDisposals,
     winRate: winRate(realized, input.minimumRoundTrips),
-    protocolBreakdown: protocolBreakdown(input.activities),
+    protocolBreakdown: protocolBreakdown(input.activities).map((entry) => ({
+      protocol: entry.protocol,
+      volumeUsd: publishedUsd(entry.volumeUsd),
+      txCount: entry.txCount,
+    })),
     chainBreakdown: chainBreakdown(input.activities).map((chain) => ({
       chainSlug: chainSlugOf(chain, resolveChain),
-      volumeUsd: chain.volumeUsd,
+      volumeUsd: publishedUsd(chain.volumeUsd),
       txCount: chain.txCount,
     })),
     activityCount: input.activities.length,
     activitiesPerDay30d: activitiesPerDay30d(input.activities, input.nowSeconds),
-    ...seenSpanOf(input.activities, input.nowSeconds),
+    firstSeenSeconds: seenAgeSecondsOf(input.firstObservedAtSeconds, input.nowSeconds),
+    lastSeenSeconds: seenAgeSecondsOf(
+      latestObservedAtSecondsOf(input.activities, input.firstObservedAtSeconds),
+      input.nowSeconds,
+    ),
     unpricedSharePct: unpricedSharePct(input.activities),
+    unpriced30dSharePct: unpriced30dSharePct(input.activities, input.nowSeconds),
     truncated: input.truncated,
   };
 }

@@ -60,19 +60,25 @@ function agentActivityFrom(row: AgentActivityQueryRow): AgentActivity {
   };
 }
 
-export async function publishedAgentHash(pool: pg.Pool, name: string): Promise<string | null> {
-  const result = await pool.query<{ agent_hash: string }>(
-    `SELECT ag.agent_hash
+export type PublishedAgent = { agentHash: string; firstObservedAtSeconds: number };
+
+export async function publishedAgent(pool: pg.Pool, name: string): Promise<PublishedAgent | null> {
+  const result = await pool.query<{ agent_hash: string; first_observed_at_seconds: string }>(
+    `SELECT ag.agent_hash,
+            floor(extract(epoch FROM MIN(${OBSERVED_AT})))::bigint::text AS first_observed_at_seconds
      FROM agents ag
-     WHERE ag.name = $1
-       AND ag.status = 'active'
-       AND EXISTS (SELECT 1
-                   FROM activities a
-                   WHERE a.agent_hash = ag.agent_hash
-                     AND a.verification_state IN ${VERIFIED_STATES})`,
+     JOIN activities a ON a.agent_hash = ag.agent_hash
+                      AND a.verification_state IN ${VERIFIED_STATES}
+     WHERE ag.name = $1 AND ag.status = 'active'
+     GROUP BY ag.agent_hash`,
     [name],
   );
-  return result.rows[0]?.agent_hash ?? null;
+  const row = result.rows[0];
+  if (row === undefined) return null;
+  return {
+    agentHash: row.agent_hash,
+    firstObservedAtSeconds: Number(row.first_observed_at_seconds),
+  };
 }
 
 export async function publishedAgentNames(
@@ -104,7 +110,7 @@ export async function agentPageActivities(
             a.usd_out_priced::text AS usd_out_priced,
             a.token_in_address, a.token_in_decimals, a.executed_in_raw,
             a.token_out_address, a.token_out_decimals, a.executed_out_raw,
-            extract(epoch FROM ${OBSERVED_AT})::bigint::text AS observed_at_seconds
+            floor(extract(epoch FROM ${OBSERVED_AT}))::bigint::text AS observed_at_seconds
      FROM activities a
      WHERE a.agent_hash = $1
        AND a.verification_state IN ${VERIFIED_STATES}
