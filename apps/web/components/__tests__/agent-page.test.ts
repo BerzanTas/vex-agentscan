@@ -76,6 +76,10 @@ function markupWithHostileLabel(label: string): string {
   });
 }
 
+function disposalsNote(markup: string): string {
+  return markup.match(/<p class="max-w-3xl text-xs text-text-muted">(.*?)<\/p>/)?.[1] ?? "";
+}
+
 function rowLabels(markup: string): string[] {
   return [...markup.matchAll(/<td class="text-text-primary">(.*?)<\/td>/g)].map((match) =>
     (match[1] ?? "").replace(/<[^>]*>/g, ""),
@@ -125,18 +129,11 @@ describe("AgentPageView", () => {
     expect(markup).toContain("/ day");
   });
 
-  it("counts the disposals that outran the priced inventory", () => {
-    const markup = viewMarkup(agent);
+  it("never states the closed round trip count inside the disposals note", () => {
+    const note = disposalsNote(viewMarkup(agent));
 
-    expect(markup).toContain("2 disposals consumed more than the priced inventory available");
-    expect(markup).toContain("the matched portion still closes a round trip");
-  });
-
-  it("never presents the disposal counts as a partition of all disposals", () => {
-    const markup = viewMarkup(agent);
-
-    expect(markup).not.toMatch(/2 (of|out of) 18/);
-    expect(markup).not.toContain("18 closed, 2 unmatched");
+    expect(note).toContain("2 disposals");
+    expect(note).not.toContain(String(agent.closedRoundTrips));
   });
 
   it("lists every protocol and chain of the breakdown", () => {
@@ -166,6 +163,16 @@ describe("AgentPageView", () => {
     expect(markup).toContain("4.2% could not be priced");
   });
 
+  it("renders one breakdown row per entry and no total, which must never be summed", () => {
+    const markup = viewMarkup(agent);
+
+    expect(rowLabels(markup)).toHaveLength(
+      agent.protocolBreakdown.length + agent.chainBreakdown.length,
+    );
+    expect(markup).not.toContain("<tfoot");
+    expect(markup).not.toMatch(/Total/i);
+  });
+
   it("renders no transaction hash even when one arrives in a label field", () => {
     const markup = markupWithHostileLabel(TX_HASH);
 
@@ -188,10 +195,10 @@ describe("AgentPageView", () => {
     expect(rowLabels(markup)).toEqual(["unknown protocol", "unknown chain"]);
   });
 
-  it("keeps a hostile label out of every attribute too, with the whole page rendered", () => {
+  it("keeps a hostile label out of the page with every conditional branch rendered", () => {
     const markup = markupWithHostileLabel(TX_HASH);
 
-    expect(markup).not.toContain(TX_HASH);
+    expect(markup).not.toMatch(/0x[0-9a-fA-F]{64}/);
     expect(markup).toContain("most recent activities only");
     expect(markup).toContain("4.2% could not be priced");
   });
@@ -231,6 +238,40 @@ describe("AgentPagePerformance", () => {
     expect(markup).toContain("0%");
     expect(markup).not.toContain("1%");
   });
+
+  it("claims no closed round trip when every unmatched disposal matched nothing", () => {
+    const note = disposalsNote(
+      performanceMarkup({ ...agent, closedRoundTrips: 0, unmatchedDisposals: 3, winRate: null }),
+    );
+
+    expect(note).toContain("3 disposals had no recorded acquisition");
+    expect(note.split("closed a round trip")).toHaveLength(2);
+    expect(note).toContain("where an acquisition did match, that amount closed a round trip");
+  });
+
+  it("keeps the same sentence true when the disposals matched only partially", () => {
+    const note = disposalsNote(
+      performanceMarkup({ ...agent, closedRoundTrips: 18, unmatchedDisposals: 2 }),
+    );
+
+    expect(note).toContain("2 disposals had no recorded acquisition");
+    expect(note).toContain("where an acquisition did match, that amount closed a round trip");
+  });
+
+  it("says nothing about disposals when every one of them matched exactly", () => {
+    const markup = performanceMarkup({ ...agent, closedRoundTrips: 18, unmatchedDisposals: 0 });
+
+    expect(markup).not.toContain("disposal");
+  });
+
+  it("counts a single unmatched disposal in the singular", () => {
+    const note = disposalsNote(
+      performanceMarkup({ ...agent, closedRoundTrips: 0, unmatchedDisposals: 1 }),
+    );
+
+    expect(note).toContain("1 disposal had no recorded acquisition");
+    expect(note).not.toContain("1 disposals");
+  });
 });
 
 describe("AgentPageDisclosure", () => {
@@ -241,12 +282,20 @@ describe("AgentPageDisclosure", () => {
     expect(markup).toContain("0% could not be priced");
   });
 
-  it("binds the whole-read share to the realized result and the breakdowns", () => {
+  it("binds the whole-read share to the priced-only figures", () => {
     const markup = disclosureMarkup(12.5, 4.2, false);
 
+    expect(markup).toContain("12.5% of this agent&#x27;s verified activity could not be priced.");
     expect(markup).toContain(
-      "12.5% of this agent&#x27;s verified activity could not be priced and is excluded from the realized result and the protocol and chain breakdowns.",
+      "Those transactions are excluded from the realized result, the win rate and the breakdown volumes, but are still counted in the transaction counts.",
     );
+  });
+
+  it("does not claim unpriced activity is missing from the breakdown transaction counts", () => {
+    const markup = disclosureMarkup(12.5, 4.2, false);
+
+    expect(markup).not.toContain("excluded from the realized result and the protocol and chain");
+    expect(markup).toContain("still counted in the transaction counts");
   });
 
   it("binds the trailing thirty day share to the deployed capital and its chart", () => {

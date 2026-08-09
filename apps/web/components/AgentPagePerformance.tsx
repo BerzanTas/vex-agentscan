@@ -22,14 +22,14 @@ function winRateNote(winRate: number | null): string | undefined {
   return undefined;
 }
 
-const UNMATCHED_PORTION_SENTENCE =
-  "The unmatched portion contributes nothing to the realized result; the matched portion still closes a round trip.";
+const UNMATCHED_AMOUNT_SENTENCE =
+  "The unmatched amount contributes nothing to the realized result; where an acquisition did match, that amount closed a round trip.";
 
 function unmatchedDisposalsNote(count: number): string {
   if (count === 1) {
-    return `1 disposal consumed more than the priced inventory available. ${UNMATCHED_PORTION_SENTENCE}`;
+    return `1 disposal had no recorded acquisition behind part or all of the amount disposed. ${UNMATCHED_AMOUNT_SENTENCE}`;
   }
-  return `${count.toLocaleString("en-US")} disposals consumed more than the priced inventory available. ${UNMATCHED_PORTION_SENTENCE}`;
+  return `${count.toLocaleString("en-US")} disposals had no recorded acquisition behind part or all of the amount disposed. ${UNMATCHED_AMOUNT_SENTENCE}`;
 }
 
 export function AgentPagePerformance({ agent }: { agent: AgentPageDto }) {
