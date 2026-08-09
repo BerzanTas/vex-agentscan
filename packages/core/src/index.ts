@@ -28,8 +28,20 @@ export {
   type IngestEventStatus,
   type IngestOutcome,
 } from "./ingest-decision.js";
-export { nextBackoff } from "./backoff.js";
+export { backoffDelayMs, nextBackoff } from "./backoff.js";
 export { generatePublicId } from "./public-id.js";
+export type { PriceFeed, PricePoint, PriceQuery } from "./pricing/price-feed.js";
+export { resolveCoinKey, type CoinKeyQuery, type CoinKeyResolution } from "./pricing/coin-key.js";
+export { isPriceAcceptable, type PriceAcceptanceGate } from "./pricing/acceptance.js";
+export { legUsd, plainDecimalFrom } from "./pricing/decimal.js";
+export {
+  decidePricingOutcome,
+  presentLeg,
+  priceDivergenceRatio,
+  type ActivityLeg,
+  type LegPricing,
+  type PricingOutcome,
+} from "./pricing/pricing-decision.js";
 export {
   rangeWindowSeconds,
   resolveChartRange,
