@@ -427,9 +427,10 @@ describe("windows where the coverage note must not claim the window was empty", 
       totalVolumeUsd: "0",
       totalTx: 1,
     });
+    expect(await getJson<TokenStatDto[]>("/api/tokens?range=24h")).toEqual([]);
   });
 
-  it("counts a priced swap whose in leg never arrived, and publishes no usd for it", async () => {
+  it("discloses a priced swap whose in leg never arrived as one it could not price", async () => {
     await seedWindow(db.pool, []);
     await seedActivity(db.pool, {
       ...pricedSwap,
@@ -440,10 +441,10 @@ describe("windows where the coverage note must not claim the window was empty", 
     await bookAggregatesForSeededActivities(db.pool);
 
     expect(await coverageOf()).toEqual({
-      pricedActivityCount: 1,
-      unpricedActivityCount: 0,
+      pricedActivityCount: 0,
+      unpricedActivityCount: 1,
       pendingActivityCount: 0,
-      pricedCoverage: 1,
+      pricedCoverage: 0,
     });
     expect(await getJson<StatsDto>("/api/stats")).toMatchObject({
       totalVolumeUsd: "0",

@@ -29,6 +29,7 @@ const SPAN_CTE = `
 
 const IN_WINDOW = `((SELECT first_start FROM span) IS NULL
        OR ${OBSERVED_AT} >= to_timestamp((SELECT first_start FROM span)))`;
+const VOLUME_LEG = "a.event_role IN ('swap','bridge_deposit')";
 
 const LISTED_LEGS_CTE = `
   legs AS (
@@ -37,6 +38,7 @@ const LISTED_LEGS_CTE = `
            a.protocol, a.agent_hash, ${serverPricedUsdIn("a")} AS usd, ${OBSERVED_AT} AS observed_at
     FROM activities a
     WHERE a.verification_state IN ${VERIFIED_STATES}
+      AND ${VOLUME_LEG}
       AND lower(a.token_in_address) IS NOT NULL
       AND ${IN_WINDOW}
     UNION ALL
@@ -45,6 +47,7 @@ const LISTED_LEGS_CTE = `
            a.protocol, a.agent_hash, ${serverPricedUsdOut("a")}, ${OBSERVED_AT}
     FROM activities a
     WHERE a.verification_state IN ${VERIFIED_STATES}
+      AND ${VOLUME_LEG}
       AND lower(a.token_out_address) IS NOT NULL
       AND ${IN_WINDOW}
   )`;
@@ -55,6 +58,7 @@ const TOKEN_LEGS_CTE = `
            a.protocol, a.agent_hash, ${serverPricedUsdIn("a")} AS usd, ${OBSERVED_AT} AS observed_at
     FROM activities a
     WHERE a.verification_state IN ${VERIFIED_STATES}
+      AND ${VOLUME_LEG}
       AND a.chain_family = $3 AND a.chain_id = $4::bigint
       AND lower(a.token_in_address) = $5
       AND ${IN_WINDOW}
@@ -63,6 +67,7 @@ const TOKEN_LEGS_CTE = `
            a.protocol, a.agent_hash, ${serverPricedUsdOut("a")}, ${OBSERVED_AT}
     FROM activities a
     WHERE a.verification_state IN ${VERIFIED_STATES}
+      AND ${VOLUME_LEG}
       AND a.chain_family = $3 AND a.chain_id = $4::bigint
       AND lower(a.token_out_address) = $5
       AND ${IN_WINDOW}
@@ -136,12 +141,14 @@ async function sparklineSeries(
               ${serverPricedUsdIn("a")} AS usd, ${OBSERVED_AT} AS observed_at
        ${SPARKLINE_LEG_JOIN} AND lower(a.token_in_address) = t.address
        WHERE a.verification_state IN ${VERIFIED_STATES}
+         AND ${VOLUME_LEG}
          AND ${SPARKLINE_WINDOW}
        UNION ALL
        SELECT a.id, t.chain_family, t.chain_id, t.address,
               ${serverPricedUsdOut("a")}, ${OBSERVED_AT}
        ${SPARKLINE_LEG_JOIN} AND lower(a.token_out_address) = t.address
        WHERE a.verification_state IN ${VERIFIED_STATES}
+         AND ${VOLUME_LEG}
          AND ${SPARKLINE_WINDOW}
      ),
      bucketed AS (
