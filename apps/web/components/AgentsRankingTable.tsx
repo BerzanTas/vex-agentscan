@@ -1,5 +1,5 @@
 import type { AgentStatDto } from "../lib/api";
-import { formatAge, formatUsdCompact, formatUsdEstimate } from "../lib/format";
+import { formatAge, formatUsdCompact, formatUsdAmount } from "../lib/format";
 import { EmptyPanel } from "./EmptyPanel";
 
 function countLabel(count: number): string {
@@ -37,10 +37,9 @@ export function AgentsRankingTable({
               <td className="font-mono text-text-primary">{agent.alias}</td>
               <td
                 className="whitespace-nowrap font-mono text-text-primary"
-                title={`$${formatUsdEstimate(agent.volumeUsd)}`}
+                title={`$${formatUsdAmount(agent.volumeUsd)}`}
               >
                 ${formatUsdCompact(agent.volumeUsd)}
-                <span className="ml-1 text-xs text-text-muted">est.</span>
               </td>
               <td className="font-mono text-xs text-text-secondary">{countLabel(agent.txCount)}</td>
               <td className="font-mono text-xs text-text-secondary">

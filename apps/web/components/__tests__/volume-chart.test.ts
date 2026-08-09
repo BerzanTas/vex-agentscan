@@ -237,8 +237,8 @@ describe("formatBucketMoment", () => {
 });
 
 describe("formatBucketValue", () => {
-  it("marks a volume value as an estimate", () => {
-    expect(formatBucketValue(point, "volume")).toBe("$12,045.44 est.");
+  it("renders a volume value without an estimate suffix", () => {
+    expect(formatBucketValue(point, "volume")).toBe("$12,045.44");
   });
 
   it("shows a grouped integer without the estimate marker for transactions", () => {

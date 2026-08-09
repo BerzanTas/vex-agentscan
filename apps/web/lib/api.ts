@@ -113,6 +113,13 @@ export type VerificationStatsDto = {
   chains: ChainTierDto[];
 };
 
+export type PricingCoverageDto = {
+  pricedActivityCount: number;
+  unpricedActivityCount: number;
+  pendingActivityCount: number;
+  pricedCoverage: number;
+};
+
 export type ActivityRowDto = {
   publicId: string;
   kind: string;
@@ -256,6 +263,10 @@ export function verificationPath(): string {
   return "/api/verification";
 }
 
+export function pricingCoveragePath(range: ChartRange): string {
+  return pathWithQuery("/api/pricing-coverage", [["range", range]]);
+}
+
 export function protocolsPath(): string {
   return "/api/protocols";
 }
@@ -315,6 +326,12 @@ export async function fetchBridgeRoutes(
 
 export async function fetchVerificationStats(): Promise<VerificationStatsDto> {
   return readApiJson(verificationPath());
+}
+
+export async function fetchPricingCoverage(
+  range: ChartRange = DEFAULT_CHART_RANGE,
+): Promise<PricingCoverageDto> {
+  return readApiJson(pricingCoveragePath(range));
 }
 
 export async function fetchProtocols(): Promise<ProtocolStatDto[]> {

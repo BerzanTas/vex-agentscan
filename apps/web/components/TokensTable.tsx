@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { TokenStatDto } from "../lib/api";
-import { formatAge, formatUsdCompact, formatUsdEstimate } from "../lib/format";
+import { formatAge, formatUsdCompact, formatUsdAmount } from "../lib/format";
 import { ChainBadge } from "./ChainBadge";
 import { EmptyPanel } from "./EmptyPanel";
 import { ProtocolBadge } from "./ProtocolBadge";
@@ -83,10 +83,9 @@ export function TokensTable({ rows, emptyMessage }: { rows: TokenStatDto[]; empt
               </td>
               <td
                 className="whitespace-nowrap font-mono text-text-primary"
-                title={`$${formatUsdEstimate(token.volumeUsd)}`}
+                title={`$${formatUsdAmount(token.volumeUsd)}`}
               >
                 ${formatUsdCompact(token.volumeUsd)}
-                <span className="ml-1 text-xs text-text-muted">est.</span>
               </td>
               <td className="font-mono text-xs text-text-secondary">
                 {token.txCount.toLocaleString("en-US")}

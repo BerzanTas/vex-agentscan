@@ -1,5 +1,5 @@
 import type { ChartPointDto, StatsDto } from "../lib/api";
-import { formatUsdCompact, formatUsdEstimate } from "../lib/format";
+import { formatUsdCompact, formatUsdAmount } from "../lib/format";
 import { cumulativeSeriesEndingAt, txValues, volumeValues } from "../lib/stat-series";
 import { CountUpValue, type CountUpKind } from "./CountUpValue";
 import { CursorLight } from "./CursorLight";
@@ -16,18 +16,16 @@ type StatCell = {
   finalText: string;
   exactText: string;
   countUp: CountUpKind;
-  unit?: string;
   footer: StatFooter;
 };
 
-function usdCell(label: string, usdEstimate: string, trend: number[]): StatCell {
+function usdCell(label: string, usdPriced: string, trend: number[]): StatCell {
   return {
     label,
-    target: Number(usdEstimate),
-    finalText: `$${formatUsdCompact(usdEstimate)}`,
-    exactText: `$${formatUsdEstimate(usdEstimate)}`,
+    target: Number(usdPriced),
+    finalText: `$${formatUsdCompact(usdPriced)}`,
+    exactText: `$${formatUsdAmount(usdPriced)}`,
     countUp: "usdCompact",
-    unit: "est.",
     footer: { trend },
   };
 }
@@ -92,7 +90,6 @@ export function StatCards({ stats, series }: { stats: StatsDto; series: ChartPoi
                   finalText={cell.finalText}
                   kind={cell.countUp}
                 />
-                {cell.unit !== undefined && <span className="stat-cell-unit">{cell.unit}</span>}
               </p>
               <StatCellFooter label={cell.label} footer={cell.footer} />
             </div>

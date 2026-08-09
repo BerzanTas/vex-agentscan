@@ -71,11 +71,11 @@ describe("AgentsRankingTable", () => {
     expect(markup).not.toContain("/agents/");
   });
 
-  it("marks the observed volume as an estimate and keeps the exact value in the title", () => {
+  it("keeps the exact volume in the title and carries no estimate badge", () => {
     const markup = agentsMarkup([agent]);
 
     expect(markup).toContain('title="$1,284,310.55"');
-    expect(markup).toContain(">est.<");
+    expect(markup).not.toContain(">est.<");
   });
 
   it("ranks the rows by their position in the list", () => {
@@ -139,11 +139,11 @@ describe("ProtocolsRankingTable", () => {
     expect(markup).toContain("300 bridge");
   });
 
-  it("marks the observed volume as an estimate and keeps the exact value in the title", () => {
+  it("keeps the exact volume in the title and carries no estimate badge", () => {
     const markup = protocolsMarkup([protocol]);
 
     expect(markup).toContain('title="$985,420.10"');
-    expect(markup).toContain(">est.<");
+    expect(markup).not.toContain(">est.<");
   });
 
   it("shows the empty message instead of a table when there are no protocols", () => {

@@ -4,7 +4,7 @@ const TAGLINE =
   "Public explorer of Vex agent activity. Swaps and bridges reported by Vex installations, each checked against the chain it declares.";
 
 const DISCLAIMER =
-  "All USD values are estimates supplied at quote time, never settlement prices. Activity is reported by Vex installations and verified on-chain.";
+  "Per-activity USD figures are client estimates supplied at quote time; aggregate USD figures are priced by AgentScan. Activity is reported by Vex installations and verified on-chain.";
 
 export function SiteFooter() {
   return (

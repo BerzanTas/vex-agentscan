@@ -18,7 +18,7 @@ type ActivitySeed = {
   protocol: string;
   fromChainId: string | null;
   toChainId: string | null;
-  usdInEst: string;
+  usdInPriced: string;
   minutesAgo: number;
 };
 
@@ -33,11 +33,11 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
   await pool.query(
     `INSERT INTO activities
        (agent_hash, source_row_id, public_id, source_execution_id, event_index, kind, event_role, status,
-        protocol, chain_family, chain_id, from_chain_id, to_chain_id, usd_in_est, tx_hash,
+        protocol, chain_family, chain_id, from_chain_id, to_chain_id, usd_in_priced, pricing_state, tx_hash,
         client_created_at, client_confirmed_at, statuses_seen, verification_state,
         received_at, received_schema_version)
      VALUES ($1, $2, $2, 'exec-1', 0, $3, $4, 'confirmed',
-             $5, 'eip155', 8453, $6::bigint, $7::bigint, $8::numeric, '0xabc',
+             $5, 'eip155', 8453, $6::bigint, $7::bigint, $8::numeric, 'server_priced', '0xabc',
              now() - make_interval(mins => $9::int), now() - make_interval(mins => $9::int),
              ARRAY['confirmed'], $10, now(), 1)`,
     [
@@ -48,7 +48,7 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
       seed.protocol,
       seed.fromChainId,
       seed.toChainId,
-      seed.usdInEst,
+      seed.usdInPriced,
       seed.minutesAgo,
       seed.verificationState,
     ],
@@ -73,20 +73,20 @@ beforeAll(async () => {
      VALUES ($1, 'token-sha', 1, now())`,
     [agentHash],
   );
-  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "khalani-solana-base", protocol: "khalani", fromChainId: "20011000000", toChainId: "8453", usdInEst: "100.50" });
-  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "relay-solana-base", protocol: "relay", fromChainId: "792703809", toChainId: "8453", usdInEst: "50.25" });
-  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "relay-base-arbitrum-first", protocol: "relay", fromChainId: "8453", toChainId: "42161", usdInEst: "10.00" });
-  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "relay-base-arbitrum-second", protocol: "relay", fromChainId: "8453", toChainId: "42161", usdInEst: "5.00" });
-  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "relay-arbitrum-optimism-deposit", protocol: "relay", fromChainId: "42161", toChainId: "10", usdInEst: "1.00" });
-  await seedActivity(db.pool, { ...verifiedBridgeDeposit, eventRole: "bridge_fill_observed", sourceRowId: "relay-arbitrum-optimism-fill", protocol: "relay", fromChainId: "42161", toChainId: "10", usdInEst: "500.00" });
-  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "relay-polygon-base-verified", protocol: "relay", fromChainId: "137", toChainId: "8453", usdInEst: "20.00" });
-  await seedActivity(db.pool, { ...verifiedBridgeDeposit, verificationState: "none", sourceRowId: "relay-polygon-base-unverified", protocol: "relay", fromChainId: "137", toChainId: "8453", usdInEst: "333.00" });
-  await seedActivity(db.pool, { ...verifiedBridgeDeposit, verificationState: "mismatch", sourceRowId: "relay-polygon-base-mismatch", protocol: "relay", fromChainId: "137", toChainId: "8453", usdInEst: "222.00" });
-  await seedActivity(db.pool, { ...verifiedBridgeDeposit, kind: "swap", eventRole: "swap", sourceRowId: "relay-base-optimism-swap", protocol: "relay", fromChainId: "8453", toChainId: "10", usdInEst: "444.00" });
-  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "khalani-with-relay-solana-id", protocol: "khalani", fromChainId: "792703809", toChainId: "8453", usdInEst: "777.00" });
-  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "relay-unknown-target-chain", protocol: "relay", fromChainId: "8453", toChainId: "999999999", usdInEst: "888.00" });
-  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "relay-missing-from-leg", protocol: "relay", fromChainId: null, toChainId: "8453", usdInEst: "111.00" });
-  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "relay-ethereum-base-outside-window", protocol: "relay", fromChainId: "1", toChainId: "8453", usdInEst: "60.00", minutesAgo: 57_600 });
+  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "khalani-solana-base", protocol: "khalani", fromChainId: "20011000000", toChainId: "8453", usdInPriced: "100.50" });
+  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "relay-solana-base", protocol: "relay", fromChainId: "792703809", toChainId: "8453", usdInPriced: "50.25" });
+  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "relay-base-arbitrum-first", protocol: "relay", fromChainId: "8453", toChainId: "42161", usdInPriced: "10.00" });
+  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "relay-base-arbitrum-second", protocol: "relay", fromChainId: "8453", toChainId: "42161", usdInPriced: "5.00" });
+  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "relay-arbitrum-optimism-deposit", protocol: "relay", fromChainId: "42161", toChainId: "10", usdInPriced: "1.00" });
+  await seedActivity(db.pool, { ...verifiedBridgeDeposit, eventRole: "bridge_fill_observed", sourceRowId: "relay-arbitrum-optimism-fill", protocol: "relay", fromChainId: "42161", toChainId: "10", usdInPriced: "500.00" });
+  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "relay-polygon-base-verified", protocol: "relay", fromChainId: "137", toChainId: "8453", usdInPriced: "20.00" });
+  await seedActivity(db.pool, { ...verifiedBridgeDeposit, verificationState: "none", sourceRowId: "relay-polygon-base-unverified", protocol: "relay", fromChainId: "137", toChainId: "8453", usdInPriced: "333.00" });
+  await seedActivity(db.pool, { ...verifiedBridgeDeposit, verificationState: "mismatch", sourceRowId: "relay-polygon-base-mismatch", protocol: "relay", fromChainId: "137", toChainId: "8453", usdInPriced: "222.00" });
+  await seedActivity(db.pool, { ...verifiedBridgeDeposit, kind: "swap", eventRole: "swap", sourceRowId: "relay-base-optimism-swap", protocol: "relay", fromChainId: "8453", toChainId: "10", usdInPriced: "444.00" });
+  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "khalani-with-relay-solana-id", protocol: "khalani", fromChainId: "792703809", toChainId: "8453", usdInPriced: "777.00" });
+  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "relay-unknown-target-chain", protocol: "relay", fromChainId: "8453", toChainId: "999999999", usdInPriced: "888.00" });
+  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "relay-missing-from-leg", protocol: "relay", fromChainId: null, toChainId: "8453", usdInPriced: "111.00" });
+  await seedActivity(db.pool, { ...verifiedBridgeDeposit, sourceRowId: "relay-ethereum-base-outside-window", protocol: "relay", fromChainId: "1", toChainId: "8453", usdInPriced: "60.00", minutesAgo: 57_600 });
   app = fastify();
   await app.register(bridgeRouteRoutes, {
     pool: db.pool,

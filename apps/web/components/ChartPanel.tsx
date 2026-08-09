@@ -65,7 +65,7 @@ export function ChartPanel({
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h2 className="text-sm text-text-secondary">Volume</h2>
         {metric === "volume" && (
-          <span className="font-mono text-xs tracking-wide text-text-muted">USD est.</span>
+          <span className="font-mono text-xs tracking-wide text-text-muted">USD</span>
         )}
         {loading && (
           <span className="font-mono text-xs tracking-wide text-text-muted">Loading…</span>

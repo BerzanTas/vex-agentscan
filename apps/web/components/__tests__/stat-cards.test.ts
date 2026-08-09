@@ -52,8 +52,8 @@ describe("StatCards", () => {
     expect(markup()).toContain("5,271");
   });
 
-  it("labels usd values as estimates", () => {
-    expect(markup().match(/class="stat-cell-unit">est\./g)).toHaveLength(2);
+  it("carries no estimate badge on the priced usd totals", () => {
+    expect(markup()).not.toContain("stat-cell-unit");
   });
 
   it("draws a trend for every stat that has a series", () => {

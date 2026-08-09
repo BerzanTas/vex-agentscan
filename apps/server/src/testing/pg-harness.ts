@@ -9,7 +9,7 @@ const MIGRATE_DOWN_MARKER = "-- migrate:down";
 
 const migrationsDir = fileURLToPath(new URL("../../../../db/migrations", import.meta.url));
 
-function migrateUpSection(migrationSql: string): string {
+export function migrateUpSection(migrationSql: string): string {
   const afterUpMarker = migrationSql.slice(
     migrationSql.indexOf(MIGRATE_UP_MARKER) + MIGRATE_UP_MARKER.length,
   );

@@ -3,11 +3,13 @@ import { parseChartRange } from "../../lib/range";
 import { NetworksTable } from "../../components/NetworksTable";
 import { PageHeading } from "../../components/PageHeading";
 import { PanelHeading } from "../../components/PanelHeading";
+import { PricingCoverageNote } from "../../components/PricingCoverageNote";
 import { RangeChips } from "../../components/RangeChips";
 import { RoutesList } from "../../components/RoutesList";
 import {
   fetchBridgeRoutes,
   fetchNetworks,
+  fetchPricingCoverage,
 } from "../../lib/api";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +23,11 @@ type NetworksPageProps = { searchParams: Promise<Record<string, string | string[
 
 export default async function NetworksPage({ searchParams }: NetworksPageProps) {
   const range = parseChartRange((await searchParams).range);
-  const [networks, routes] = await Promise.all([fetchNetworks(range), fetchBridgeRoutes(range)]);
+  const [networks, routes, coverage] = await Promise.all([
+    fetchNetworks(range),
+    fetchBridgeRoutes(range),
+    fetchPricingCoverage(range),
+  ]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -33,6 +39,7 @@ export default async function NetworksPage({ searchParams }: NetworksPageProps) 
           actions={<RangeChips current={range} label="Network activity range" />}
         />
         <NetworksTable networks={networks} />
+        <PricingCoverageNote coverage={coverage} />
       </section>
       <section className="section-enter glass p-4">
         <PanelHeading title="Bridge routes" meta={range} />

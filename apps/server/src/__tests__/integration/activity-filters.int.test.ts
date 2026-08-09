@@ -44,7 +44,7 @@ type ActivitySeed = {
   chainId: string;
   status: "pending" | "confirmed" | "definitively_failed";
   verificationState: string;
-  usdInEst: string | null;
+  usdInPriced: string | null;
   receivedSecondsAgo: number;
   confirmedDaysAgo: number | null;
 };
@@ -53,11 +53,11 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
   await pool.query(
     `INSERT INTO activities
        (agent_hash, source_row_id, public_id, source_execution_id, event_index, kind, event_role, status,
-        protocol, chain_family, chain_id, usd_in_est, tx_hash,
+        protocol, chain_family, chain_id, usd_in_priced, pricing_state, tx_hash,
         client_created_at, client_confirmed_at, statuses_seen, verification_state, verified_at,
         received_at, received_schema_version)
      VALUES ($1, $2, $2, $2, 0, $3, $4, $5,
-             $6, $7, $8::bigint, $9::numeric, $10,
+             $6, $7, $8::bigint, $9::numeric, 'server_priced', $10,
              now() - interval '3 hours',
              CASE WHEN $11::int IS NULL THEN NULL ELSE now() - make_interval(days => $11::int) END,
              ARRAY['pending'], $12,
@@ -72,7 +72,7 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
       seed.protocol,
       seed.chainFamily,
       seed.chainId,
-      seed.usdInEst,
+      seed.usdInPriced,
       seed.status === "pending" ? null : `0x${seed.publicId}`,
       seed.confirmedDaysAgo,
       seed.verificationState,
@@ -92,7 +92,7 @@ const seeds: ActivitySeed[] = [
     chainId: "8453",
     status: "confirmed",
     verificationState: "verified_full",
-    usdInEst: "100",
+    usdInPriced: "100",
     receivedSecondsAgo: 900,
     confirmedDaysAgo: 0,
   },
@@ -106,7 +106,7 @@ const seeds: ActivitySeed[] = [
     chainId: "42161",
     status: "confirmed",
     verificationState: "verified_basic",
-    usdInEst: "50",
+    usdInPriced: "50",
     receivedSecondsAgo: 800,
     confirmedDaysAgo: 0,
   },
@@ -120,7 +120,7 @@ const seeds: ActivitySeed[] = [
     chainId: "8453",
     status: "confirmed",
     verificationState: "verified_full",
-    usdInEst: "70",
+    usdInPriced: "70",
     receivedSecondsAgo: 700,
     confirmedDaysAgo: 40,
   },
@@ -134,7 +134,7 @@ const seeds: ActivitySeed[] = [
     chainId: "20011000000",
     status: "confirmed",
     verificationState: "verified_full",
-    usdInEst: "25",
+    usdInPriced: "25",
     receivedSecondsAgo: 600,
     confirmedDaysAgo: 0,
   },
@@ -148,7 +148,7 @@ const seeds: ActivitySeed[] = [
     chainId: "792703809",
     status: "confirmed",
     verificationState: "verified_full",
-    usdInEst: "10",
+    usdInPriced: "10",
     receivedSecondsAgo: 500,
     confirmedDaysAgo: 2,
   },
@@ -162,7 +162,7 @@ const seeds: ActivitySeed[] = [
     chainId: "8453",
     status: "confirmed",
     verificationState: "queued",
-    usdInEst: null,
+    usdInPriced: null,
     receivedSecondsAgo: 400,
     confirmedDaysAgo: 0,
   },
@@ -176,7 +176,7 @@ const seeds: ActivitySeed[] = [
     chainId: "8453",
     status: "pending",
     verificationState: "none",
-    usdInEst: null,
+    usdInPriced: null,
     receivedSecondsAgo: 300,
     confirmedDaysAgo: null,
   },
@@ -190,7 +190,7 @@ const seeds: ActivitySeed[] = [
     chainId: "8453",
     status: "definitively_failed",
     verificationState: "none",
-    usdInEst: null,
+    usdInPriced: null,
     receivedSecondsAgo: 200,
     confirmedDaysAgo: null,
   },
@@ -204,7 +204,7 @@ const seeds: ActivitySeed[] = [
     chainId: "8453",
     status: "pending",
     verificationState: "none",
-    usdInEst: null,
+    usdInPriced: null,
     receivedSecondsAgo: 100,
     confirmedDaysAgo: null,
   },
@@ -218,7 +218,7 @@ const seeds: ActivitySeed[] = [
     chainId: "20011000000",
     status: "pending",
     verificationState: "none",
-    usdInEst: null,
+    usdInPriced: null,
     receivedSecondsAgo: 50,
     confirmedDaysAgo: null,
   },
@@ -232,7 +232,7 @@ const seeds: ActivitySeed[] = [
     chainId: "8453",
     status: "confirmed",
     verificationState: "mismatch",
-    usdInEst: "999",
+    usdInPriced: "999",
     receivedSecondsAgo: 25,
     confirmedDaysAgo: 0,
   },
@@ -450,7 +450,7 @@ describe("GET /api/activity serving a launch kind row", () => {
       chainId: "8453",
       status: "confirmed",
       verificationState: "verified_basic",
-      usdInEst: null,
+      usdInPriced: null,
       receivedSecondsAgo: 5,
       confirmedDaysAgo: 0,
     });
@@ -500,7 +500,7 @@ describe("GET /api/activity with a filter while the read cache is warm", () => {
       chainId: "8453",
       status: "confirmed",
       verificationState: "verified_full",
-      usdInEst: "1",
+      usdInPriced: "1",
       receivedSecondsAgo: 10,
       confirmedDaysAgo: 0,
     });

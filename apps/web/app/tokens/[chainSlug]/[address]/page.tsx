@@ -14,7 +14,7 @@ import {
   type TokenDetailDto,
   type TokenPairStatDto,
 } from "../../../../lib/api";
-import { formatUsdCompact, formatUsdEstimate } from "../../../../lib/format";
+import { formatUsdCompact, formatUsdAmount } from "../../../../lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -80,9 +80,8 @@ export default async function TokenDetailPage({ params, searchParams }: TokenPag
             <span className="stat-card-label">Observed volume</span>
             <span className="stat-card-window">{windowLabel}</span>
           </div>
-          <p className="stat-card-value" title={`$${formatUsdEstimate(detail.volumeUsd)}`}>
+          <p className="stat-card-value" title={`$${formatUsdAmount(detail.volumeUsd)}`}>
             ${formatUsdCompact(detail.volumeUsd)}
-            <span className="stat-card-unit">est.</span>
           </p>
         </div>
         <div className="glass stat-card">
@@ -130,8 +129,8 @@ export default async function TokenDetailPage({ params, searchParams }: TokenPag
         </section>
       </div>
       <p className="section-enter max-w-3xl text-xs text-text-muted">
-        Volumes are estimates observed in Vex agent activity, not market volume. A swap counts on
-        both of its tokens.
+        Volumes are observed in Vex agent activity, not market volume. A swap counts on both of its
+        tokens.
       </p>
     </div>
   );

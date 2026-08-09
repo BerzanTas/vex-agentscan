@@ -1084,13 +1084,6 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .stat-card-unit {
-    margin-left: 0.35rem;
-    font-family: var(--font-mono);
-    font-size: 0.6875rem;
-    color: var(--color-text-muted);
-  }
-
   .table-head {
     font-size: 0.625rem;
     letter-spacing: 0.16em;
@@ -1626,14 +1619,6 @@
     color: var(--color-text-primary);
     font-variant-numeric: tabular-nums;
     text-shadow: var(--stat-value-glow);
-  }
-
-  .stat-cell-unit {
-    font-family: var(--font-mono);
-    font-size: 0.625rem;
-    letter-spacing: 0.08em;
-    color: var(--color-text-muted);
-    text-shadow: none;
   }
 
   .stat-cell-footer {

@@ -5,6 +5,7 @@ import { agentsRoutes } from "./agents.js";
 import { eventsRoutes } from "./events.js";
 import { handshakeRoutes } from "./handshake.js";
 import { statsRoutes } from "./public/stats.js";
+import { pricingCoverageRoutes } from "./public/pricing-coverage.js";
 import { chartRoutes } from "./public/chart.js";
 import { protocolsRoutes } from "./public/protocols.js";
 import { agentsRoutes as publicAgentsRoutes } from "./public/agents.js";
@@ -25,6 +26,7 @@ export const routePlugins: FastifyPluginAsync<WiredDeps>[] = [
   handshakeRoutes,
   tokenAttestationsRoutes,
   statsRoutes,
+  pricingCoverageRoutes,
   chartRoutes,
   protocolsRoutes,
   publicAgentsRoutes,
