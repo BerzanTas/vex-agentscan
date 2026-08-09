@@ -38,9 +38,11 @@ export {
   decidePricingOutcome,
   presentLeg,
   priceDivergenceRatio,
+  pricingRetryOutcome,
   type ActivityLeg,
   type LegPricing,
   type PricingOutcome,
+  type PricingRetryBudget,
 } from "./pricing/pricing-decision.js";
 export {
   rangeWindowSeconds,

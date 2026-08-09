@@ -26,18 +26,20 @@ function usdOf(leg: LegPricing): string | null {
   return leg.state === "priced" ? leg.usd : null;
 }
 
-export function decidePricingOutcome(args: {
-  legIn: LegPricing;
-  legOut: LegPricing;
-  attempts: number;
-  maxAttempts: number;
-  schedule: readonly string[];
-}): PricingOutcome {
+export type PricingRetryBudget = { attempts: number; maxAttempts: number; schedule: readonly string[] };
+
+export function pricingRetryOutcome(
+  budget: PricingRetryBudget,
+): Extract<PricingOutcome, { kind: "reschedule" } | { kind: "attempts_exhausted" }> {
+  if (budget.attempts + 1 >= budget.maxAttempts) return { kind: "attempts_exhausted" };
+  return { kind: "reschedule", delayMs: backoffDelayMs(budget.attempts, budget.schedule) };
+}
+
+export function decidePricingOutcome(
+  args: PricingRetryBudget & { legIn: LegPricing; legOut: LegPricing },
+): PricingOutcome {
   if (args.legIn.state === "absent" && args.legOut.state === "absent") return { kind: "nothing_to_price" };
-  if (args.legIn.state === "unpriceable" || args.legOut.state === "unpriceable") {
-    if (args.attempts + 1 >= args.maxAttempts) return { kind: "attempts_exhausted" };
-    return { kind: "reschedule", delayMs: backoffDelayMs(args.attempts, args.schedule) };
-  }
+  if (args.legIn.state === "unpriceable" || args.legOut.state === "unpriceable") return pricingRetryOutcome(args);
   return { kind: "priced", usdIn: usdOf(args.legIn), usdOut: usdOf(args.legOut) };
 }
 

@@ -71,10 +71,12 @@ const envSchema = z.object({
   PRICE_MAX_DRIFT_SEC: z.coerce.number().int().min(1).default(3600),
   PRICE_MISS_RETRY_HOURS: z.coerce.number().int().min(1).default(24),
   PRICE_FEED_COINS_PER_REQUEST: z.coerce.number().int().min(1).default(50),
+  PRICE_FEED_TIMEOUT_MS: z.coerce.number().int().min(1).default(10_000),
   PRICE_DIVERGENCE_WARN_RATIO: z.coerce.number().min(1).default(5),
   PRICING_BATCH_MAX: z.coerce.number().int().min(1).default(50),
   PRICING_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(5),
   PRICING_POLL_INTERVAL_SEC: z.coerce.number().int().min(1).default(30),
+  PRICING_LEASE_SEC: z.coerce.number().int().min(1).default(120),
   PRICING_BACKOFF_SCHEDULE: z.string().default("1m,5m,30m,2h,12h").transform(commaSeparated),
   WIN_RATE_MIN_ROUND_TRIPS: z.coerce.number().int().min(1).default(5),
 });

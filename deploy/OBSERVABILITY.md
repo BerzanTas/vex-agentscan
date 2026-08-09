@@ -149,3 +149,153 @@ to the strict path) at `/healthz?strict=1` on an interval shorter than
 `WORKER_HEARTBEAT_MAX_AGE_SEC` to actually catch this.
 
 **Alert condition.** Any non-200 from `GET /healthz?strict=1`.
+
+## 4. Pricing coverage — the number read before the explorer goes public
+
+**What it means.** Every USD figure the explorer publishes is computed by the
+pricing lane (`apps/server/src/worker/pricing-loop.ts`, `runPricingPass`, one
+call per `PRICING_POLL_INTERVAL_SEC` tick); client-supplied `usd*Est` values
+are never summed into a public figure. Each pass that claimed at least one
+activity logs one `"pricing coverage"` line at info level:
+
+```json
+{
+  "processed": 50,
+  "serverPriced": 46,
+  "unpriced": 1,
+  "rescheduled": 3,
+  "byChainProtocol": [
+    { "chainSlug": "base", "chainFamily": "eip155", "chainId": "8453",
+      "protocol": "kyberswap", "serverPriced": 40, "unpriced": 0 }
+  ]
+}
+```
+
+- `serverPriced` — activities that reached `pricing_state = 'server_priced'`
+  in this pass: every present leg was priced from a gate-accepted feed point.
+- `unpriced` — activities that reached the **terminal** `pricing_state =
+  'unpriced'`: either nothing to price (no leg carried an amount, a token
+  address and decimals) or `PRICING_MAX_ATTEMPTS` exhausted. Terminal rows are
+  disclosed by `/api/pricing-coverage`, never collapsed into a zero.
+- `rescheduled` — still `pending`, backed off, and not yet on either side of
+  the ratio.
+- `byChainProtocol` — the same two counters split per `(chain, protocol)`,
+  sorted deterministically. This is where a single broken feed key shows up
+  while the global number still looks healthy.
+
+**Log query.**
+
+```kusto
+ContainerAppConsoleLogs_CL
+| where ContainerAppName_s == "worker"
+| where Log_s has "pricing coverage"
+| extend parsed = parse_json(Log_s)
+| project TimeGenerated,
+          processed = toint(parsed.processed),
+          serverPriced = toint(parsed.serverPriced),
+          unpriced = toint(parsed.unpriced),
+          rescheduled = toint(parsed.rescheduled)
+| order by TimeGenerated desc
+```
+
+Per chain and protocol:
+
+```kusto
+ContainerAppConsoleLogs_CL
+| where ContainerAppName_s == "worker"
+| where Log_s has "pricing coverage"
+| extend parsed = parse_json(Log_s)
+| mv-expand slice = parsed.byChainProtocol
+| summarize serverPriced = sum(toint(slice.serverPriced)),
+            unpriced = sum(toint(slice.unpriced))
+          by chainSlug = tostring(slice.chainSlug), protocol = tostring(slice.protocol),
+             bin(TimeGenerated, 1h)
+| extend coverage = todouble(serverPriced) / todouble(serverPriced + unpriced)
+| order by TimeGenerated desc
+```
+
+**What a sustained coverage drop means.** `serverPriced / (serverPriced +
+unpriced)` falling and staying down is not a load problem — the lane retries
+on its own backoff and a transient feed outage shows up as `rescheduled`, not
+as `unpriced`. A sustained drop means one of:
+
+- **A feed key broke.** A chain's `priceFeedKey`
+  (`packages/core/src/chain-registry/chains.ts`) no longer matches what the
+  upstream feed calls that chain, so every token on it resolves to a coin key
+  the feed does not know. Signature: one `chainSlug` at ~0 coverage while the
+  others are unchanged.
+- **A chain lost support.** The feed stopped indexing that chain, or the
+  agents moved onto a chain the registry lists without a `priceFeedKey` at
+  all. Same signature; the difference is upstream, not in our registry.
+- **A token is illiquid.** The feed answers, but below `PRICE_MIN_CONFIDENCE`
+  or further than `PRICE_MAX_DRIFT_SEC` from the activity's own timestamp.
+  Signature: coverage drops for one protocol on an otherwise healthy chain.
+  This is the gate working — the feed's nearest point for an illiquid token
+  can be days away, and publishing it would be a wrong number, not a stale one.
+
+**Alert condition.** Coverage below 0.9 over a 6 hour window, evaluated per
+chain as well as globally — a single chain at zero is invisible in the global
+ratio until it is most of the volume.
+
+**Launch gate.** This number is read **before the explorer goes public**, per
+the Stage 4a design (§8). Low coverage at that point is a launch decision —
+add a second price feed, or narrow which chains are published — not something
+to discover from users after the fact.
+
+## 5. Pricing divergence — server price vs client estimate
+
+**What it means.** The reporting client keeps sending `usdInEst` / `usdOutEst`
+over the ingest contract. They are no longer a publication source; they are a
+second, independent measurement. When the lane prices a leg it compares the two
+and, on a ratio outside `PRICE_DIVERGENCE_WARN_RATIO` in either direction,
+emits one `"pricing divergence"` line at warn level:
+
+```json
+{
+  "activityId": "1234",
+  "chainSlug": "base",
+  "chainFamily": "eip155",
+  "chainId": "8453",
+  "protocol": "kyberswap",
+  "leg": "in",
+  "tokenAddress": "0x4200000000000000000000000000000000000006",
+  "pricedUsd": "2500",
+  "estimateUsd": "100",
+  "ratio": 25
+}
+```
+
+The comparison is skipped when the client estimate is null or zero — there is
+nothing to disagree with. **The warning never suppresses or alters the price
+that is written:** a false positive blanking a legitimate number is worse than
+publishing a flagged one an operator can review.
+
+**Log query.**
+
+```kusto
+ContainerAppConsoleLogs_CL
+| where ContainerAppName_s == "worker"
+| where Log_s has "pricing divergence"
+| extend parsed = parse_json(Log_s)
+| project TimeGenerated,
+          chainSlug = tostring(parsed.chainSlug),
+          protocol = tostring(parsed.protocol),
+          tokenAddress = tostring(parsed.tokenAddress),
+          leg = tostring(parsed.leg),
+          pricedUsd = tostring(parsed.pricedUsd),
+          estimateUsd = tostring(parsed.estimateUsd),
+          ratio = todouble(parsed.ratio)
+| order by TimeGenerated desc
+```
+
+**Alert condition.** More than 5 divergences on the same `tokenAddress` within
+an hour. One-off divergences are expected (a client estimate taken from a quote
+rather than the settled trade); the same token disagreeing repeatedly points at
+a wrong coin key or a decimals mismatch, and both produce published numbers
+that are wrong rather than missing.
+
+A related third-party signal is `"price feed unavailable for hour bucket"` at
+warn level: the upstream feed rejected a whole batch. Those activities stay
+`pending` and nothing is written to `token_prices`, so a transient outage can
+never be mistaken for a permanent feed miss. Sustained occurrences mean the
+feed, not the data.
