@@ -43,6 +43,7 @@ export type AgentPageDto = {
   firstSeenSeconds: number;
   lastSeenSeconds: number;
   unpricedSharePct: number;
+  unpriced30dSharePct: number;
   truncated: boolean;
 };
 

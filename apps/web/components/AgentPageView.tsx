@@ -1,6 +1,5 @@
 import Link from "next/link";
 import type { AgentPageDto } from "../lib/api";
-import { formatAge } from "../lib/format";
 import { AgentPageBreakdowns } from "./AgentPageBreakdowns";
 import { AgentPageDeployedChart } from "./AgentPageDeployedChart";
 import { AgentPageDisclosure } from "./AgentPageDisclosure";
@@ -8,12 +7,23 @@ import { AgentPageHeadline } from "./AgentPageHeadline";
 import { AgentPagePerformance } from "./AgentPagePerformance";
 import { PageHeading } from "./PageHeading";
 
+const SECONDS_PER_HOUR = 3600;
+const HOURS_PER_DAY = 24;
+const WITHIN_THE_HOUR = "less than an hour";
+
+function hourlyAge(ageSeconds: number): string {
+  const hours = Math.floor(ageSeconds / SECONDS_PER_HOUR);
+  if (hours < 1) return WITHIN_THE_HOUR;
+  if (hours < HOURS_PER_DAY) return `${hours}h`;
+  return `${Math.floor(hours / HOURS_PER_DAY)}d`;
+}
+
 function firstSeenLabel(agent: AgentPageDto): string {
-  return `First seen ${formatAge(agent.firstSeenSeconds)} ago`;
+  return `First seen ${hourlyAge(agent.firstSeenSeconds)} ago`;
 }
 
 function lastSeenLabel(agent: AgentPageDto): string {
-  return `Last seen ${formatAge(agent.lastSeenSeconds)} ago`;
+  return `Last seen ${hourlyAge(agent.lastSeenSeconds)} ago`;
 }
 
 function activityCountLabel(agent: AgentPageDto): string {
@@ -46,6 +56,7 @@ export function AgentPageView({ agent }: { agent: AgentPageDto }) {
       <AgentPageBreakdowns protocols={agent.protocolBreakdown} chains={agent.chainBreakdown} />
       <AgentPageDisclosure
         unpricedSharePct={agent.unpricedSharePct}
+        unpriced30dSharePct={agent.unpriced30dSharePct}
         truncated={agent.truncated}
       />
     </div>
