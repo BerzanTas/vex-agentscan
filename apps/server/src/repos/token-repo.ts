@@ -1,5 +1,6 @@
 import type pg from "pg";
 import type { ChartRangePlan } from "@agentscan/core";
+import { serverPricedUsdIn, serverPricedUsdOut } from "./server-priced-usd.js";
 
 const VERIFIED_STATES = "('verified_full','verified_basic')";
 const OBSERVED_AT = "COALESCE(a.client_confirmed_at, a.verified_at, a.received_at)";
@@ -32,7 +33,7 @@ const LISTED_LEGS_CTE = `
   legs AS (
     SELECT a.id AS activity_id, a.chain_family, a.chain_id,
            lower(a.token_in_address) AS address, a.token_in_symbol AS symbol,
-           a.protocol, a.agent_hash, a.usd_in_est AS usd, ${OBSERVED_AT} AS observed_at
+           a.protocol, a.agent_hash, ${serverPricedUsdIn("a")} AS usd, ${OBSERVED_AT} AS observed_at
     FROM activities a
     WHERE a.verification_state IN ${VERIFIED_STATES}
       AND lower(a.token_in_address) IS NOT NULL
@@ -40,7 +41,7 @@ const LISTED_LEGS_CTE = `
     UNION ALL
     SELECT a.id, a.chain_family, a.chain_id,
            lower(a.token_out_address), a.token_out_symbol,
-           a.protocol, a.agent_hash, a.usd_out_est, ${OBSERVED_AT}
+           a.protocol, a.agent_hash, ${serverPricedUsdOut("a")}, ${OBSERVED_AT}
     FROM activities a
     WHERE a.verification_state IN ${VERIFIED_STATES}
       AND lower(a.token_out_address) IS NOT NULL
@@ -50,7 +51,7 @@ const LISTED_LEGS_CTE = `
 const TOKEN_LEGS_CTE = `
   legs AS (
     SELECT a.id AS activity_id, a.token_in_symbol AS symbol, a.token_in_decimals AS decimals,
-           a.protocol, a.agent_hash, a.usd_in_est AS usd, ${OBSERVED_AT} AS observed_at
+           a.protocol, a.agent_hash, ${serverPricedUsdIn("a")} AS usd, ${OBSERVED_AT} AS observed_at
     FROM activities a
     WHERE a.verification_state IN ${VERIFIED_STATES}
       AND a.chain_family = $3 AND a.chain_id = $4::bigint
@@ -58,7 +59,7 @@ const TOKEN_LEGS_CTE = `
       AND ${IN_WINDOW}
     UNION ALL
     SELECT a.id, a.token_out_symbol, a.token_out_decimals,
-           a.protocol, a.agent_hash, a.usd_out_est, ${OBSERVED_AT}
+           a.protocol, a.agent_hash, ${serverPricedUsdOut("a")}, ${OBSERVED_AT}
     FROM activities a
     WHERE a.verification_state IN ${VERIFIED_STATES}
       AND a.chain_family = $3 AND a.chain_id = $4::bigint
@@ -131,13 +132,13 @@ async function sparklineSeries(
      ),
      legs AS (
        SELECT a.id AS activity_id, t.chain_family, t.chain_id, t.address,
-              a.usd_in_est AS usd, ${OBSERVED_AT} AS observed_at
+              ${serverPricedUsdIn("a")} AS usd, ${OBSERVED_AT} AS observed_at
        ${SPARKLINE_LEG_JOIN} AND lower(a.token_in_address) = t.address
        WHERE a.verification_state IN ${VERIFIED_STATES}
          AND ${SPARKLINE_WINDOW}
        UNION ALL
        SELECT a.id, t.chain_family, t.chain_id, t.address,
-              a.usd_out_est, ${OBSERVED_AT}
+              ${serverPricedUsdOut("a")}, ${OBSERVED_AT}
        ${SPARKLINE_LEG_JOIN} AND lower(a.token_out_address) = t.address
        WHERE a.verification_state IN ${VERIFIED_STATES}
          AND ${SPARKLINE_WINDOW}

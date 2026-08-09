@@ -1,5 +1,6 @@
 import type pg from "pg";
 import type { ChainFamily, ChartRangePlan } from "@agentscan/core";
+import { serverPricedUsdInSum, serverPricedUsdInSumOf } from "./server-priced-usd.js";
 
 export type ActivityDbRow = {
   id: bigint;
@@ -283,12 +284,20 @@ export async function aggregateTotals(pool: pg.Pool): Promise<AggregateTotals> {
     daily_tx: number;
     total_tx: number;
   }>(
-    `SELECT
-       COALESCE(SUM(volume_usd) FILTER (WHERE day = (now() AT TIME ZONE 'utc')::date), 0)::text AS daily_volume_usd,
-       COALESCE(SUM(volume_usd), 0)::text AS total_volume_usd,
-       COALESCE(SUM(tx_count) FILTER (WHERE day = (now() AT TIME ZONE 'utc')::date), 0)::int AS daily_tx,
-       COALESCE(SUM(tx_count), 0)::int AS total_tx
-     FROM daily_aggregates`,
+    `WITH priced_by_day AS (${PRICED_VOLUME_BY_UTC_DAY}),
+     counted AS (
+       SELECT
+         COALESCE(SUM(tx_count) FILTER (WHERE day = ${CURRENT_UTC_DAY}), 0)::int AS daily_tx,
+         COALESCE(SUM(tx_count), 0)::int AS total_tx
+       FROM daily_aggregates
+     )
+     SELECT
+       (SELECT COALESCE(SUM(volume_usd) FILTER (WHERE day = ${CURRENT_UTC_DAY}), 0)::text
+        FROM priced_by_day) AS daily_volume_usd,
+       (SELECT COALESCE(SUM(volume_usd), 0)::text FROM priced_by_day) AS total_volume_usd,
+       daily_tx,
+       total_tx
+     FROM counted`,
   );
   const row = singleRow(result);
   return {
@@ -314,6 +323,19 @@ export type ChartBucketRead = { bucketStart: number; volumeUsd: string; txCount:
 type ChartBucketQueryRow = { bucket_start: string; volume_usd: string; tx_count: number };
 
 const VERIFIED_VOLUME_ROLES = "('swap','bridge_deposit')";
+const ACTIVITY_TIME_ANCHOR = "COALESCE(a.client_confirmed_at, a.verified_at)";
+const VERIFIED_STATES_PREDICATE = "a.verification_state IN ('verified_full','verified_basic')";
+const VOLUME_LEG_PREDICATE = `a.event_role IN ${VERIFIED_VOLUME_ROLES}`;
+const VOLUME_LEG_USD_SUM = serverPricedUsdInSumOf("a", VOLUME_LEG_PREDICATE);
+const UTC_DAY_OF_ANCHOR = `(${ACTIVITY_TIME_ANCHOR} AT TIME ZONE 'utc')::date`;
+const CURRENT_UTC_DAY = "(now() AT TIME ZONE 'utc')::date";
+
+const PRICED_VOLUME_BY_UTC_DAY = `
+  SELECT ${UTC_DAY_OF_ANCHOR} AS day, ${serverPricedUsdInSum("a")} AS volume_usd
+  FROM activities a
+  WHERE ${VERIFIED_STATES_PREDICATE}
+    AND ${VOLUME_LEG_PREDICATE}
+  GROUP BY 1`;
 
 function chartBucketFrom(row: ChartBucketQueryRow): ChartBucketRead {
   return {
@@ -343,8 +365,7 @@ async function bucketsFromActivities(
      bucketed AS (
        SELECT (floor(extract(epoch FROM COALESCE(a.client_confirmed_at, a.verified_at)) / $1::bigint)
                  * $1::bigint)::bigint AS bucket_start,
-              SUM(CASE WHEN a.event_role IN ${VERIFIED_VOLUME_ROLES}
-                       THEN COALESCE(a.usd_in_est, 0) ELSE 0 END) AS volume_usd,
+              ${serverPricedUsdInSumOf("a", VOLUME_LEG_PREDICATE)} AS volume_usd,
               COUNT(*)::int AS tx_count
        FROM activities a
        WHERE a.verification_state IN ('verified_full','verified_basic')
@@ -376,16 +397,18 @@ async function bucketsFromAggregates(pool: pg.Pool, days: number | null): Promis
                               (now() AT TIME ZONE 'utc')::date::timestamp,
                               interval '1 day')::date AS day
      ),
-     summed AS (
-       SELECT day, SUM(volume_usd) AS volume_usd, SUM(tx_count)::int AS tx_count
+     counted AS (
+       SELECT day, SUM(tx_count)::int AS tx_count
        FROM daily_aggregates
        GROUP BY day
-     )
+     ),
+     priced_by_day AS (${PRICED_VOLUME_BY_UTC_DAY})
      SELECT extract(epoch FROM s.day::timestamp AT TIME ZONE 'utc')::bigint::text AS bucket_start,
-            COALESCE(d.volume_usd, 0)::text AS volume_usd,
-            COALESCE(d.tx_count, 0)::int AS tx_count
+            COALESCE(p.volume_usd, 0)::text AS volume_usd,
+            COALESCE(c.tx_count, 0)::int AS tx_count
      FROM series s
-     LEFT JOIN summed d ON d.day = s.day
+     LEFT JOIN counted c ON c.day = s.day
+     LEFT JOIN priced_by_day p ON p.day = s.day
      ORDER BY s.day`,
     [days],
   );
@@ -399,10 +422,7 @@ export async function chartBuckets(pool: pg.Pool, plan: ChartRangePlan): Promise
   return bucketsFromAggregates(pool, plan.days);
 }
 
-const ACTIVITY_TIME_ANCHOR = "COALESCE(a.client_confirmed_at, a.verified_at)";
-const VERIFIED_STATES_PREDICATE = "a.verification_state IN ('verified_full','verified_basic')";
-const USD_IN_SUM = "COALESCE(SUM(a.usd_in_est), 0)";
-const VOLUME_LEG_USD_SUM = `COALESCE(SUM(a.usd_in_est) FILTER (WHERE a.event_role IN ${VERIFIED_VOLUME_ROLES}), 0)`;
+const USD_IN_SUM = serverPricedUsdInSum("a");
 const DISTINCT_CHAIN_COUNT = "COUNT(DISTINCT (a.chain_family, a.chain_id))::int";
 
 function windowPredicate(paramIndex: number): string {
@@ -467,10 +487,23 @@ export type ProtocolRankingRead = ProtocolRead & {
 
 export async function protocolTotals(pool: pg.Pool): Promise<ProtocolRead[]> {
   const result = await pool.query<{ protocol: string; volume_usd: string; tx_count: number }>(
-    `SELECT protocol, SUM(volume_usd)::text AS volume_usd, SUM(tx_count)::int AS tx_count
-     FROM daily_aggregates
-     GROUP BY protocol
-     ORDER BY SUM(volume_usd) DESC`,
+    `WITH counted AS (
+       SELECT protocol, SUM(tx_count)::int AS tx_count
+       FROM daily_aggregates
+       GROUP BY protocol
+     ),
+     priced AS (
+       SELECT a.protocol, ${VOLUME_LEG_USD_SUM} AS volume_usd
+       FROM activities a
+       WHERE ${VERIFIED_STATES_PREDICATE}
+       GROUP BY a.protocol
+     )
+     SELECT c.protocol,
+            COALESCE(p.volume_usd, 0)::text AS volume_usd,
+            c.tx_count
+     FROM counted c
+     LEFT JOIN priced p ON p.protocol = c.protocol
+     ORDER BY COALESCE(p.volume_usd, 0) DESC, c.protocol`,
   );
   return result.rows.map((row) => ({
     protocol: row.protocol,
@@ -512,4 +545,39 @@ export async function protocolRanking(
     swapTxCount: row.swap_tx_count,
     bridgeTxCount: row.bridge_tx_count,
   }));
+}
+
+export type PricingCoverageRead = {
+  pricedActivityCount: number;
+  unpricedActivityCount: number;
+  pendingActivityCount: number;
+};
+
+function pricingStateCount(state: string): string {
+  return `COUNT(*) FILTER (WHERE a.pricing_state = '${state}')::int`;
+}
+
+export async function pricingCoverage(
+  pool: pg.Pool,
+  windowSeconds: number | null,
+): Promise<PricingCoverageRead> {
+  const result = await pool.query<{
+    priced_activity_count: number;
+    unpriced_activity_count: number;
+    pending_activity_count: number;
+  }>(
+    `SELECT ${pricingStateCount("server_priced")} AS priced_activity_count,
+            ${pricingStateCount("unpriced")} AS unpriced_activity_count,
+            ${pricingStateCount("pending")} AS pending_activity_count
+     FROM activities a
+     WHERE ${VERIFIED_STATES_PREDICATE}
+       AND ${windowPredicate(1)}`,
+    [windowSeconds],
+  );
+  const row = singleRow(result);
+  return {
+    pricedActivityCount: row.priced_activity_count,
+    unpricedActivityCount: row.unpriced_activity_count,
+    pendingActivityCount: row.pending_activity_count,
+  };
 }

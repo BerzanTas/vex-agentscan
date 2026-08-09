@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ChainEntry, ResolveChain } from "./app.js";
-import type { ActivityDbRow, AgentVolumeRead } from "./repos/read-repo.js";
+import type { ActivityDbRow, AgentVolumeRead, PricingCoverageRead } from "./repos/read-repo.js";
 
 export type ResolveBridgeChain = (protocol: string, chainId: bigint) => ChainEntry | null;
 
@@ -273,3 +273,20 @@ export type VerificationStatsDto = {
   latencySeconds: VerificationLatencyDto;
   chains: ChainTierDto[];
 };
+
+export type PricingCoverageDto = {
+  pricedActivityCount: number;
+  unpricedActivityCount: number;
+  pendingActivityCount: number;
+  pricedCoverage: number;
+};
+
+export function toPricingCoverageDto(read: PricingCoverageRead): PricingCoverageDto {
+  const decided = read.pricedActivityCount + read.unpricedActivityCount;
+  return {
+    pricedActivityCount: read.pricedActivityCount,
+    unpricedActivityCount: read.unpricedActivityCount,
+    pendingActivityCount: read.pendingActivityCount,
+    pricedCoverage: decided === 0 ? 0 : read.pricedActivityCount / decided,
+  };
+}
