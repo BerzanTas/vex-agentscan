@@ -7,15 +7,16 @@ function countLabel(count: number): string {
   return count.toLocaleString("en-US");
 }
 
-export function agentPageHref(name: string): string {
+function agentPageHref(name: string): string {
   return `/agent/${encodeURIComponent(name)}`;
 }
 
 function AgentName({ agent }: { agent: AgentStatDto }) {
-  if (agent.name === null) return <>{agent.alias}</>;
+  const name = agent.name ?? null;
+  if (name === null) return <>{agent.alias}</>;
   return (
-    <Link href={agentPageHref(agent.name)} className="text-text-primary">
-      {agent.name}
+    <Link href={agentPageHref(name)} className="text-text-primary">
+      {name}
     </Link>
   );
 }

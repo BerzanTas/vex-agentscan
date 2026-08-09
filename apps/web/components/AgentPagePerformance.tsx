@@ -14,7 +14,7 @@ function signedUsd(usd: string, format: (usd: string) => string): string {
 
 function winRateValue(winRate: number | null): string {
   if (winRate === null) return NO_VALUE;
-  return `${Math.round(winRate * PERCENT)}%`;
+  return `${Math.floor(winRate * PERCENT)}%`;
 }
 
 function winRateNote(winRate: number | null): string | undefined {

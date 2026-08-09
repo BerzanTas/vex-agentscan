@@ -182,6 +182,26 @@ describe("AgentPagePerformance", () => {
     expect(markup).toContain("0%");
     expect(markup).not.toContain("Not enough closed round trips yet");
   });
+
+  it("never rounds a losing round trip away into a perfect record", () => {
+    const markup = performanceMarkup({ ...agent, winRate: 0.996, closedRoundTrips: 250 });
+
+    expect(markup).toContain("99%");
+    expect(markup).not.toContain("100%");
+  });
+
+  it("shows a perfect record only when every closed round trip won", () => {
+    const markup = performanceMarkup({ ...agent, winRate: 1, closedRoundTrips: 12 });
+
+    expect(markup).toContain("100%");
+  });
+
+  it("understates a win rate below one percent instead of inventing one", () => {
+    const markup = performanceMarkup({ ...agent, winRate: 0.004, closedRoundTrips: 250 });
+
+    expect(markup).toContain("0%");
+    expect(markup).not.toContain("1%");
+  });
 });
 
 describe("AgentPageDisclosure", () => {

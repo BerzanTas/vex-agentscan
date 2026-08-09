@@ -72,6 +72,23 @@ describe("AgentsRankingTable", () => {
     expect(markup).not.toContain("/agent/");
   });
 
+  it("leaves a row unlinked when the API answers without a name field at all", () => {
+    const rowFromApiWithoutName = {
+      alias: "quiet-otter-1f3a",
+      volumeUsd: "1284310.55",
+      txCount: 412,
+      protocolCount: 3,
+      chainCount: 4,
+      lastSeenSeconds: 7200,
+    } as unknown as AgentStatDto;
+
+    const markup = agentsMarkup([rowFromApiWithoutName]);
+
+    expect(markup).toContain("quiet-otter-1f3a");
+    expect(markup).not.toContain("<a");
+    expect(markup).not.toContain("undefined");
+  });
+
   it("links a bound agent row to its public page and shows the public name", () => {
     const markup = agentsMarkup([{ ...agent, name: "Vex-9f2a41c8" }]);
 
