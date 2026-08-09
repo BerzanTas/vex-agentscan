@@ -1,5 +1,5 @@
 import type { BridgeRouteDto } from "../lib/api";
-import { formatUsdCompact, formatUsdEstimate } from "../lib/format";
+import { formatUsdCompact, formatUsdAmount } from "../lib/format";
 import { ChainBadge } from "./ChainBadge";
 
 const ROUTE_ARROW = "→";
@@ -33,7 +33,7 @@ export function RoutesList({
           </span>
           <ChainBadge slug={route.toChainSlug} />
           <span className="ml-auto text-xs text-text-muted">{legLabel(route.legCount)}</span>
-          <span className="text-text-primary" title={`$${formatUsdEstimate(route.volumeUsd)}`}>
+          <span className="text-text-primary" title={`$${formatUsdAmount(route.volumeUsd)}`}>
             ${formatUsdCompact(route.volumeUsd)}
           </span>
         </li>

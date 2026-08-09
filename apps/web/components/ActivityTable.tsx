@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ActivityRowDto } from "../lib/api";
-import { formatAge, formatRawAmount, formatRawAmountDisplay, formatUsdEstimate } from "../lib/format";
+import { formatAge, formatRawAmount, formatRawAmountDisplay, formatUsdAmount } from "../lib/format";
 import { ChainBadge } from "./ChainBadge";
 import { EmptyPanel } from "./EmptyPanel";
 import { ProtocolBadge } from "./ProtocolBadge";
@@ -44,7 +44,7 @@ function AmountCell({ row }: { row: ActivityRowDto }) {
       </span>
       {row.tokenInSymbol !== null && <span className="ml-1 text-text-muted">{row.tokenInSymbol}</span>}
       {row.usdInEst !== null && (
-        <span className="block text-xs text-text-muted">${formatUsdEstimate(row.usdInEst)} est.</span>
+        <span className="block text-xs text-text-muted">${formatUsdAmount(row.usdInEst)} est.</span>
       )}
     </span>
   );

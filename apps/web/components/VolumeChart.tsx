@@ -26,7 +26,7 @@ import {
   type MonotoneAreaSeriesOptions,
 } from "./MonotoneAreaSeries";
 import { chartPalette, type ChartPalette } from "../lib/chart-theme";
-import { formatUsdEstimate } from "../lib/format";
+import { formatUsdAmount } from "../lib/format";
 import { resolveTheme } from "../lib/theme";
 
 export type ChartMetric = "volume" | "txns";
@@ -186,7 +186,7 @@ export function priceScaleOptionsFor(scale: ChartScale): DeepPartial<PriceScaleO
 }
 
 export function formatBucketValue(point: ChartPointDto, metric: ChartMetric): string {
-  if (metric === "volume") return `$${formatUsdEstimate(point.volumeUsd)}`;
+  if (metric === "volume") return `$${formatUsdAmount(point.volumeUsd)}`;
   return point.txCount.toLocaleString("en");
 }
 

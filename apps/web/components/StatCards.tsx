@@ -1,5 +1,5 @@
 import type { ChartPointDto, StatsDto } from "../lib/api";
-import { formatUsdCompact, formatUsdEstimate } from "../lib/format";
+import { formatUsdCompact, formatUsdAmount } from "../lib/format";
 import { cumulativeSeriesEndingAt, txValues, volumeValues } from "../lib/stat-series";
 import { CountUpValue, type CountUpKind } from "./CountUpValue";
 import { CursorLight } from "./CursorLight";
@@ -24,7 +24,7 @@ function usdCell(label: string, usdPriced: string, trend: number[]): StatCell {
     label,
     target: Number(usdPriced),
     finalText: `$${formatUsdCompact(usdPriced)}`,
-    exactText: `$${formatUsdEstimate(usdPriced)}`,
+    exactText: `$${formatUsdAmount(usdPriced)}`,
     countUp: "usdCompact",
     footer: { trend },
   };

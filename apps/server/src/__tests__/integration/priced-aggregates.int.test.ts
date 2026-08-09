@@ -29,7 +29,7 @@ type ActivitySeed = {
   sourceRowId: string;
   protocol: string;
   kind: "swap" | "bridge";
-  eventRole: "swap" | "bridge_deposit";
+  eventRole: "swap" | "bridge_deposit" | "bridge_fill_observed";
   pricingState: PricingState;
   usdInEst: string;
   usdOutEst: string | null;
@@ -158,6 +158,22 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
   );
 }
 
+async function bookAggregatesForSeededActivities(pool: pg.Pool): Promise<void> {
+  await pool.query(
+    `INSERT INTO daily_aggregates (day, protocol, kind, volume_usd, tx_count, volume_usd_priced)
+     SELECT (now() AT TIME ZONE 'utc')::date, protocol, kind, $1::numeric, COUNT(*)::int,
+            COALESCE(SUM(usd_in_priced) FILTER (
+              WHERE pricing_state = 'server_priced' AND event_role IN ('swap','bridge_deposit')
+            ), 0)
+     FROM activities
+     GROUP BY protocol, kind
+     ON CONFLICT (day, protocol, kind) DO UPDATE
+       SET tx_count = EXCLUDED.tx_count,
+           volume_usd_priced = EXCLUDED.volume_usd_priced`,
+    [CLIENT_ESTIMATE_NEVER_PUBLISHED],
+  );
+}
+
 async function seedWindow(pool: pg.Pool, seeds: readonly ActivitySeed[]): Promise<void> {
   await pool.query("TRUNCATE agents CASCADE");
   await pool.query("DELETE FROM daily_aggregates");
@@ -167,16 +183,7 @@ async function seedWindow(pool: pg.Pool, seeds: readonly ActivitySeed[]): Promis
     [agentHash],
   );
   for (const seed of seeds) await seedActivity(pool, seed);
-  await pool.query(
-    `INSERT INTO daily_aggregates (day, protocol, kind, volume_usd, tx_count, volume_usd_priced)
-     SELECT (now() AT TIME ZONE 'utc')::date, protocol, kind, $1::numeric, COUNT(*)::int,
-            COALESCE(SUM(usd_in_priced) FILTER (
-              WHERE pricing_state = 'server_priced' AND event_role IN ('swap','bridge_deposit')
-            ), 0)
-     FROM activities
-     GROUP BY protocol, kind`,
-    [CLIENT_ESTIMATE_NEVER_PUBLISHED],
-  );
+  await bookAggregatesForSeededActivities(pool);
 }
 
 let db: Awaited<ReturnType<typeof startTestDb>>;
@@ -389,6 +396,77 @@ describe("public aggregates over a window where nothing has been priced yet", ()
       pricedActivityCount: 0,
       unpricedActivityCount: 2,
       pendingActivityCount: 2,
+      pricedCoverage: 0,
+    });
+  });
+});
+
+describe("windows where the coverage note must not claim the window was empty", () => {
+  async function coverageOf(): Promise<PricingCoverageDto> {
+    return getJson<PricingCoverageDto>("/api/pricing-coverage?range=24h");
+  }
+
+  it("measures nothing on a window whose verified rows all carry no usd leg", async () => {
+    await seedWindow(db.pool, []);
+    await seedActivity(db.pool, {
+      ...pricedSwap,
+      sourceRowId: "priced-fill-leg",
+      kind: "bridge",
+      eventRole: "bridge_fill_observed",
+      usdInPriced: "5000.00",
+    });
+    await bookAggregatesForSeededActivities(db.pool);
+
+    expect(await coverageOf()).toEqual({
+      pricedActivityCount: 0,
+      unpricedActivityCount: 0,
+      pendingActivityCount: 0,
+      pricedCoverage: 0,
+    });
+    expect(await getJson<StatsDto>("/api/stats")).toMatchObject({
+      totalVolumeUsd: "0",
+      totalTx: 1,
+    });
+  });
+
+  it("counts a priced swap whose in leg never arrived, and publishes no usd for it", async () => {
+    await seedWindow(db.pool, []);
+    await seedActivity(db.pool, {
+      ...pricedSwap,
+      sourceRowId: "priced-without-in-leg",
+      usdInPriced: null,
+      usdOutPriced: "90.00",
+    });
+    await bookAggregatesForSeededActivities(db.pool);
+
+    expect(await coverageOf()).toEqual({
+      pricedActivityCount: 1,
+      unpricedActivityCount: 0,
+      pendingActivityCount: 0,
+      pricedCoverage: 1,
+    });
+    expect(await getJson<StatsDto>("/api/stats")).toMatchObject({
+      totalVolumeUsd: "0",
+      totalTx: 1,
+    });
+  });
+
+  it("keeps the purged agent's total while its activity leaves the coverage population", async () => {
+    await seedWindow(db.pool, [pricedSwap]);
+    const before = await getJson<StatsDto>("/api/stats");
+    expect(before).toMatchObject({ totalVolumeUsd: "100.00", totalTx: 1 });
+    expect(await coverageOf()).toMatchObject({ pricedActivityCount: 1, pricedCoverage: 1 });
+
+    await db.pool.query("DELETE FROM activities WHERE agent_hash = $1", [agentHash]);
+
+    expect(await getJson<StatsDto>("/api/stats")).toMatchObject({
+      totalVolumeUsd: "100.00",
+      totalTx: 1,
+    });
+    expect(await coverageOf()).toEqual({
+      pricedActivityCount: 0,
+      unpricedActivityCount: 0,
+      pendingActivityCount: 0,
       pricedCoverage: 0,
     });
   });

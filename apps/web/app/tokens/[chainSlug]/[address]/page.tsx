@@ -14,7 +14,7 @@ import {
   type TokenDetailDto,
   type TokenPairStatDto,
 } from "../../../../lib/api";
-import { formatUsdCompact, formatUsdEstimate } from "../../../../lib/format";
+import { formatUsdCompact, formatUsdAmount } from "../../../../lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -80,7 +80,7 @@ export default async function TokenDetailPage({ params, searchParams }: TokenPag
             <span className="stat-card-label">Observed volume</span>
             <span className="stat-card-window">{windowLabel}</span>
           </div>
-          <p className="stat-card-value" title={`$${formatUsdEstimate(detail.volumeUsd)}`}>
+          <p className="stat-card-value" title={`$${formatUsdAmount(detail.volumeUsd)}`}>
             ${formatUsdCompact(detail.volumeUsd)}
           </p>
         </div>

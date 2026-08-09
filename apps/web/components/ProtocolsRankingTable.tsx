@@ -1,5 +1,5 @@
 import type { ProtocolRankingDto } from "../lib/api";
-import { formatUsdCompact, formatUsdEstimate } from "../lib/format";
+import { formatUsdCompact, formatUsdAmount } from "../lib/format";
 import { EmptyPanel } from "./EmptyPanel";
 import { ProtocolBadge } from "./ProtocolBadge";
 
@@ -87,7 +87,7 @@ export function ProtocolsRankingTable({
               </td>
               <td
                 className="whitespace-nowrap font-mono text-text-primary"
-                title={`$${formatUsdEstimate(row.volumeUsd)}`}
+                title={`$${formatUsdAmount(row.volumeUsd)}`}
               >
                 ${formatUsdCompact(row.volumeUsd)}
               </td>

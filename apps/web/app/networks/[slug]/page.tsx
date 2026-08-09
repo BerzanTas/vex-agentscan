@@ -14,7 +14,7 @@ import {
   fetchNetworkDetail,
   type NetworkTokenStatDto,
 } from "../../../lib/api";
-import { formatUsdCompact, formatUsdEstimate } from "../../../lib/format";
+import { formatUsdCompact, formatUsdAmount } from "../../../lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -62,7 +62,7 @@ function NetworkTokens({
           </span>
           <span
             className="font-mono text-text-primary"
-            title={`$${formatUsdEstimate(token.volumeUsd)}`}
+            title={`$${formatUsdAmount(token.volumeUsd)}`}
           >
             ${formatUsdCompact(token.volumeUsd)}
           </span>
@@ -112,7 +112,7 @@ export default async function NetworkDetailPage({ params, searchParams }: Networ
           <span className="table-head">Observed volume</span>
           <span
             className="verification-stat-value"
-            title={`$${formatUsdEstimate(detail.volumeUsd)}`}
+            title={`$${formatUsdAmount(detail.volumeUsd)}`}
           >
             ${formatUsdCompact(detail.volumeUsd)}
           </span>

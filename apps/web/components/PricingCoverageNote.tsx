@@ -20,8 +20,12 @@ function excludedActivityCount(coverage: PricingCoverageDto): number {
   return coverage.unpricedActivityCount + coverage.pendingActivityCount;
 }
 
-function activityPhrase(count: number): string {
-  return count === 1 ? "1 activity is" : `${count} activities are`;
+function legCount(count: number): string {
+  return count === 1 ? "1 swap or bridge deposit" : `${count} swaps and bridge deposits`;
+}
+
+function legPhrase(count: number): string {
+  return `${legCount(count)} ${count === 1 ? "is" : "are"}`;
 }
 
 function exclusionReasons(coverage: PricingCoverageDto): string[] {
@@ -37,17 +41,22 @@ function exclusionReasons(coverage: PricingCoverageDto): string[] {
 
 function exclusionSentence(coverage: PricingCoverageDto): string {
   const reasons = exclusionReasons(coverage);
-  if (reasons.length === 0) return "Every verified activity in this window is priced.";
-  return `${activityPhrase(excludedActivityCount(coverage))} left out of every USD figure (${reasons.join(", ")}), and still counted in transaction counts.`;
+  if (reasons.length === 0) return "Every swap and bridge deposit in this window is priced.";
+  return `${legPhrase(excludedActivityCount(coverage))} left out of every USD figure (${reasons.join(", ")}), and still counted in transaction counts.`;
 }
 
 function nothingPricedSentence(coverage: PricingCoverageDto): string {
-  return `Nothing in this window is priced yet: ${activityPhrase(coverage.pendingActivityCount)} still being priced, and still counted in transaction counts.`;
+  return `Nothing in this window is priced yet: ${legCount(coverage.pendingActivityCount)} still being priced, and still counted in transaction counts.`;
 }
 
 export function PricingCoverageNote({ coverage }: { coverage: PricingCoverageDto }) {
   if (measuredActivityCount(coverage) === 0) {
-    return <p className={NOTE_CLASS}>No verified activity in this window yet.</p>;
+    return (
+      <p className={NOTE_CLASS}>
+        USD figures are priced by AgentScan from the swaps and bridge deposits it holds. It holds none
+        for this window, so there is no coverage to report here.
+      </p>
+    );
   }
 
   if (finishedPricingCount(coverage) === 0) {
@@ -57,7 +66,7 @@ export function PricingCoverageNote({ coverage }: { coverage: PricingCoverageDto
   return (
     <p className={NOTE_CLASS}>
       USD figures are priced by AgentScan and cover {coveragePercent(coverage.pricedCoverage)} of the
-      verified activity we have finished pricing in this window. {exclusionSentence(coverage)}
+      swaps and bridge deposits in this window we have finished pricing. {exclusionSentence(coverage)}
     </p>
   );
 }

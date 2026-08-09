@@ -17,7 +17,7 @@ describe("PricingCoverageNote", () => {
       pricedCoverage: 0.75,
     });
 
-    expect(markup).toContain("75.0% of the verified activity we have finished pricing");
+    expect(markup).toContain("75.0% of the swaps and bridge deposits in this window we have finished pricing");
   });
 
   it("counts the unpriced and the not yet priced activities as left out", () => {
@@ -28,7 +28,7 @@ describe("PricingCoverageNote", () => {
       pricedCoverage: 0.7894736842105263,
     });
 
-    expect(markup).toContain("10 activities are left out");
+    expect(markup).toContain("10 swaps and bridge deposits are left out");
     expect(markup).toContain("8 we could not price");
     expect(markup).toContain("2 still being priced");
   });
@@ -41,8 +41,8 @@ describe("PricingCoverageNote", () => {
       pricedCoverage: 1,
     });
 
-    expect(markup).toContain("100.0% of the verified activity we have finished pricing");
-    expect(markup).toContain("2 activities are left out");
+    expect(markup).toContain("100.0% of the swaps and bridge deposits in this window we have finished pricing");
+    expect(markup).toContain("2 swaps and bridge deposits are left out");
     expect(markup).toContain("2 still being priced");
     expect(markup).not.toContain("we could not price");
   });
@@ -56,7 +56,7 @@ describe("PricingCoverageNote", () => {
     });
 
     expect(markup).toContain("100.0%");
-    expect(markup).toContain("Every verified activity in this window is priced.");
+    expect(markup).toContain("Every swap and bridge deposit in this window is priced.");
     expect(markup).not.toContain("left out");
   });
 
@@ -68,11 +68,11 @@ describe("PricingCoverageNote", () => {
       pricedCoverage: 0.8,
     });
 
-    expect(markup).toContain("1 activity is left out");
-    expect(markup).not.toContain("1 activities");
+    expect(markup).toContain("1 swap or bridge deposit is left out");
+    expect(markup).not.toContain("1 swaps");
   });
 
-  it("says there is no verified activity rather than nothing priced on an empty window", () => {
+  it("reports what coverage can see rather than claiming the window had no activity", () => {
     const markup = markupOf({
       pricedActivityCount: 0,
       unpricedActivityCount: 0,
@@ -80,7 +80,8 @@ describe("PricingCoverageNote", () => {
       pricedCoverage: 0,
     });
 
-    expect(markup).toContain("No verified activity in this window yet.");
+    expect(markup).toContain("It holds none for this window, so there is no coverage to report");
+    expect(markup).not.toContain("no verified activity");
     expect(markup).not.toContain("0.0%");
     expect(markup).not.toContain("left out");
   });
@@ -93,7 +94,7 @@ describe("PricingCoverageNote", () => {
       pricedCoverage: 0,
     });
 
-    expect(markup).toContain("Nothing in this window is priced yet: 5 activities are still being priced");
+    expect(markup).toContain("Nothing in this window is priced yet: 5 swaps and bridge deposits still being priced");
     expect(markup).not.toContain("0.0%");
   });
 
@@ -105,7 +106,7 @@ describe("PricingCoverageNote", () => {
       pricedCoverage: 0,
     });
 
-    expect(markup).toContain("Nothing in this window is priced yet: 1 activity is still being priced");
-    expect(markup).not.toContain("1 activities");
+    expect(markup).toContain("Nothing in this window is priced yet: 1 swap or bridge deposit still being priced");
+    expect(markup).not.toContain("1 swaps");
   });
 });
