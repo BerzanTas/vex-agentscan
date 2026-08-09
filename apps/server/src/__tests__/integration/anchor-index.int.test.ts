@@ -33,11 +33,17 @@ function capturingPool(pool: pg.Pool, captured: CapturedQuery[]): pg.Pool {
   } as unknown as pg.Pool;
 }
 
-async function planOf(pool: pg.Pool, query: CapturedQuery): Promise<string> {
+type SequentialScans = "on" | "off";
+
+async function planOf(
+  pool: pg.Pool,
+  query: CapturedQuery,
+  sequentialScans: SequentialScans,
+): Promise<string> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await client.query("SET LOCAL enable_seqscan = off");
+    await client.query(`SET LOCAL enable_seqscan = ${sequentialScans}`);
     const explained = await client.query<{ "QUERY PLAN": string }>(
       `EXPLAIN ${query.text}`,
       [...query.values],
@@ -49,10 +55,31 @@ async function planOf(pool: pg.Pool, query: CapturedQuery): Promise<string> {
   }
 }
 
-async function plansOf(read: (pool: pg.Pool) => Promise<unknown>): Promise<string> {
+async function queriesOf(read: (pool: pg.Pool) => Promise<unknown>): Promise<CapturedQuery[]> {
   const captured: CapturedQuery[] = [];
   await read(capturingPool(db.pool, captured));
-  const plans = await Promise.all(captured.map((query) => planOf(db.pool, query)));
+  return captured;
+}
+
+async function queryContaining(
+  read: (pool: pg.Pool) => Promise<unknown>,
+  fragment: string,
+): Promise<CapturedQuery> {
+  const found = (await queriesOf(read)).find((query) => query.text.includes(fragment));
+  if (found === undefined) throw new Error(`no query containing ${fragment}`);
+  return found;
+}
+
+function indexConditionsOf(plan: string): string {
+  return plan
+    .split("\n")
+    .filter((line) => line.includes("Index Cond"))
+    .join("\n");
+}
+
+async function plansOf(read: (pool: pg.Pool) => Promise<unknown>): Promise<string> {
+  const captured = await queriesOf(read);
+  const plans = await Promise.all(captured.map((query) => planOf(db.pool, query, "off")));
   return plans.join("\n");
 }
 
@@ -105,14 +132,11 @@ const ANCHOR_WINDOWED_READS: [name: string, read: (pool: pg.Pool) => Promise<unk
   ["the bridge routes", (pool) => bridgeRoutes(pool, resolveChartRange("30d"), resolveBridgeChain)],
 ];
 
-const DIMENSION_SCOPED_READS: [name: string, read: (pool: pg.Pool) => Promise<unknown>][] = [
-  [
-    "the network listing",
-    (pool) =>
-      networkList(pool, { networks, plan: resolveChartRange("30d"), resolveBridgeChain }),
-  ],
-  ["the token listing", (pool) => tokenListing(pool, resolveChartRange("30d"), TOKEN_ROWS_MAX)],
-];
+const networkListing = (pool: pg.Pool) =>
+  networkList(pool, { networks, plan: resolveChartRange("30d"), resolveBridgeChain });
+
+const tokenListingRead = (pool: pg.Pool) =>
+  tokenListing(pool, resolveChartRange("30d"), TOKEN_ROWS_MAX);
 
 describe("the activity time anchor is indexed", () => {
   for (const [name, read] of ANCHOR_WINDOWED_READS) {
@@ -127,18 +151,35 @@ describe("the activity time anchor is indexed", () => {
       expect(indexConditions).toContain(ANCHOR_EXPRESSION);
     });
   }
+});
 
-  for (const [name, read] of [...ANCHOR_WINDOWED_READS, ...DIMENSION_SCOPED_READS]) {
-    it(`plans ${name} without scanning the whole activity table`, async () => {
-      expect(await plansOf(read)).not.toContain("Seq Scan on activities");
+const UNPUSHABLE_WINDOWS: [name: string, read: (pool: pg.Pool) => Promise<unknown>, sql: string][] =
+  [
+    ["the network totals", networkListing, "chain_map(chain_family"],
+    ["the token listing legs", tokenListingRead, "mode() WITHIN GROUP"],
+  ];
+
+describe("the aggregate reads whose window no index can restrict", () => {
+  for (const [name, read, sql] of UNPUSHABLE_WINDOWS) {
+    it(`cannot push the settlement anchor into an index condition for ${name}`, async () => {
+      const plan = await planOf(db.pool, await queryContaining(read, sql), "off");
+
+      expect(indexConditionsOf(plan)).not.toContain(ANCHOR_EXPRESSION);
+    });
+
+    it(`scans the activity table for ${name} under the planner's own settings`, async () => {
+      const plan = await planOf(db.pool, await queryContaining(read, sql), "on");
+
+      expect(plan).toContain("Seq Scan on activities");
     });
   }
 });
 
-describe("chain and registry scoped reads", () => {
-  it("resolves them through a partial index of the verified rows", async () => {
-    for (const [, read] of DIMENSION_SCOPED_READS) {
-      expect(await plansOf(read)).toContain("Index");
-    }
+describe("the sibling window in the same file that an index can restrict", () => {
+  it("pushes the settlement anchor down for the token sparkline", async () => {
+    const query = await queryContaining(tokenListingRead, "sparkline_span");
+    const plan = await planOf(db.pool, query, "off");
+
+    expect(indexConditionsOf(plan)).toContain(ANCHOR_EXPRESSION);
   });
 });
