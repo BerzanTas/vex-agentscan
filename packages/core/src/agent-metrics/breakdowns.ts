@@ -1,5 +1,5 @@
 import type { ChainFamily } from "../chain-registry/catalog.js";
-import { isServerPriced, type AgentActivity } from "./agent-activity.js";
+import { deploysCapital, isServerPriced, type AgentActivity } from "./agent-activity.js";
 import { ZERO_DECIMAL, addDecimal, decimalFromText, decimalToText, type Decimal } from "./decimal.js";
 
 export type ProtocolVolume = { protocol: string; volumeUsd: string; txCount: number };
@@ -23,6 +23,7 @@ type ChainVolumeTally = VolumeTally & {
 const emptyTally: VolumeTally = { volume: ZERO_DECIMAL, txCount: 0 };
 
 function pricedVolumeOf(activity: AgentActivity): Decimal {
+  if (!deploysCapital(activity)) return ZERO_DECIMAL;
   if (!isServerPriced(activity) || activity.spent.usdPriced === null) return ZERO_DECIMAL;
   return decimalFromText(activity.spent.usdPriced);
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { activitiesPerDay30d } from "../agent-metrics/activity-cadence.js";
-import { unpricedSharePct } from "../agent-metrics/unpriced-share.js";
+import { unpriced30dSharePct, unpricedSharePct } from "../agent-metrics/unpriced-share.js";
 import { activity, leg } from "./agent-activity-fixture.js";
 
 const USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
@@ -109,5 +109,39 @@ describe("unpricedSharePct", () => {
     ];
 
     expect(unpricedSharePct(activities)).toBe(50);
+  });
+});
+
+describe("unpriced30dSharePct", () => {
+  it("reports a recent coverage break that the lifetime share dilutes away", () => {
+    const longPricedHistory = Array.from({ length: 48 }, (_unused, index) =>
+      seen({ activityId: BigInt(index), day: "2026-01-05" }),
+    );
+    const recentBreak = [
+      seen({ activityId: 100n, day: "2026-08-02", pricingState: "unpriced" }),
+      seen({ activityId: 101n, day: "2026-08-03", pricingState: "unpriced" }),
+      seen({ activityId: 102n, day: "2026-08-04", pricingState: "unpriced" }),
+      seen({ activityId: 103n, day: "2026-08-05" }),
+    ];
+    const activities = [...longPricedHistory, ...recentBreak];
+
+    expect(unpricedSharePct(activities)).toBe(5.8);
+    expect(unpriced30dSharePct(activities, nowSeconds)).toBe(75);
+  });
+
+  it("excludes rows still pending inside the window", () => {
+    const activities = [
+      seen({ activityId: 1n, day: "2026-08-01", pricingState: "unpriced" }),
+      seen({ activityId: 2n, day: "2026-08-02" }),
+      seen({ activityId: 3n, day: "2026-08-03", pricingState: "pending" }),
+    ];
+
+    expect(unpriced30dSharePct(activities, nowSeconds)).toBe(50);
+  });
+
+  it("reports zero when the window holds nothing", () => {
+    const activities = [seen({ activityId: 1n, day: "2026-01-05", pricingState: "unpriced" })];
+
+    expect(unpriced30dSharePct(activities, nowSeconds)).toBe(0);
   });
 });

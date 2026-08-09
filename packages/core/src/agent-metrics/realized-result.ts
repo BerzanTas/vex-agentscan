@@ -25,7 +25,7 @@ type SwapTrade = { disposal: PricedLeg; acquisition: PricedLeg };
 
 type InventoryLot = { quantity: Decimal; cost: Decimal };
 
-type Consumption = { matchedCost: Decimal; consumedLots: number };
+type Consumption = { matchedCost: Decimal; matchedQuantity: Decimal; consumedLots: number };
 
 function inventoryKeyOf(activity: AgentActivity, tokenAddress: string): string {
   return `${activity.chainFamily}:${activity.chainId}:${tokenAddress.toLowerCase()}`;
@@ -52,6 +52,7 @@ function swapTradeOf(activity: AgentActivity): SwapTrade | null {
 function consumeInventory(lots: InventoryLot[], quantity: Decimal): Consumption {
   let remaining = quantity;
   let matchedCost = ZERO_DECIMAL;
+  let matchedQuantity = ZERO_DECIMAL;
   let consumedLots = 0;
   while (isPositiveDecimal(remaining)) {
     const oldest = lots[0];
@@ -62,6 +63,7 @@ function consumeInventory(lots: InventoryLot[], quantity: Decimal): Consumption 
         ? oldest.cost
         : proportionOfDecimal(oldest.cost, taken, oldest.quantity);
     matchedCost = addDecimal(matchedCost, cost);
+    matchedQuantity = addDecimal(matchedQuantity, taken);
     remaining = subtractDecimal(remaining, taken);
     consumedLots += 1;
     if (taken === oldest.quantity) {
@@ -71,7 +73,7 @@ function consumeInventory(lots: InventoryLot[], quantity: Decimal): Consumption 
     oldest.quantity = subtractDecimal(oldest.quantity, taken);
     oldest.cost = subtractDecimal(oldest.cost, cost);
   }
-  return { matchedCost, consumedLots };
+  return { matchedCost, matchedQuantity, consumedLots };
 }
 
 function lotsFor(inventory: Map<string, InventoryLot[]>, inventoryKey: string): InventoryLot[] {
@@ -96,9 +98,14 @@ export function realizedResult(activities: readonly AgentActivity[]): RealizedRe
       lotsFor(inventory, trade.disposal.inventoryKey),
       trade.disposal.quantity,
     );
-    if (consumption.consumedLots === 0) unmatchedDisposals += 1;
+    if (consumption.matchedQuantity < trade.disposal.quantity) unmatchedDisposals += 1;
     if (consumption.consumedLots > 0) {
-      const result = subtractDecimal(trade.disposal.usd, consumption.matchedCost);
+      const matchedProceeds = proportionOfDecimal(
+        trade.disposal.usd,
+        consumption.matchedQuantity,
+        trade.disposal.quantity,
+      );
+      const result = subtractDecimal(matchedProceeds, consumption.matchedCost);
       realized = addDecimal(realized, result);
       closedRoundTrips += 1;
       if (isPositiveDecimal(result)) winningRoundTrips += 1;

@@ -11,6 +11,7 @@ type BreakdownShape = {
   usd: string | null;
   chainFamily?: "eip155" | "solana";
   chainId?: bigint;
+  eventRole?: string;
   pricingState?: "pending" | "server_priced" | "unpriced";
 };
 
@@ -21,6 +22,7 @@ function traded(shape: BreakdownShape) {
     protocol: shape.protocol,
     chainFamily: shape.chainFamily ?? "eip155",
     chainId: shape.chainId ?? 8453n,
+    eventRole: shape.eventRole ?? "swap",
     pricingState: shape.pricingState ?? "server_priced",
     spent: leg(USDC, 6, "1000000000", shape.usd),
     received: leg(WETH, 18, "1000000000000000000", shape.usd),
@@ -51,6 +53,20 @@ describe("protocolBreakdown", () => {
     expect(protocolBreakdown(activities)).toEqual([
       { protocol: "kyberswap", volumeUsd: "40", txCount: 2 },
       { protocol: "khalani", volumeUsd: "0", txCount: 1 },
+    ]);
+  });
+
+  it("counts a priced non-deploying role without adding it to the volume", () => {
+    const activities = [
+      traded({ activityId: 1n, protocol: "relay", usd: "70", eventRole: "swap" }),
+      traded({ activityId: 2n, protocol: "relay", usd: "30", eventRole: "bridge_deposit" }),
+      traded({ activityId: 3n, protocol: "relay", usd: "900", eventRole: "bridge_fill_observed" }),
+      traded({ activityId: 4n, protocol: "relay", usd: "800", eventRole: "bridge_refund" }),
+      traded({ activityId: 5n, protocol: "relay", usd: "700", eventRole: "token_launch" }),
+    ];
+
+    expect(protocolBreakdown(activities)).toEqual([
+      { protocol: "relay", volumeUsd: "100", txCount: 5 },
     ]);
   });
 
@@ -86,6 +102,29 @@ describe("chainBreakdown", () => {
         protocols: ["kyberswap"],
         volumeUsd: "120",
         txCount: 1,
+      },
+    ]);
+  });
+
+  it("keeps a priced non-deploying role out of the chain volume but inside its count", () => {
+    const activities = [
+      traded({ activityId: 1n, protocol: "relay", chainId: 8453n, usd: "40", eventRole: "swap" }),
+      traded({
+        activityId: 2n,
+        protocol: "relay",
+        chainId: 8453n,
+        usd: "900",
+        eventRole: "bridge_refund",
+      }),
+    ];
+
+    expect(chainBreakdown(activities)).toEqual([
+      {
+        chainFamily: "eip155",
+        chainId: 8453n,
+        protocols: ["relay"],
+        volumeUsd: "40",
+        txCount: 2,
       },
     ]);
   });

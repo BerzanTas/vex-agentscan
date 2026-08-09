@@ -68,7 +68,8 @@ export {
   type ProtocolVolume,
 } from "./agent-metrics/breakdowns.js";
 export { activitiesPerDay30d } from "./agent-metrics/activity-cadence.js";
-export { unpricedSharePct } from "./agent-metrics/unpriced-share.js";
+export { unpriced30dSharePct, unpricedSharePct } from "./agent-metrics/unpriced-share.js";
+export { publishedUsd } from "./agent-metrics/published-usd.js";
 export {
   attestationSignalsFor,
   bestAttestationCandidate,

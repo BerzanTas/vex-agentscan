@@ -99,6 +99,50 @@ describe("realizedResult", () => {
     });
   });
 
+  it("books only the matched share of proceeds when a disposal exceeds the queue", () => {
+    const buy = activity({
+      activityId: 1n,
+      observedAtSeconds: 1000,
+      spent: leg(USDC, 6, "1000000000", "1000"),
+      received: leg(WETH, 18, oneWeth, "1000"),
+    });
+    const oversizedSell = activity({
+      activityId: 2n,
+      observedAtSeconds: 2000,
+      spent: leg(WETH, 18, threeWeth, "3600"),
+      received: leg(USDC, 6, "3600000000", "3600"),
+    });
+
+    expect(realizedResult([buy, oversizedSell])).toEqual({
+      realizedUsd: "200",
+      closedRoundTrips: 1,
+      winningRoundTrips: 1,
+      unmatchedDisposals: 2,
+    });
+  });
+
+  it("refuses to turn one wei of cost basis into a whole position's gain", () => {
+    const dustBuy = activity({
+      activityId: 1n,
+      observedAtSeconds: 1000,
+      spent: leg(USDC, 6, "1", "0.000001"),
+      received: leg(WETH, 18, "1", "0.000001"),
+    });
+    const wholeSell = activity({
+      activityId: 2n,
+      observedAtSeconds: 2000,
+      spent: leg(WETH, 18, oneWeth, "5000"),
+      received: leg(USDC, 6, "5000000000", "5000"),
+    });
+
+    expect(realizedResult([dustBuy, wholeSell])).toEqual({
+      realizedUsd: "-0.000000999999995",
+      closedRoundTrips: 1,
+      winningRoundTrips: 0,
+      unmatchedDisposals: 2,
+    });
+  });
+
   it("keeps two tokens on the same chain in separate queues", () => {
     const buyWeth = activity({
       activityId: 1n,
