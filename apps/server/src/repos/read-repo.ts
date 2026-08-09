@@ -553,7 +553,9 @@ export type PricingCoverageRead = {
   pendingActivityCount: number;
 };
 
-function pricingStateCount(state: string): string {
+type PricingState = "server_priced" | "unpriced" | "pending";
+
+function pricingStateCount(state: PricingState): string {
   return `COUNT(*) FILTER (WHERE a.pricing_state = '${state}')::int`;
 }
 
