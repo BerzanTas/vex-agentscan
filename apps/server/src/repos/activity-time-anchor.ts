@@ -1,5 +1,9 @@
+export function activitySettledAtSql(alias: string): string {
+  return `COALESCE(${alias}.client_confirmed_at, ${alias}.block_time)`;
+}
+
 export function activityTimeAnchorSql(alias: string): string {
-  return `COALESCE(${alias}.client_confirmed_at, ${alias}.block_time, ${alias}.verified_at)`;
+  return `COALESCE(${activitySettledAtSql(alias)}, ${alias}.verified_at)`;
 }
 
 export function activityAggregateDaySql(alias: string): string {

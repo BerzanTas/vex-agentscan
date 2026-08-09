@@ -16,8 +16,14 @@ const blocked = { state: "unpriceable", notBefore: null } as const;
 const blockedUntil = (notBefore: Date) => ({ state: "unpriceable", notBefore }) as const;
 const priced = (usd: string) => ({ state: "priced", usd }) as const;
 
+const settledAt = new Date("2026-08-04T10:41:00Z");
+
 function outcomeFor(legIn: LegPricing, legOut: LegPricing, attempts = 0) {
-  return decidePricingOutcome({ legIn, legOut, attempts, maxAttempts, schedule, now });
+  return decidePricingOutcome({ legIn, legOut, attempts, maxAttempts, schedule, now, settledAt });
+}
+
+function outcomeWithoutSettlementTime(legIn: LegPricing, legOut: LegPricing, attempts = 0) {
+  return decidePricingOutcome({ legIn, legOut, attempts, maxAttempts, schedule, now, settledAt: null });
 }
 
 describe("presentLeg", () => {
@@ -66,6 +72,20 @@ describe("decidePricingOutcome", () => {
   it("does not consume an attempt when no leg is present", () => {
     expect(outcomeFor(absent, absent, 0)).toEqual({ kind: "nothing_to_price" });
     expect(outcomeFor(absent, absent, 4)).toEqual({ kind: "nothing_to_price" });
+  });
+
+  it("is terminal on the first pass when the activity carries no settlement time", () => {
+    expect(outcomeWithoutSettlementTime(priced("10.5"), priced("10.4"))).toEqual({ kind: "no_settlement_time" });
+  });
+
+  it("refuses the settlement-time-less activity however priceable its legs are, at any attempt", () => {
+    expect(outcomeWithoutSettlementTime(priced("10.5"), absent, 0)).toEqual({ kind: "no_settlement_time" });
+    expect(outcomeWithoutSettlementTime(blocked, absent, 4)).toEqual({ kind: "no_settlement_time" });
+    expect(outcomeWithoutSettlementTime(unmappable, absent, 0)).toEqual({ kind: "no_settlement_time" });
+  });
+
+  it("still reports a settlement-time-less activity with no legs as nothing to price", () => {
+    expect(outcomeWithoutSettlementTime(absent, absent)).toEqual({ kind: "nothing_to_price" });
   });
 
   it("is terminally unmappable on the first pass when a leg has no feed identity", () => {

@@ -12,6 +12,7 @@ export type PricingOutcome =
   | { kind: "priced"; usdIn: string | null; usdOut: string | null }
   | { kind: "reschedule"; delayMs: number }
   | { kind: "nothing_to_price" }
+  | { kind: "no_settlement_time" }
   | { kind: "unmappable" }
   | { kind: "attempts_exhausted" };
 
@@ -55,10 +56,11 @@ export function pricingRetryOutcome(
 }
 
 export function decidePricingOutcome(
-  args: PricingRetryBudget & { legIn: LegPricing; legOut: LegPricing },
+  args: PricingRetryBudget & { settledAt: Date | null; legIn: LegPricing; legOut: LegPricing },
 ): PricingOutcome {
   const legs = [args.legIn, args.legOut];
   if (legs.every((leg) => leg.state === "absent")) return { kind: "nothing_to_price" };
+  if (args.settledAt === null) return { kind: "no_settlement_time" };
   if (legs.some((leg) => leg.state === "unmappable")) return { kind: "unmappable" };
   if (legs.some((leg) => leg.state === "unpriceable")) return pricingRetryOutcome(args, latestNotBefore(legs));
   return { kind: "priced", usdIn: usdOf(args.legIn), usdOut: usdOf(args.legOut) };

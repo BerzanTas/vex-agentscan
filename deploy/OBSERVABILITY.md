@@ -180,20 +180,46 @@ activity logs one `"pricing coverage"` line at info level:
   a leg whose chain or token address has no coin key at all. This is the only
   terminal counter that belongs in the coverage ratio.
 - `nothingToPrice` — activities that reached the same terminal
-  `pricing_state = 'unpriced'` because there was **nothing to price**: no leg
-  carried an amount, a token address and decimals. A `launch` event is the
-  ordinary case. These are **excluded from the ratio on purpose** — counting
-  them as failures would depress the launch-gate number permanently with zero
-  feed involvement.
+  `pricing_state = 'unpriced'` because there was **nothing to price**. Two
+  sources: no leg carried an amount, a token address and decimals (a `launch`
+  event is the ordinary case), or the activity carries no settlement time at
+  all — neither `client_confirmed_at` nor `block_time` — so the only instant
+  left is our own `verified_at`, which is when we noticed rather than when the
+  market moved. Both are **excluded from the ratio on purpose**: counting them
+  as failures would depress the launch-gate number permanently with zero feed
+  involvement. The second source is normally zero and has its own warning line
+  (below).
 - `rescheduled` — still `pending`, backed off, and not yet on any side of
   the ratio.
 - `byChainProtocol` — the same three counters split per `(chain, protocol)`,
   sorted deterministically. This is where a single broken feed key shows up
   while the global number still looks healthy.
 
-Both terminal counters land in `pricing_state = 'unpriced'` in the database and
-both are disclosed by `/api/pricing-coverage`; the split exists so the operator
-can tell a feed problem from a legless row.
+All terminal outcomes land in `pricing_state = 'unpriced'` in the database, so
+the column alone cannot tell a feed failure from a legless row from a row with
+no settlement time. The per-pass counters can, which is why the ratio is read
+from them. Anything deriving coverage from the column instead must discriminate
+with `client_confirmed_at IS NULL AND block_time IS NULL` (no settlement time)
+and the `executed_*_raw` leg predicate (nothing to price), or it will report
+both as a broken feed key.
+
+**`"pricing activity has no settlement time…"` — warn level, expected to be
+silent.** The lane refuses to price an activity whose only timestamp is our own
+`verified_at`: its `volume_usd` was booked on the settlement day by the verify
+path, so pricing it on the verification day would split one activity across two
+days permanently, and `daily_aggregates` are never recomputed. A disclosed
+missing figure is the lane's posture everywhere else. The line carries
+`activityId`, `chainSlug`, `protocol` and `verifiedDay`.
+
+The one situation that produces a burst of these is a release that lands
+migration `0011` before the new `worker` revision: `deploy/release.sh` runs the
+migration job first and then rolls the revisions, so for a minute or two the
+**old** worker verifies against the **new** schema and stamps no `block_time`.
+Those rows are terminated by the lane on sight rather than dated wrongly, and
+this warning is how you see it happened. A steady trickle **after** the new
+revision is ready is a different matter and means a reporting client is omitting
+`confirmedAt` on rows whose verification also failed to record a block time —
+worth investigating, but still never a wrong number.
 
 **Log query.**
 
@@ -276,8 +302,18 @@ WHERE pricing_state = 'unpriced' AND client_confirmed_at IS NULL AND block_time 
 Expect zero on an empty production database. A non-zero count on staging or a
 local dataset is the migration working as intended, not a feed problem — it does
 not indicate a broken feed key, and it must **not** be requeued by the procedure
-below, because the block timestamp those rows needed is unrecoverable. Every row
-verified from 0011 onward carries `block_time`, so the count never grows.
+below, because the block timestamp those rows needed is unrecoverable.
+
+**The migration is a cleanup, not the guarantee.** `deploy/release.sh` runs the
+migration job before it rolls the revisions, so the previous `worker` keeps
+verifying against the already-migrated schema for as long as the rollout takes,
+and rows finalised in that window get no `block_time` either. The migration has
+already run by then and cannot catch them. What holds the invariant is the lane
+itself: a claimed activity with neither `client_confirmed_at` nor `block_time`
+is terminated on sight and logs `"pricing activity has no settlement time…"`
+(§4 above), whenever and by whatever code it was written. So this count can grow
+after a release, and that is expected and safe — read the warning line, not this
+query, to see it happen.
 
 ### Recovering from a wrong feed key
 

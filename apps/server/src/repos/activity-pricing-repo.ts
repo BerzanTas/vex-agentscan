@@ -3,6 +3,7 @@ import type { ChainFamily } from "@agentscan/core";
 import {
   activityAggregateDaySql,
   activityPriceHourSql,
+  activitySettledAtSql,
   activityTimeAnchorSql,
 } from "./activity-time-anchor.js";
 
@@ -17,6 +18,7 @@ export type ClaimedPricingRow = {
   chainId: bigint;
   priceHour: Date;
   aggregateDay: string;
+  settledAt: Date | null;
   attempts: number;
   executedInRaw: string | null;
   tokenInAddress: string | null;
@@ -37,6 +39,7 @@ type ClaimedPricingRowShape = {
   chain_id: string;
   price_hour: Date;
   aggregate_day: string;
+  settled_at: Date | null;
   pricing_attempts: number;
   executed_in_raw: string | null;
   token_in_address: string | null;
@@ -69,6 +72,7 @@ export async function claimDuePricingRows(
      RETURNING id, protocol, kind, event_role, chain_family, chain_id,
                ${activityPriceHourSql("activities")} AS price_hour,
                ${activityAggregateDaySql("activities")}::text AS aggregate_day,
+               ${activitySettledAtSql("activities")} AS settled_at,
                pricing_attempts,
                executed_in_raw, token_in_address, token_in_decimals, usd_in_est,
                executed_out_raw, token_out_address, token_out_decimals, usd_out_est`,
@@ -83,6 +87,7 @@ export async function claimDuePricingRows(
     chainId: BigInt(row.chain_id),
     priceHour: row.price_hour,
     aggregateDay: row.aggregate_day,
+    settledAt: row.settled_at,
     attempts: row.pricing_attempts,
     executedInRaw: row.executed_in_raw,
     tokenInAddress: row.token_in_address,

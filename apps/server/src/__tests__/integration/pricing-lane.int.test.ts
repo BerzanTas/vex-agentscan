@@ -119,21 +119,29 @@ async function inKathmanduSession<T>(run: (client: pg.PoolClient) => Promise<T>)
   }
 }
 
-async function withRejectedAggregateWrites(run: () => Promise<void>): Promise<void> {
+async function withAggregateWriteTrigger(body: string, run: () => Promise<void>): Promise<void> {
   await pool.query(
-    `CREATE OR REPLACE FUNCTION reject_daily_aggregate_write() RETURNS trigger AS $$
-     BEGIN RAISE EXCEPTION 'daily aggregate write rejected'; END; $$ LANGUAGE plpgsql`,
+    `CREATE OR REPLACE FUNCTION guard_daily_aggregate_write() RETURNS trigger AS $$
+     BEGIN ${body} END; $$ LANGUAGE plpgsql`,
   );
   await pool.query(
-    `CREATE TRIGGER reject_daily_aggregate_write BEFORE INSERT OR UPDATE ON daily_aggregates
-     FOR EACH ROW EXECUTE FUNCTION reject_daily_aggregate_write()`,
+    `CREATE TRIGGER guard_daily_aggregate_write BEFORE INSERT OR UPDATE ON daily_aggregates
+     FOR EACH ROW EXECUTE FUNCTION guard_daily_aggregate_write()`,
   );
   try {
     await run();
   } finally {
-    await pool.query("DROP TRIGGER reject_daily_aggregate_write ON daily_aggregates");
+    await pool.query("DROP TRIGGER guard_daily_aggregate_write ON daily_aggregates");
   }
 }
+
+const REJECT_EVERY_AGGREGATE_WRITE = "RAISE EXCEPTION 'daily aggregate write rejected';";
+
+const REQUIRE_THE_PRICING_CAS_TO_BE_VISIBLE = `
+  IF NOT EXISTS (SELECT 1 FROM activities WHERE pricing_state = 'server_priced') THEN
+    RAISE EXCEPTION 'aggregate written from a connection that cannot see the pricing CAS';
+  END IF;
+  RETURN NEW;`;
 
 function legacyAbandonStatementOfMigration0011(): string {
   const migrationPath = fileURLToPath(
@@ -269,42 +277,30 @@ describe("claimDuePricingRows", () => {
     expect(claimed[0]!.aggregateDay).toBe("2026-08-05");
   });
 
-  it("falls back to the verification time only when neither client nor chain time is known", async () => {
+  it("still claims an activity with no settlement time, so the lane can terminate it rather than strand it", async () => {
     await seedPricingActivity({ publicId: "verified-at-anchor", confirmedAt: null, blockTime: null });
 
     const claimed = await claimDuePricingRows(pool, 10, 60);
 
+    expect(claimed[0]!.settledAt).toBeNull();
     expect(claimed[0]!.priceHour.toISOString()).toBe("2026-08-06T09:00:00.000Z");
     expect(claimed[0]!.aggregateDay).toBe("2026-08-06");
   });
-});
 
-describe("migration 0011 abandons activities that predate block_time", () => {
-  it("takes an unanchored pre-migration activity out of the pricing lane instead of dating it wrongly", async () => {
-    const unanchored = await seedPricingActivity({
-      publicId: "predates-block-time",
-      confirmedAt: null,
-      blockTime: null,
-    });
-    const anchored = await seedPricingActivity({ publicId: "has-client-time" });
+  it("reports the settlement time itself, not the verification fallback, when the client sent one", async () => {
+    await seedPricingActivity({ publicId: "settled-row" });
 
-    await pool.query(legacyAbandonStatementOfMigration0011());
+    const claimed = await claimDuePricingRows(pool, 10, 60);
 
-    expect((await pricingStateOf(unanchored)).pricing_state).toBe("unpriced");
-    expect((await pricingStateOf(anchored)).pricing_state).toBe("pending");
-    expect((await claimDuePricingRows(pool, 10, 60)).map((row) => row.activityId)).toEqual([anchored]);
+    expect(claimed[0]!.settledAt).toEqual(new Date(CONFIRMED_AT));
   });
 
-  it("leaves an unanchored activity alone once verification has stamped its block time", async () => {
-    const backfilled = await seedPricingActivity({
-      publicId: "block-time-present",
-      confirmedAt: null,
-      blockTime: "2026-08-05T22:30:00Z",
-    });
+  it("treats the on-chain block time as a settlement time", async () => {
+    await seedPricingActivity({ publicId: "settled-on-chain", confirmedAt: null, blockTime: "2026-08-05T22:30:00Z" });
 
-    await pool.query(legacyAbandonStatementOfMigration0011());
+    const claimed = await claimDuePricingRows(pool, 10, 60);
 
-    expect((await pricingStateOf(backfilled)).pricing_state).toBe("pending");
+    expect(claimed[0]!.settledAt).toEqual(new Date("2026-08-05T22:30:00Z"));
   });
 
   it("skips an activity that is not verified", async () => {
@@ -394,6 +390,35 @@ describe("migration 0011 abandons activities that predate block_time", () => {
   });
 });
 
+describe("migration 0011 abandons activities that predate block_time", () => {
+  it("takes an unanchored pre-migration activity out of the pricing lane instead of dating it wrongly", async () => {
+    const unanchored = await seedPricingActivity({
+      publicId: "predates-block-time",
+      confirmedAt: null,
+      blockTime: null,
+    });
+    const anchored = await seedPricingActivity({ publicId: "has-client-time" });
+
+    await pool.query(legacyAbandonStatementOfMigration0011());
+
+    expect((await pricingStateOf(unanchored)).pricing_state).toBe("unpriced");
+    expect((await pricingStateOf(anchored)).pricing_state).toBe("pending");
+    expect((await claimDuePricingRows(pool, 10, 60)).map((row) => row.activityId)).toEqual([anchored]);
+  });
+
+  it("leaves an unanchored activity alone once verification has stamped its block time", async () => {
+    const backfilled = await seedPricingActivity({
+      publicId: "block-time-present",
+      confirmedAt: null,
+      blockTime: "2026-08-05T22:30:00Z",
+    });
+
+    await pool.query(legacyAbandonStatementOfMigration0011());
+
+    expect((await pricingStateOf(backfilled)).pricing_state).toBe("pending");
+  });
+});
+
 describe("runPricingPass", () => {
   it("prices both legs of a swap from the feed and records the source price", async () => {
     const activityId = await seedPricingActivity({ publicId: "two-leg" });
@@ -473,7 +498,7 @@ describe("runPricingPass", () => {
     const activityId = await seedPricingActivity({ publicId: "atomic-volume" });
     const feed = recordingFeed({ [`base:${WETH.toLowerCase()}`]: wethPoint, [`base:${USDC.toLowerCase()}`]: usdcPoint });
 
-    await withRejectedAggregateWrites(async () => {
+    await withAggregateWriteTrigger(REJECT_EVERY_AGGREGATE_WRITE, async () => {
       await runPricingPass(depsWith(feed.feed));
     });
 
@@ -482,6 +507,20 @@ describe("runPricingPass", () => {
     expect(state.usd_in_priced).toBeNull();
     expect(state.priced_at).toBeNull();
     expect(await pricedVolumeRows()).toEqual([]);
+  });
+
+  it("issues the volume increment on the same connection that holds the uncommitted pricing CAS", async () => {
+    const activityId = await seedPricingActivity({ publicId: "shared-connection" });
+    const feed = recordingFeed({ [`base:${WETH.toLowerCase()}`]: wethPoint, [`base:${USDC.toLowerCase()}`]: usdcPoint });
+
+    await withAggregateWriteTrigger(REQUIRE_THE_PRICING_CAS_TO_BE_VISIBLE, async () => {
+      await runPricingPass(depsWith(feed.feed));
+    });
+
+    expect((await pricingStateOf(activityId)).pricing_state).toBe("server_priced");
+    expect(await pricedVolumeRows()).toEqual([
+      { day: AGGREGATE_DAY, volume_usd_priced: "2500", tx_count: 0 },
+    ]);
   });
 
   it("does not re-claim an activity a previous pass already priced", async () => {
@@ -550,6 +589,54 @@ describe("runPricingPass", () => {
     expect(state.pricing_state).toBe("unpriced");
     expect(state.pricing_attempts).toBe(0);
     expect(feed.calls).toHaveLength(0);
+  });
+
+  it("is terminally unpriced on the first pass when the activity carries no settlement time", async () => {
+    const warnings: Record<string, unknown>[] = [];
+    const activityId = await seedPricingActivity({
+      publicId: "no-settlement-time",
+      confirmedAt: null,
+      blockTime: null,
+    });
+    const feed = recordingFeed({ [`base:${WETH.toLowerCase()}`]: wethPoint, [`base:${USDC.toLowerCase()}`]: usdcPoint });
+    const capturingLogger = {
+      ...logger,
+      warn: (payload: Record<string, unknown>, message: string) => {
+        if (message.startsWith("pricing activity has no settlement time")) warnings.push(payload);
+      },
+    } as unknown as PricingLoopDeps["logger"];
+
+    await runPricingPass(depsWith(feed.feed, { logger: capturingLogger }));
+
+    const state = await pricingStateOf(activityId);
+    expect(state.pricing_state).toBe("unpriced");
+    expect(state.pricing_attempts).toBe(0);
+    expect(state.usd_in_priced).toBeNull();
+    expect(await pricedVolumeRows()).toEqual([]);
+    expect(warnings).toEqual([
+      {
+        activityId: activityId.toString(),
+        chainSlug: "base",
+        protocol: "kyberswap",
+        verifiedDay: "2026-08-06",
+      },
+    ]);
+  });
+
+  it("counts a settlement-time-less activity as nothing to price, not as a feed failure", async () => {
+    const coverage: Record<string, unknown>[] = [];
+    await seedPricingActivity({ publicId: "anchorless-coverage", confirmedAt: null, blockTime: null });
+    const feed = recordingFeed({ [`base:${WETH.toLowerCase()}`]: wethPoint, [`base:${USDC.toLowerCase()}`]: usdcPoint });
+    const capturingLogger = {
+      ...logger,
+      info: (payload: Record<string, unknown>, message: string) => {
+        if (message === "pricing coverage") coverage.push(payload);
+      },
+    } as unknown as PricingLoopDeps["logger"];
+
+    await runPricingPass(depsWith(feed.feed, { logger: capturingLogger }));
+
+    expect(coverage[0]).toMatchObject({ processed: 1, serverPriced: 0, unpriceable: 0, nothingToPrice: 1 });
   });
 
   it("is terminally unpriced on the first pass when the chain has no price feed key", async () => {

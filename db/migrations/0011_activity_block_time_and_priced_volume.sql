@@ -20,8 +20,12 @@ ALTER TABLE daily_aggregates ADD COLUMN volume_usd_priced NUMERIC NOT NULL DEFAU
 -- while the pricing lane would key its volume_usd_priced on the verification day -- two days for
 -- one activity, permanently, since daily_aggregates are never recomputed. Abandon those rows from
 -- the priced series instead: an unpriced row is a disclosed missing figure, which is the posture
--- the whole lane takes, and a wrong per-day figure is not. Rows verified from here on always carry
--- block_time, so this affects nothing written after this migration. To see how many were abandoned:
+-- the whole lane takes, and a wrong per-day figure is not. This statement is a cleanup, not the
+-- guarantee: the release runs the migration job before it rolls the worker revision, so the
+-- previous worker keeps finalising rows against this schema without stamping block_time until the
+-- rollout completes, and they arrive after this has already run. What holds the invariant is the
+-- lane, which terminates any claimed activity with no settlement time on sight, whenever and by
+-- whatever code it was written. To see how many rows carry no settlement time at all:
 --   SELECT count(*) FROM activities WHERE pricing_state = 'unpriced' AND client_confirmed_at IS NULL
 --     AND block_time IS NULL AND verification_state IN ('verified_full','verified_basic');
 -- The down migration cannot restore them: once block_time is dropped they are indistinguishable.

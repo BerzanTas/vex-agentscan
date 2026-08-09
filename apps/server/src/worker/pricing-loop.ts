@@ -263,6 +263,18 @@ function chainSlugOf(row: ClaimedPricingRow): string | null {
     ?.canonicalSlug ?? null;
 }
 
+function warnOnMissingSettlementTime(deps: PricingLoopDeps, row: ClaimedPricingRow): void {
+  deps.logger.warn(
+    {
+      activityId: row.activityId.toString(),
+      chainSlug: chainSlugOf(row),
+      protocol: row.protocol,
+      verifiedDay: row.aggregateDay,
+    },
+    "pricing activity has no settlement time; abandoning it rather than dating it by our own clock",
+  );
+}
+
 function warnOnDivergence(
   deps: PricingLoopDeps,
   row: ClaimedPricingRow,
@@ -317,7 +329,7 @@ type PricingCoverageReport = {
 
 function countInSlice(slice: CoverageSlice, outcome: PricingOutcome): void {
   if (outcome.kind === "priced") slice.serverPriced += 1;
-  else if (outcome.kind === "nothing_to_price") slice.nothingToPrice += 1;
+  else if (outcome.kind === "nothing_to_price" || outcome.kind === "no_settlement_time") slice.nothingToPrice += 1;
   else slice.unpriceable += 1;
 }
 
@@ -359,9 +371,11 @@ async function priceRow(
 ): Promise<PricingOutcome> {
   const outcome = decidePricingOutcome({
     ...retryBudgetOf(deps, prepared.row),
+    settledAt: prepared.row.settledAt,
     legIn: legPricingOf(prepared.legIn, resolved),
     legOut: legPricingOf(prepared.legOut, resolved),
   });
+  if (outcome.kind === "no_settlement_time") warnOnMissingSettlementTime(deps, prepared.row);
   await applyOutcome(deps, prepared.row, outcome);
   if (outcome.kind === "priced") {
     warnOnDivergence(deps, prepared.row, "in", outcome.usdIn);
