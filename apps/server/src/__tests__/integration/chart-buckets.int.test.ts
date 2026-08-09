@@ -110,11 +110,9 @@ function utcMidnightSecondsToday(): number {
 }
 
 describe("chartBuckets for the all range", () => {
-  it("spans a single day when no aggregate was ever written and fills it with the priced volume", async () => {
+  it("returns a single zero-filled day when no aggregate was ever written", async () => {
     const buckets = await chartBuckets(db.pool, resolveChartRange("all"));
 
-    expect(buckets).toEqual([
-      { bucketStart: utcMidnightSecondsToday(), volumeUsd: "100.50", txCount: 0 },
-    ]);
+    expect(buckets).toEqual([{ bucketStart: utcMidnightSecondsToday(), volumeUsd: "0", txCount: 0 }]);
   });
 });

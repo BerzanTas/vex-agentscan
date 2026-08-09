@@ -1,6 +1,7 @@
 import type pg from "pg";
 import { rangeWindowSeconds, type ChartRangePlan } from "@agentscan/core";
 import type { ResolveBridgeChain } from "../app.js";
+import { activityTimeAnchorSql } from "./activity-time-anchor.js";
 import { serverPricedUsdInSumOf } from "./server-priced-usd.js";
 
 
@@ -77,7 +78,7 @@ async function bridgeLegGroups(pool: pg.Pool, plan: ChartRangePlan): Promise<Bri
        AND a.from_chain_id IS NOT NULL
        AND a.to_chain_id IS NOT NULL
        AND ($1::int IS NULL
-            OR COALESCE(a.client_confirmed_at, a.verified_at) >= now() - make_interval(secs => $1::int))
+            OR ${activityTimeAnchorSql("a")} >= now() - make_interval(secs => $1::int))
      GROUP BY a.protocol, a.from_chain_id, a.to_chain_id`,
     [rangeWindowSeconds(plan)],
   );

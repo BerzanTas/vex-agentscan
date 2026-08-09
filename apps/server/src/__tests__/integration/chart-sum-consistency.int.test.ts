@@ -3,6 +3,7 @@ import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { resolveChain, resolveChartRange } from "@agentscan/core";
 import { loadConfig } from "../../config.js";
+import { activityAggregateDaySql } from "../../repos/activity-time-anchor.js";
 import { chartBuckets, type ChartBucketRead } from "../../repos/read-repo.js";
 import { startTestDb } from "../../testing/pg-harness.js";
 import { makeChainReader } from "../../verification/viem-chain-reader.js";
@@ -70,6 +71,22 @@ async function utcDayWindow(pool: pg.Pool): Promise<{ dayStart: Date; elapsedMs:
   return { dayStart: row.day_start, elapsedMs: row.server_now.getTime() - row.day_start.getTime() };
 }
 
+async function addPricedVolumeAsTheLaneWould(pool: pg.Pool): Promise<void> {
+  await pool.query(
+    `INSERT INTO daily_aggregates (day, protocol, kind, volume_usd, tx_count, volume_usd_priced)
+     SELECT ${activityAggregateDaySql("a")}, a.protocol, a.kind, 0, 0,
+            COALESCE(SUM(a.usd_in_priced) FILTER (
+              WHERE a.pricing_state = 'server_priced'
+                AND a.event_role IN ('swap','bridge_deposit')
+            ), 0)
+     FROM activities a
+     WHERE a.verification_state IN ('verified_full','verified_basic')
+     GROUP BY 1, a.protocol, a.kind
+     ON CONFLICT (day, protocol, kind)
+     DO UPDATE SET volume_usd_priced = daily_aggregates.volume_usd_priced + EXCLUDED.volume_usd_priced`,
+  );
+}
+
 async function seedQueuedActivity(pool: pg.Pool, index: number, seed: ActivitySeed, confirmedAt: Date): Promise<void> {
   const rowKey = `chart-sum-${index}`;
   const inserted = await pool.query<{ id: string }>(
@@ -113,13 +130,14 @@ beforeAll(async () => {
     chainReaderFor: (entry, context) => makeChainReader(entry, confirmAllConfig, context),
     logger,
   });
+  await addPricedVolumeAsTheLaneWould(db.pool);
 }, 120_000);
 
 afterAll(async () => {
   await db.stop();
 });
 
-describe("chart ranges served from activities and from daily_aggregates", () => {
+describe("chart ranges served from activities and from the priced daily aggregates", () => {
   it("reports the same volume for today whether it is bucketed live or read from the aggregates", async () => {
     const liveBuckets = await chartBuckets(db.pool, resolveChartRange("24h"));
     const aggregateBuckets = await chartBuckets(db.pool, resolveChartRange("30d"));

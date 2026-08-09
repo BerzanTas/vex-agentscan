@@ -85,9 +85,9 @@ beforeAll(async () => {
   await seedActivity(db.pool, { agentHash: agentA, publicId: "pub-mismatch-a", status: "confirmed", verificationState: "mismatch", receivedSecondsAgo: 60, txHash: "0xbad", usdInEst: "999" });
   await seedActivity(db.pool, { agentHash: agentC, publicId: "pub-mismatch-c", status: "confirmed", verificationState: "mismatch", receivedSecondsAgo: 30, txHash: "0xbadc", usdInEst: "888" });
   await db.pool.query(
-    `INSERT INTO daily_aggregates (day, protocol, kind, volume_usd, tx_count) VALUES
-       ((now() AT TIME ZONE 'utc')::date, 'kyberswap', 'swap', 100.5, 2),
-       ((now() AT TIME ZONE 'utc')::date - 1, 'relay', 'bridge', 50.25, 1)`,
+    `INSERT INTO daily_aggregates (day, protocol, kind, volume_usd, tx_count, volume_usd_priced) VALUES
+       ((now() AT TIME ZONE 'utc')::date, 'kyberswap', 'swap', 100.5, 2, 100.5),
+       ((now() AT TIME ZONE 'utc')::date - 1, 'relay', 'bridge', 50.25, 1, 0)`,
   );
   const dayRows = await db.pool.query<{ day: string }>("SELECT day::text AS day FROM daily_aggregates ORDER BY day");
   seededDays = dayRows.rows.map((row) => row.day);
@@ -168,7 +168,7 @@ describe("GET /api/tx/:publicId", () => {
 });
 
 describe("GET /api/stats", () => {
-  it("totals the server priced activity and takes the counts from the daily aggregates", async () => {
+  it("totals the priced daily aggregates and never the client estimate series beside them", async () => {
     const response = await app.inject({ method: "GET", url: "/api/stats" });
     expect(response.statusCode).toBe(200);
     expect(response.json<StatsDto>()).toEqual({
@@ -186,7 +186,7 @@ function utcMidnightSecondsOf(day: string): number {
 }
 
 describe("GET /api/chart", () => {
-  it("counts daily buckets from the aggregates and fills them with the priced volume", async () => {
+  it("serves daily buckets of priced volume and transaction counts from one table", async () => {
     const [yesterdayStart, todayStart] = seededDays.map(utcMidnightSecondsOf);
     const response = await app.inject({ method: "GET", url: "/api/chart?range=30d" });
     expect(response.statusCode).toBe(200);
@@ -215,7 +215,7 @@ describe("GET /api/chart", () => {
 });
 
 describe("GET /api/protocols", () => {
-  it("ranks protocols by priced volume and counts them from the aggregates", async () => {
+  it("ranks protocols by priced volume, leaving a protocol with nothing priced at zero", async () => {
     const response = await app.inject({ method: "GET", url: "/api/protocols" });
     expect(response.statusCode).toBe(200);
     expect(response.json<ProtocolStatDto[]>()).toEqual([

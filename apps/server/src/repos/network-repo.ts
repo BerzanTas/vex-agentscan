@@ -10,13 +10,14 @@ import type {
   ProtocolStatDto,
   VerificationTier,
 } from "../public-dto.js";
+import { activityTimeAnchorSql } from "./activity-time-anchor.js";
 import { serverPricedUsdIn, serverPricedUsdInSumOf, serverPricedUsdOut } from "./server-priced-usd.js";
 
 
 const DAY_SECONDS = 86_400;
 const VERIFIED_STATES = "('verified_full','verified_basic')";
 const VOLUME_ROLES = "('swap','bridge_deposit')";
-const OBSERVED_AT = "COALESCE(a.client_confirmed_at, a.verified_at)";
+const OBSERVED_AT = activityTimeAnchorSql("a");
 const NETWORK_CHAINS = "a.chain_family = $1 AND a.chain_id = ANY($2::bigint[])";
 const VOLUME_SUM = serverPricedUsdInSumOf("a", `a.event_role IN ${VOLUME_ROLES}`);
 const DEPOSIT_VOLUME_SUM = serverPricedUsdInSumOf("a", "a.event_role = 'bridge_deposit'");

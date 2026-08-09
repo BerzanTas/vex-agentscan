@@ -168,8 +168,11 @@ async function seedWindow(pool: pg.Pool, seeds: readonly ActivitySeed[]): Promis
   );
   for (const seed of seeds) await seedActivity(pool, seed);
   await pool.query(
-    `INSERT INTO daily_aggregates (day, protocol, kind, volume_usd, tx_count)
-     SELECT (now() AT TIME ZONE 'utc')::date, protocol, kind, $1::numeric, COUNT(*)::int
+    `INSERT INTO daily_aggregates (day, protocol, kind, volume_usd, tx_count, volume_usd_priced)
+     SELECT (now() AT TIME ZONE 'utc')::date, protocol, kind, $1::numeric, COUNT(*)::int,
+            COALESCE(SUM(usd_in_priced) FILTER (
+              WHERE pricing_state = 'server_priced' AND event_role IN ('swap','bridge_deposit')
+            ), 0)
      FROM activities
      GROUP BY protocol, kind`,
     [CLIENT_ESTIMATE_NEVER_PUBLISHED],
@@ -356,6 +359,15 @@ describe("public aggregates over a window where nothing has been priced yet", ()
     expect(totalVolumeOf(live)).toBe(0);
     expect(totalVolumeOf(daily)).toBe(0);
     expect(totalTxOf(live)).toBe(NOTHING_PRICED_WINDOW.length);
+  });
+
+  it("shows a day of transactions carrying no priced volume rather than an empty day", async () => {
+    const daily = await getJson<ChartPointDto[]>("/api/chart?range=30d");
+    const observed = daily.filter((point) => point.txCount > 0);
+
+    expect(observed.map(({ volumeUsd, txCount }) => ({ volumeUsd, txCount }))).toEqual([
+      { volumeUsd: "0", txCount: NOTHING_PRICED_WINDOW.length },
+    ]);
   });
 
   it("returns zero volume for protocols, networks, tokens and routes", async () => {

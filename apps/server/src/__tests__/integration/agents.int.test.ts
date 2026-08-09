@@ -247,9 +247,9 @@ describe("GET /api/agents", () => {
       await db.pool.query("UPDATE agents SET name = 'Vex-09090909' WHERE agent_hash = $1", [
         hashOf(9),
       ]);
-      await seedActivity(db.pool, { agentHash: hashOf(9), usdInEst: "200" });
+      await seedActivity(db.pool, { agentHash: hashOf(9), usdInPriced: "200" });
       await seedAgent(db.pool, hashOf(10));
-      await seedActivity(db.pool, { agentHash: hashOf(10), usdInEst: "100" });
+      await seedActivity(db.pool, { agentHash: hashOf(10), usdInPriced: "100" });
     });
 
     it("links the bound agent by name and leaves the unbound one linkless", async () => {

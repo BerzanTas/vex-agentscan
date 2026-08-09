@@ -6,6 +6,7 @@ const SERVER_SRC = new URL("../", import.meta.url);
 
 const CLIENT_ESTIMATE_COLUMN = /usd_(in|out)_est/;
 const SERVER_PRICED_COLUMN = /usd_(in|out)_priced/;
+const CLIENT_ESTIMATE_DAILY_SUM = /SUM\((?:\w+\.)?volume_usd\)/;
 const PRICING_STATE_GUARD = /pricing_state/;
 
 const PRICED_COLUMN_OWNER = "repos/server-priced-usd.ts";
@@ -13,6 +14,7 @@ const PRICED_COLUMN_OWNER = "repos/server-priced-usd.ts";
 const NON_AGGREGATE_REPOS: readonly string[] = [
   "activities-ingest-repo.ts",
   "activities-verify-repo.ts",
+  "activity-pricing-repo.ts",
   "agents-repo.ts",
   "handshake-repo.ts",
   "purge-repo.ts",
@@ -31,6 +33,17 @@ const PER_ROW_DETAIL_LINES: Record<string, readonly string[]> = {
     "usd_out_est: raw.usd_out_est,",
   ],
   "public-dto.ts": ["usdInEst: row.usd_in_est,", "usdOutEst: row.usd_out_est,"],
+};
+
+const PER_ROW_PRICED_LINES: Record<string, readonly string[]> = {
+  "repos/agent-page-repo.ts": [
+    "usd_in_priced: string | null;",
+    "usd_out_priced: string | null;",
+    "a.usd_in_priced::text AS usd_in_priced,",
+    "a.usd_out_priced::text AS usd_out_priced,",
+    "usdPriced: row.usd_in_priced,",
+    "usdPriced: row.usd_out_priced,",
+  ],
 };
 
 function typeScriptFilesIn(directory: string): string[] {
@@ -60,6 +73,10 @@ function linesMatching(sourcePath: string, pattern: RegExp): string[] {
 
 function perRowDetailLinesOf(sourcePath: string): readonly string[] {
   return PER_ROW_DETAIL_LINES[sourcePath] ?? [];
+}
+
+function perRowPricedLinesOf(sourcePath: string): readonly string[] {
+  return PER_ROW_PRICED_LINES[sourcePath] ?? [];
 }
 
 const KNOWN_AGGREGATE_SOURCES = [
@@ -92,16 +109,31 @@ describe("public aggregate sources", () => {
       expect(references.filter((line) => !exempted.includes(line))).toEqual([]);
     });
 
+    it(`sums no client estimate column of daily_aggregates in ${sourcePath}`, () => {
+      expect(linesMatching(sourcePath, CLIENT_ESTIMATE_DAILY_SUM)).toEqual([]);
+    });
+
     if (sourcePath === PRICED_COLUMN_OWNER) continue;
 
     it(`reads the priced columns only through ${PRICED_COLUMN_OWNER} in ${sourcePath}`, () => {
-      expect(linesMatching(sourcePath, SERVER_PRICED_COLUMN)).toEqual([]);
+      const references = linesMatching(sourcePath, SERVER_PRICED_COLUMN);
+      const exempted = perRowPricedLinesOf(sourcePath);
+
+      expect(references.filter((line) => !exempted.includes(line))).toEqual([]);
     });
   }
 
   for (const [sourcePath, exempted] of Object.entries(PER_ROW_DETAIL_LINES)) {
     it(`keeps every exempted per-row detail line of ${sourcePath} present`, () => {
       const references = linesMatching(sourcePath, CLIENT_ESTIMATE_COLUMN);
+
+      expect(exempted.filter((line) => !references.includes(line))).toEqual([]);
+    });
+  }
+
+  for (const [sourcePath, exempted] of Object.entries(PER_ROW_PRICED_LINES)) {
+    it(`keeps every exempted per-row priced line of ${sourcePath} present`, () => {
+      const references = linesMatching(sourcePath, SERVER_PRICED_COLUMN);
 
       expect(exempted.filter((line) => !references.includes(line))).toEqual([]);
     });
