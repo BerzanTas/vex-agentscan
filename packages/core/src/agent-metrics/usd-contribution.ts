@@ -21,3 +21,7 @@ export function usdContributionOf(activity: AgentActivity): UsdContribution {
   if (activity.pricingState === "pending") return "awaiting_a_price";
   return couldNotBePriced(activity) ? "contributes_no_usd" : "contributes_usd";
 }
+
+export function awaitingAPriceCount(activities: readonly AgentActivity[]): number {
+  return activities.filter((activity) => usdContributionOf(activity) === "awaiting_a_price").length;
+}

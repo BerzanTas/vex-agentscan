@@ -1,5 +1,6 @@
 import {
   activitiesPerDay30d,
+  awaitingAPriceCount,
   capitalDeployed,
   chainBreakdown,
   protocolBreakdown,
@@ -37,6 +38,7 @@ export type AgentPageDto = {
   lastSeenSeconds: number;
   unpricedSharePct: number;
   unpriced30dSharePct: number;
+  awaitingAPriceCount: number;
   truncated: boolean;
 };
 
@@ -106,6 +108,7 @@ export function toAgentPageDto(input: AgentPageInput, resolveChain: ResolveChain
     ),
     unpricedSharePct: unpricedSharePct(input.activities),
     unpriced30dSharePct: unpriced30dSharePct(input.activities, input.nowSeconds),
+    awaitingAPriceCount: awaitingAPriceCount(input.activities),
     truncated: input.truncated,
   };
 }
