@@ -207,7 +207,7 @@ async function applyOutcome(
     await exhaustPricing(deps.pool, row.activityId);
     return;
   }
-  await abandonPricing(deps.pool, row.activityId);
+  if (outcome.kind === "nothing_to_price") await abandonPricing(deps.pool, row.activityId);
 }
 
 function chainSlugOf(row: ClaimedPricingRow): string | null {

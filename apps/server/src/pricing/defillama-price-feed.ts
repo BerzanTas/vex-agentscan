@@ -21,7 +21,7 @@ const historicalResponseSchema = z.object({ coins: z.record(z.string(), z.unknow
 
 function chunked<T>(items: readonly T[], size: number): T[][] {
   const chunks: T[][] = [];
-  for (let index = 0; index < items.length; index += size) chunks.push([...items.slice(index, index + size)]);
+  for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
   return chunks;
 }
 

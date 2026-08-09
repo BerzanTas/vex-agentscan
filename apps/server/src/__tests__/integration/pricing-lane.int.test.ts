@@ -228,6 +228,7 @@ describe("claimDuePricingRows", () => {
        WHERE pricing_state = 'pending'
          AND verification_state IN ('verified_full','verified_basic')
          AND (pricing_next_attempt_at IS NULL OR pricing_next_attempt_at <= now())
+         AND COALESCE(client_confirmed_at, verified_at) IS NOT NULL
        ORDER BY id LIMIT 50`,
     );
     const plan = explained.rows.map((row) => row["QUERY PLAN"]).join("\n");
