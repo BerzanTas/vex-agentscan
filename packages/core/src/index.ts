@@ -83,6 +83,7 @@ export {
 } from "./agent-metrics/breakdowns.js";
 export { activitiesPerDay30d } from "./agent-metrics/activity-cadence.js";
 export { unpriced30dSharePct, unpricedSharePct } from "./agent-metrics/unpriced-share.js";
+export { usdContributionOf, type UsdContribution } from "./agent-metrics/usd-contribution.js";
 export { publishedUsd } from "./agent-metrics/published-usd.js";
 export {
   attestationSignalsFor,
