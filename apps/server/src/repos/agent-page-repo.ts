@@ -1,8 +1,9 @@
 import type pg from "pg";
 import type { AgentActivity, ChainFamily, PricingState } from "@agentscan/core";
+import { activityTimeAnchorSql } from "./activity-time-anchor.js";
 
 const VERIFIED_STATES = "('verified_full','verified_basic')";
-const OBSERVED_AT = "COALESCE(a.client_confirmed_at, a.verified_at, a.received_at)";
+const OBSERVED_AT = activityTimeAnchorSql("a");
 
 const PRICING_STATES: readonly PricingState[] = ["pending", "server_priced", "unpriced"];
 

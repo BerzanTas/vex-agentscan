@@ -56,6 +56,9 @@ type ActivitySeed = {
   tokenOutDecimals?: number | null;
   executedOutRaw?: string | null;
   txHash?: string | null;
+  clientConfirmed?: boolean;
+  blockTimeDaysAgo?: number;
+  verifiedAtDaysAgo?: number;
 };
 
 async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
@@ -68,8 +71,8 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
         token_in_address, token_in_decimals, executed_in_raw,
         token_out_address, token_out_decimals, executed_out_raw,
         usd_in_priced, usd_out_priced, pricing_state,
-        tx_hash, client_created_at, client_confirmed_at, statuses_seen, verification_state,
-        received_schema_version)
+        tx_hash, client_created_at, client_confirmed_at, block_time, verified_at,
+        statuses_seen, verification_state, received_schema_version)
      VALUES ($1, $2, $2, $2, 0, $3, $4, 'confirmed',
              $5, 'eip155', $6::bigint,
              $7, $8, $9,
@@ -77,7 +80,9 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
              $13::numeric, $14::numeric, $15,
              $16,
              now() - make_interval(days => $17) - interval '1 hour',
-             now() - make_interval(days => $17),
+             CASE WHEN $19::boolean THEN now() - make_interval(days => $17) END,
+             CASE WHEN $20::int IS NOT NULL THEN now() - make_interval(days => $20::int) END,
+             CASE WHEN $21::int IS NOT NULL THEN now() - make_interval(days => $21::int) END,
              ARRAY['confirmed'], $18, 1)`,
     [
       seed.agentHash,
@@ -98,6 +103,9 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
       seed.txHash === undefined ? `0x${"ab".repeat(32)}` : seed.txHash,
       seed.daysAgo,
       seed.verificationState ?? "verified_full",
+      seed.clientConfirmed ?? true,
+      seed.blockTimeDaysAgo ?? null,
+      seed.verifiedAtDaysAgo ?? null,
     ],
   );
 }
@@ -382,6 +390,88 @@ describe("GET /api/agents/:name win rate at the floor", () => {
     const page = (await agentPage(BOUND_NAME)).json<AgentPageDto>();
     expect(page.closedRoundTrips).toBe(5);
     expect(page.winRate).toBe(1);
+  });
+});
+
+describe("GET /api/agents/:name when the client sent no confirmation time", () => {
+  beforeAll(async () => {
+    await resetData(db.pool);
+    await seedAgent(db.pool, { agentHash: BOUND_AGENT, name: BOUND_NAME });
+    await seedActivity(db.pool, {
+      agentHash: BOUND_AGENT,
+      daysAgo: 10,
+      clientConfirmed: false,
+      blockTimeDaysAgo: 10,
+      verifiedAtDaysAgo: 3,
+      tokenInAddress: USDC,
+      tokenInDecimals: 6,
+      executedInRaw: "1000000000",
+      usdInPriced: "1000",
+      tokenOutAddress: WETH,
+      tokenOutDecimals: 18,
+      executedOutRaw: "1000000000000000000",
+      usdOutPriced: "1000",
+    });
+    await seedActivity(db.pool, {
+      agentHash: BOUND_AGENT,
+      daysAgo: 8,
+      clientConfirmed: false,
+      blockTimeDaysAgo: 8,
+      verifiedAtDaysAgo: 5,
+      tokenInAddress: WETH,
+      tokenInDecimals: 18,
+      executedInRaw: "1000000000000000000",
+      usdInPriced: "1200",
+      tokenOutAddress: USDC,
+      tokenOutDecimals: 6,
+      executedOutRaw: "1200000000",
+      usdOutPriced: "1200",
+    });
+  });
+
+  it("dates activity from the block it settled in, not from when the server verified it", async () => {
+    const page = (await agentPage(BOUND_NAME)).json<AgentPageDto>();
+
+    expect(page.firstSeenSeconds).toBe(10 * 86_400);
+    expect(page.lastSeenSeconds).toBe(8 * 86_400);
+  });
+
+  it("orders the FIFO queue by block time, so the acquisition precedes its disposal", async () => {
+    const page = (await agentPage(BOUND_NAME)).json<AgentPageDto>();
+
+    expect(page.realizedResultUsd).toBe("200");
+    expect(page.closedRoundTrips).toBe(1);
+    expect(page.unmatchedDisposals).toBe(1);
+  });
+
+  it("places each day's deployed capital on the day the block settled", async () => {
+    const page = (await agentPage(BOUND_NAME)).json<AgentPageDto>();
+
+    expect(page.dailyDeployedUsd.filter((point) => point.usd !== "0")).toEqual([
+      { day: page.dailyDeployedUsd[19]?.day ?? "", usd: "1000" },
+      { day: page.dailyDeployedUsd[21]?.day ?? "", usd: "1200" },
+    ]);
+  });
+});
+
+describe("GET /api/agents/:name for a row verified before block time was recorded", () => {
+  beforeAll(async () => {
+    await resetData(db.pool);
+    await seedAgent(db.pool, { agentHash: BOUND_AGENT, name: BOUND_NAME });
+    await seedActivity(db.pool, {
+      agentHash: BOUND_AGENT,
+      daysAgo: 4,
+      clientConfirmed: false,
+      verifiedAtDaysAgo: 4,
+    });
+  });
+
+  it("falls back to the verification time rather than losing the row's date", async () => {
+    const page = (await agentPage(BOUND_NAME)).json<AgentPageDto>();
+
+    expect(page.firstSeenSeconds).toBe(4 * 86_400);
+    expect(page.lastSeenSeconds).toBe(4 * 86_400);
+    expect(page.activityCount).toBe(1);
   });
 });
 
