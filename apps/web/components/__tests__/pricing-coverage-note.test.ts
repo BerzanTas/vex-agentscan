@@ -9,7 +9,7 @@ function markupOf(coverage: PricingCoverageDto): string {
 }
 
 describe("PricingCoverageNote", () => {
-  it("states the priced share of the window as a percentage", () => {
+  it("states the priced share of what the window has finished pricing", () => {
     const markup = markupOf({
       pricedActivityCount: 30,
       unpricedActivityCount: 10,
@@ -17,7 +17,7 @@ describe("PricingCoverageNote", () => {
       pricedCoverage: 0.75,
     });
 
-    expect(markup).toContain("75.0%");
+    expect(markup).toContain("75.0% of the verified activity we have finished pricing");
   });
 
   it("counts the unpriced and the not yet priced activities as left out", () => {
@@ -30,7 +30,21 @@ describe("PricingCoverageNote", () => {
 
     expect(markup).toContain("10 activities are left out");
     expect(markup).toContain("8 we could not price");
-    expect(markup).toContain("2 not priced yet");
+    expect(markup).toContain("2 still being priced");
+  });
+
+  it("never claims full coverage while activities are still being priced", () => {
+    const markup = markupOf({
+      pricedActivityCount: 3,
+      unpricedActivityCount: 0,
+      pendingActivityCount: 2,
+      pricedCoverage: 1,
+    });
+
+    expect(markup).toContain("100.0% of the verified activity we have finished pricing");
+    expect(markup).toContain("2 activities are left out");
+    expect(markup).toContain("2 still being priced");
+    expect(markup).not.toContain("we could not price");
   });
 
   it("renders the disclosure even when everything in the window is priced", () => {
@@ -42,7 +56,8 @@ describe("PricingCoverageNote", () => {
     });
 
     expect(markup).toContain("100.0%");
-    expect(markup).toContain("0 activities are left out");
+    expect(markup).toContain("Every verified activity in this window is priced.");
+    expect(markup).not.toContain("left out");
   });
 
   it("says one activity in the singular", () => {
@@ -70,7 +85,7 @@ describe("PricingCoverageNote", () => {
     expect(markup).not.toContain("left out");
   });
 
-  it("renders zero coverage on a window where nothing is priced yet", () => {
+  it("quotes no percentage while the window has finished pricing nothing", () => {
     const markup = markupOf({
       pricedActivityCount: 0,
       unpricedActivityCount: 0,
@@ -78,7 +93,7 @@ describe("PricingCoverageNote", () => {
       pricedCoverage: 0,
     });
 
-    expect(markup).toContain("0.0%");
-    expect(markup).toContain("5 activities are left out");
+    expect(markup).toContain("None of the 5 verified activities in this window has been priced yet");
+    expect(markup).not.toContain("0.0%");
   });
 });
