@@ -159,8 +159,8 @@ describe("AgentPageView", () => {
   it("always states both unpriced shares against the figures each one qualifies", () => {
     const markup = viewMarkup(agent);
 
-    expect(markup).toContain("12.5% of this agent");
-    expect(markup).toContain("4.2% could not be priced");
+    expect(markup).toContain("12.5% could not be priced");
+    expect(markup).toContain("Over the trailing 30 days that share is 4.2%");
   });
 
   it("keeps the exact figures in their titles and carries no estimate badge", () => {
@@ -208,7 +208,7 @@ describe("AgentPageView", () => {
 
     expect(markup).not.toMatch(/0x[0-9a-fA-F]{64}/);
     expect(markup).toContain("most recent activities only");
-    expect(markup).toContain("4.2% could not be priced");
+    expect(markup).toContain("Over the trailing 30 days that share is 4.2%");
   });
 });
 
@@ -286,17 +286,27 @@ describe("AgentPageDisclosure", () => {
   it("states both fully priced shares rather than staying silent", () => {
     const markup = disclosureMarkup(0, 0, false);
 
-    expect(markup).toContain("0% of this agent");
     expect(markup).toContain("0% could not be priced");
+    expect(markup).toContain("Over the trailing 30 days that share is 0%");
   });
 
   it("binds the whole-read share to the priced-only figures", () => {
     const markup = disclosureMarkup(12.5, 4.2, false);
 
-    expect(markup).toContain("12.5% of this agent&#x27;s verified activity could not be priced.");
+    expect(markup).toContain(
+      "Of this agent&#x27;s swaps and bridge deposits we have finished pricing, 12.5% could not be priced.",
+    );
     expect(markup).toContain(
       "Those transactions are excluded from the realized result, the win rate and the breakdown volumes, but are still counted in the transaction counts.",
     );
+  });
+
+  it("names the population the share measures and never the wider one", () => {
+    const markup = disclosureMarkup(12.5, 4.2, true);
+
+    expect(markup).toContain("swaps and bridge deposits");
+    expect(markup).not.toContain("verified activity");
+    expect(markup).not.toContain("verified activities");
   });
 
   it("does not claim unpriced activity is missing from the breakdown transaction counts", () => {
@@ -310,15 +320,15 @@ describe("AgentPageDisclosure", () => {
     const markup = disclosureMarkup(12.5, 4.2, false);
 
     expect(markup).toContain(
-      "Over the trailing 30 days, 4.2% could not be priced and is excluded from the capital deployed figure and the daily chart.",
+      "Over the trailing 30 days that share is 4.2%, excluded from the capital deployed figure and the daily chart.",
     );
   });
 
   it("states a trailing share that a lifetime share would have hidden", () => {
     const markup = disclosureMarkup(5.8, 75, false);
 
-    expect(markup).toContain("5.8% of this agent");
-    expect(markup).toContain("75% could not be priced");
+    expect(markup).toContain("5.8% could not be priced");
+    expect(markup).toContain("Over the trailing 30 days that share is 75%");
   });
 
   it("says nothing about truncation when the whole history was read", () => {
