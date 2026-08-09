@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { formatUsdCompact, formatUsdEstimate } from "../lib/format";
+import { formatUsdCompact, formatUsdAmount } from "../lib/format";
 import { EmptyPanel } from "./EmptyPanel";
 
 export type AgentPageBreakdownRow = {
@@ -39,7 +39,7 @@ export function AgentPageBreakdownTable({
               <td className="text-text-primary">{row.label}</td>
               <td
                 className="whitespace-nowrap font-mono text-text-primary"
-                title={`$${formatUsdEstimate(row.volumeUsd)}`}
+                title={`$${formatUsdAmount(row.volumeUsd)}`}
               >
                 ${formatUsdCompact(row.volumeUsd)}
                 <span className="ml-1 text-xs text-text-muted">est.</span>

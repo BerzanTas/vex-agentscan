@@ -1,5 +1,5 @@
 import type { AgentPageDto } from "../lib/api";
-import { formatUsdCompact, formatUsdEstimate } from "../lib/format";
+import { formatUsdCompact, formatUsdAmount } from "../lib/format";
 import { AgentPageStatCard } from "./AgentPageStatCard";
 import { PanelHeading } from "./PanelHeading";
 
@@ -40,7 +40,7 @@ export function AgentPagePerformance({ agent }: { agent: AgentPageDto }) {
         <AgentPageStatCard
           label="Realized result"
           value={signedUsd(agent.realizedResultUsd, formatUsdCompact)}
-          exactValue={signedUsd(agent.realizedResultUsd, formatUsdEstimate)}
+          exactValue={signedUsd(agent.realizedResultUsd, formatUsdAmount)}
           unit="est."
         />
         <AgentPageStatCard
