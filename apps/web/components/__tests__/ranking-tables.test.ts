@@ -7,6 +7,7 @@ import type { AgentStatDto, ProtocolRankingDto } from "../../lib/api";
 
 const agent: AgentStatDto = {
   alias: "quiet-otter-1f3a",
+  name: null,
   volumeUsd: "1284310.55",
   txCount: 412,
   protocolCount: 3,
@@ -64,11 +65,19 @@ describe("AgentsRankingTable", () => {
     expect(markup).toMatch(/<td class="[^"]*font-mono[^"]*">quiet-otter-1f3a<\/td>/);
   });
 
-  it("links no agent row anywhere, so no alias gets a permanent page", () => {
+  it("leaves an unbound agent row unlinked, so no alias gets a permanent page", () => {
     const markup = agentsMarkup([agent]);
 
     expect(markup).not.toContain("<a");
-    expect(markup).not.toContain("/agents/");
+    expect(markup).not.toContain("/agent/");
+  });
+
+  it("links a bound agent row to its public page and shows the public name", () => {
+    const markup = agentsMarkup([{ ...agent, name: "Vex-9f2a41c8" }]);
+
+    expect(markup).toContain('href="/agent/Vex-9f2a41c8"');
+    expect(markup).toContain(">Vex-9f2a41c8</a>");
+    expect(markup).not.toContain("quiet-otter-1f3a");
   });
 
   it("marks the observed volume as an estimate and keeps the exact value in the title", () => {

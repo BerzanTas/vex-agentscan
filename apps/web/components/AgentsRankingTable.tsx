@@ -1,9 +1,23 @@
+import Link from "next/link";
 import type { AgentStatDto } from "../lib/api";
 import { formatAge, formatUsdCompact, formatUsdEstimate } from "../lib/format";
 import { EmptyPanel } from "./EmptyPanel";
 
 function countLabel(count: number): string {
   return count.toLocaleString("en-US");
+}
+
+export function agentPageHref(name: string): string {
+  return `/agent/${encodeURIComponent(name)}`;
+}
+
+function AgentName({ agent }: { agent: AgentStatDto }) {
+  if (agent.name === null) return <>{agent.alias}</>;
+  return (
+    <Link href={agentPageHref(agent.name)} className="text-text-primary">
+      {agent.name}
+    </Link>
+  );
 }
 
 export function AgentsRankingTable({
@@ -34,7 +48,9 @@ export function AgentsRankingTable({
           {agents.map((agent, index) => (
             <tr key={agent.alias}>
               <td className="font-mono text-xs text-text-muted">{index + 1}</td>
-              <td className="font-mono text-text-primary">{agent.alias}</td>
+              <td className="font-mono text-text-primary">
+                <AgentName agent={agent} />
+              </td>
               <td
                 className="whitespace-nowrap font-mono text-text-primary"
                 title={`$${formatUsdEstimate(agent.volumeUsd)}`}
