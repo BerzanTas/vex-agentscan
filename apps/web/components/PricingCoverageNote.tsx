@@ -31,7 +31,7 @@ function legPhrase(count: number): string {
 function exclusionReasons(coverage: PricingCoverageDto): string[] {
   const reasons: string[] = [];
   if (coverage.unpricedActivityCount > 0) {
-    reasons.push(`${coverage.unpricedActivityCount} we could not price`);
+    reasons.push(`${coverage.unpricedActivityCount} we could not fully price`);
   }
   if (coverage.pendingActivityCount > 0) {
     reasons.push(`${coverage.pendingActivityCount} still being priced`);
@@ -41,8 +41,8 @@ function exclusionReasons(coverage: PricingCoverageDto): string[] {
 
 function exclusionSentence(coverage: PricingCoverageDto): string {
   const reasons = exclusionReasons(coverage);
-  if (reasons.length === 0) return "Every swap and bridge deposit in this window is priced.";
-  return `${legPhrase(excludedActivityCount(coverage))} left out of every USD figure (${reasons.join(", ")}), and still counted in transaction counts.`;
+  if (reasons.length === 0) return "Every leg of every swap and bridge deposit in this window is priced.";
+  return `${legPhrase(excludedActivityCount(coverage))} not fully reflected in the USD figures (${reasons.join(", ")}), and still counted in transaction counts.`;
 }
 
 function nothingPricedSentence(coverage: PricingCoverageDto): string {

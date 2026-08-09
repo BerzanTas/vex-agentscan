@@ -28,8 +28,8 @@ describe("PricingCoverageNote", () => {
       pricedCoverage: 0.7894736842105263,
     });
 
-    expect(markup).toContain("10 swaps and bridge deposits are left out");
-    expect(markup).toContain("8 we could not price");
+    expect(markup).toContain("10 swaps and bridge deposits are not fully reflected in the USD figures");
+    expect(markup).toContain("8 we could not fully price");
     expect(markup).toContain("2 still being priced");
   });
 
@@ -42,9 +42,9 @@ describe("PricingCoverageNote", () => {
     });
 
     expect(markup).toContain("100.0% of the swaps and bridge deposits in this window we have finished pricing");
-    expect(markup).toContain("2 swaps and bridge deposits are left out");
+    expect(markup).toContain("2 swaps and bridge deposits are not fully reflected");
     expect(markup).toContain("2 still being priced");
-    expect(markup).not.toContain("we could not price");
+    expect(markup).not.toContain("we could not fully price");
   });
 
   it("renders the disclosure even when everything in the window is priced", () => {
@@ -56,8 +56,8 @@ describe("PricingCoverageNote", () => {
     });
 
     expect(markup).toContain("100.0%");
-    expect(markup).toContain("Every swap and bridge deposit in this window is priced.");
-    expect(markup).not.toContain("left out");
+    expect(markup).toContain("Every leg of every swap and bridge deposit in this window is priced.");
+    expect(markup).not.toContain("not fully reflected");
   });
 
   it("says one activity in the singular", () => {
@@ -68,7 +68,7 @@ describe("PricingCoverageNote", () => {
       pricedCoverage: 0.8,
     });
 
-    expect(markup).toContain("1 swap or bridge deposit is left out");
+    expect(markup).toContain("1 swap or bridge deposit is not fully reflected");
     expect(markup).not.toContain("1 swaps");
   });
 

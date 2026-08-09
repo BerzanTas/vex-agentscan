@@ -37,6 +37,7 @@ type ActivitySeed = {
   usdOutEst: string | null;
   usdInPriced: string | null;
   usdOutPriced: string | null;
+  tokenInAddress?: string | null;
   tokenOutAddress: string | null;
   toChainId: string | null;
 };
@@ -149,7 +150,7 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
       base,
       seed.toChainId === null ? null : base,
       seed.toChainId,
-      usdcAddress,
+      seed.tokenInAddress === undefined ? usdcAddress : seed.tokenInAddress,
       seed.tokenOutAddress,
       seed.usdInEst,
       seed.usdOutEst,
@@ -522,6 +523,71 @@ describe("windows where the coverage note must not claim the window was empty", 
       unpricedActivityCount: 0,
       pendingActivityCount: 0,
       pricedCoverage: 0,
+    });
+  });
+});
+
+describe("a swap the lane priced on one leg only", () => {
+  async function coverageOf(): Promise<PricingCoverageDto> {
+    return getJson<PricingCoverageDto>("/api/pricing-coverage?range=24h");
+  }
+
+  it("does not call a published out-leg figure absent when the in leg never arrived", async () => {
+    await seedWindow(db.pool, []);
+    await seedActivity(db.pool, {
+      ...pricedSwap,
+      sourceRowId: "priced-out-leg-only",
+      tokenInAddress: null,
+      usdInPriced: null,
+      usdOutPriced: "5000.00",
+    });
+    await bookAggregatesForSeededActivities(db.pool);
+
+    const tokens = await getJson<TokenStatDto[]>("/api/tokens?range=24h");
+
+    expect(tokens.map(({ symbol, volumeUsd }) => ({ symbol, volumeUsd }))).toEqual([
+      { symbol: "WETH", volumeUsd: "5000.00" },
+    ]);
+    expect(await coverageOf()).toEqual({
+      pricedActivityCount: 0,
+      unpricedActivityCount: 1,
+      pendingActivityCount: 0,
+      pricedCoverage: 0,
+    });
+  });
+
+  it("does not call itself fully priced when the out leg it publishes has no value", async () => {
+    await seedWindow(db.pool, []);
+    await seedActivity(db.pool, {
+      ...pricedSwap,
+      sourceRowId: "priced-in-leg-only",
+      usdInPriced: "100.00",
+      usdOutPriced: null,
+    });
+    await bookAggregatesForSeededActivities(db.pool);
+
+    const tokens = await getJson<TokenStatDto[]>("/api/tokens?range=24h");
+
+    expect(tokens.map(({ symbol, volumeUsd }) => ({ symbol, volumeUsd }))).toEqual([
+      { symbol: "USDC", volumeUsd: "100.00" },
+      { symbol: "WETH", volumeUsd: "0" },
+    ]);
+    expect(await coverageOf()).toEqual({
+      pricedActivityCount: 0,
+      unpricedActivityCount: 1,
+      pendingActivityCount: 0,
+      pricedCoverage: 0,
+    });
+  });
+
+  it("calls a swap fully priced only when every leg it publishes carries a value", async () => {
+    await seedWindow(db.pool, [pricedSwap]);
+
+    expect(await coverageOf()).toEqual({
+      pricedActivityCount: 1,
+      unpricedActivityCount: 0,
+      pendingActivityCount: 0,
+      pricedCoverage: 1,
     });
   });
 });
