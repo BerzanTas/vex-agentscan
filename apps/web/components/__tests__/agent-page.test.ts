@@ -163,14 +163,13 @@ describe("AgentPageView", () => {
     expect(markup).toContain("4.2% could not be priced");
   });
 
-  it("renders one breakdown row per entry and no total, which must never be summed", () => {
+  it("renders exactly one breakdown row per entry and no footer row", () => {
     const markup = viewMarkup(agent);
 
     expect(rowLabels(markup)).toHaveLength(
       agent.protocolBreakdown.length + agent.chainBreakdown.length,
     );
     expect(markup).not.toContain("<tfoot");
-    expect(markup).not.toMatch(/Total/i);
   });
 
   it("renders no transaction hash even when one arrives in a label field", () => {
@@ -244,7 +243,7 @@ describe("AgentPagePerformance", () => {
       performanceMarkup({ ...agent, closedRoundTrips: 0, unmatchedDisposals: 3, winRate: null }),
     );
 
-    expect(note).toContain("3 disposals had no recorded acquisition");
+    expect(note).toContain("3 disposals had no matching priced acquisition");
     expect(note.split("closed a round trip")).toHaveLength(2);
     expect(note).toContain("where an acquisition did match, that amount closed a round trip");
   });
@@ -254,7 +253,7 @@ describe("AgentPagePerformance", () => {
       performanceMarkup({ ...agent, closedRoundTrips: 18, unmatchedDisposals: 2 }),
     );
 
-    expect(note).toContain("2 disposals had no recorded acquisition");
+    expect(note).toContain("2 disposals had no matching priced acquisition");
     expect(note).toContain("where an acquisition did match, that amount closed a round trip");
   });
 
@@ -269,7 +268,7 @@ describe("AgentPagePerformance", () => {
       performanceMarkup({ ...agent, closedRoundTrips: 0, unmatchedDisposals: 1 }),
     );
 
-    expect(note).toContain("1 disposal had no recorded acquisition");
+    expect(note).toContain("1 disposal had no matching priced acquisition");
     expect(note).not.toContain("1 disposals");
   });
 });

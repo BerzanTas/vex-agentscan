@@ -27,9 +27,9 @@ const UNMATCHED_AMOUNT_SENTENCE =
 
 function unmatchedDisposalsNote(count: number): string {
   if (count === 1) {
-    return `1 disposal had no recorded acquisition behind part or all of the amount disposed. ${UNMATCHED_AMOUNT_SENTENCE}`;
+    return `1 disposal had no matching priced acquisition behind part or all of the amount disposed. ${UNMATCHED_AMOUNT_SENTENCE}`;
   }
-  return `${count.toLocaleString("en-US")} disposals had no recorded acquisition behind part or all of the amount disposed. ${UNMATCHED_AMOUNT_SENTENCE}`;
+  return `${count.toLocaleString("en-US")} disposals had no matching priced acquisition behind part or all of the amount disposed. ${UNMATCHED_AMOUNT_SENTENCE}`;
 }
 
 export function AgentPagePerformance({ agent }: { agent: AgentPageDto }) {
