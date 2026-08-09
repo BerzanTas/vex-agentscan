@@ -16,11 +16,34 @@ export type ProtocolStatDto = { protocol: string; volumeUsd: string; txCount: nu
 
 export type AgentStatDto = {
   alias: string;
+  name: string | null;
   volumeUsd: string;
   txCount: number;
   protocolCount: number;
   chainCount: number;
   lastSeenSeconds: number;
+};
+
+export type AgentDailyDeployedDto = { day: string; usd: string };
+
+export type AgentChainStatDto = { chainSlug: string | null; volumeUsd: string; txCount: number };
+
+export type AgentPageDto = {
+  name: string;
+  capitalDeployedPeak30dUsd: string;
+  dailyDeployedUsd: AgentDailyDeployedDto[];
+  realizedResultUsd: string;
+  closedRoundTrips: number;
+  unmatchedDisposals: number;
+  winRate: number | null;
+  protocolBreakdown: ProtocolStatDto[];
+  chainBreakdown: AgentChainStatDto[];
+  activityCount: number;
+  activitiesPerDay30d: number;
+  firstSeenSeconds: number;
+  lastSeenSeconds: number;
+  unpricedSharePct: number;
+  truncated: boolean;
 };
 
 export type ProtocolRankingDto = ProtocolStatDto & {
@@ -268,6 +291,10 @@ export function agentsPath(range: ChartRange): string {
   return pathWithQuery("/api/agents", [["range", range]]);
 }
 
+export function agentPagePath(name: string): string {
+  return `/api/agents/${encodeURIComponent(name)}`;
+}
+
 export function activityPath(filters: ActivityFilters = {}, cursor?: string): string {
   return pathWithQuery("/api/activity", [
     ["cursor", cursor],
@@ -331,6 +358,10 @@ export async function fetchAgents(
   range: ChartRange = DEFAULT_CHART_RANGE,
 ): Promise<AgentStatDto[]> {
   return readApiJson(agentsPath(range));
+}
+
+export async function fetchAgentPage(name: string): Promise<AgentPageDto | null> {
+  return readApiJsonOrNull(agentPagePath(name));
 }
 
 export async function fetchActivity(
