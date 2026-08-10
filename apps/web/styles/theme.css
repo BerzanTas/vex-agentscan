@@ -1612,6 +1612,16 @@
     position: relative;
   }
 
+  .stat-cell:last-child {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    column-gap: 1.25rem;
+  }
+
+  .stat-cell:last-child .stat-cell-footer {
+    grid-area: 1 / 2 / span 2 / auto;
+  }
+
   .stat-cell::before {
     content: "";
     position: absolute;
@@ -1703,7 +1713,6 @@
     display: block;
     flex: 1 1 0;
     min-width: 0;
-    max-width: 11rem;
     height: 1.75rem;
     overflow: visible;
   }
@@ -1752,6 +1761,7 @@
   }
 
   .stat-cell:last-child {
+    display: flex;
     grid-column: auto;
   }
 }
