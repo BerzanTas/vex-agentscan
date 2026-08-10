@@ -52,17 +52,29 @@ type SurfaceId =
   | "/tokens/[chainSlug]/[address]"
   | "/networks/[slug]";
 
-type Qualifier =
-  | { names: readonly string[] }
-  | { silentBecause: string; whileTheQualifierReads: string };
+type SilentQualifier = {
+  silentBecause: string;
+  claiming: string;
+  inSentences: number;
+};
+
+type Qualifier = { names: readonly string[] } | SilentQualifier;
 
 const MEASURED_POPULATION = "bridge deposit";
 
-const AGENT_PAGE_SILENCE =
-  "Of this agent's swaps and bridge deposits we have finished pricing, 0% could not be fully priced. Those transactions are not fully reflected in the realized result, the win rate or the breakdown volumes, and are still counted in the transaction counts. Over the trailing 30 days that share is 0%, not fully reflected in the capital deployed figure or the daily chart.";
+const EXPLORER_WIDE_LEAD = "Across the whole explorer";
 
-const COVERAGE_NOTE_SILENCE =
-  "USD figures are priced by AgentScan from the swaps and bridge deposits it holds. None remain on record for this window, so the coverage of any figure shown here cannot be measured.";
+const AGENT_PAGE_SILENCE: SilentQualifier = {
+  silentBecause: "F4",
+  claiming: "could not be fully priced",
+  inSentences: 3,
+};
+
+const COVERAGE_NOTE_SILENCE: SilentQualifier = {
+  silentBecause: "F4",
+  claiming: "cannot be measured",
+  inSentences: 2,
+};
 
 const AGENT_PAGE_WORDS: Record<UsdContribution, Qualifier> = {
   contributes_usd: { names: [MEASURED_POPULATION, "could not be fully priced"] },
@@ -75,7 +87,7 @@ const AGENT_PAGE_WORDS: Record<UsdContribution, Qualifier> = {
     ],
   },
   awaiting_a_price: { names: [MEASURED_POPULATION, "still being priced"] },
-  outside_usd_figures: { silentBecause: "F4", whileTheQualifierReads: AGENT_PAGE_SILENCE },
+  outside_usd_figures: AGENT_PAGE_SILENCE,
 };
 
 const COVERAGE_NOTE_WORDS: Record<UsdContribution, Qualifier> = {
@@ -84,7 +96,21 @@ const COVERAGE_NOTE_WORDS: Record<UsdContribution, Qualifier> = {
     names: [MEASURED_POPULATION, "could not fully price", "not fully reflected in the USD figures"],
   },
   awaiting_a_price: { names: [MEASURED_POPULATION, "still being priced"] },
-  outside_usd_figures: { silentBecause: "F4", whileTheQualifierReads: COVERAGE_NOTE_SILENCE },
+  outside_usd_figures: COVERAGE_NOTE_SILENCE,
+};
+
+const EXPLORER_WIDE_NOTE_WORDS: Record<UsdContribution, Qualifier> = {
+  contributes_usd: { names: [MEASURED_POPULATION, "priced by AgentScan", EXPLORER_WIDE_LEAD] },
+  contributes_no_usd: {
+    names: [
+      MEASURED_POPULATION,
+      "could not fully price",
+      "not fully reflected in the USD figures",
+      EXPLORER_WIDE_LEAD,
+    ],
+  },
+  awaiting_a_price: { names: [MEASURED_POPULATION, "still being priced", EXPLORER_WIDE_LEAD] },
+  outside_usd_figures: COVERAGE_NOTE_SILENCE,
 };
 
 function wordsFor(surface: SurfaceId, state: UsdContribution): Qualifier {
@@ -99,7 +125,7 @@ function wordsFor(surface: SurfaceId, state: UsdContribution): Qualifier {
       return AGENT_PAGE_WORDS[state];
     case "/tokens/[chainSlug]/[address]":
     case "/networks/[slug]":
-      return COVERAGE_NOTE_WORDS[state];
+      return EXPLORER_WIDE_NOTE_WORDS[state];
     default: {
       const unreachableSurface: never = surface;
       throw new Error(`no qualifier declared for ${String(unreachableSurface)}`);
@@ -356,6 +382,10 @@ function visibleText(markup: string): string {
   return markup.replace(/<[^>]*>/g, " ").replace(/&#x27;/g, "'").replace(/\s+/g, " ");
 }
 
+function sentenceCount(paragraph: string): number {
+  return paragraph.split(".").filter((sentence) => sentence.trim() !== "").length;
+}
+
 function qualifierParagraphs(markup: string): string[] {
   return [...markup.matchAll(/<p class="[^"]*max-w-3xl text-xs text-text-muted">(.*?)<\/p>/g)].map(
     (match) => visibleText(match[1] ?? "").trim(),
@@ -374,7 +404,11 @@ describe.each(SURFACES)("%s publishes USD", (surface) => {
     const qualifier = wordsFor(surface, state);
 
     if ("silentBecause" in qualifier) {
-      expect(qualifierParagraphs(markup)).toContain(qualifier.whileTheQualifierReads);
+      const claim = qualifierParagraphs(markup).find((paragraph) =>
+        paragraph.includes(qualifier.claiming),
+      );
+      expect(claim).toBeDefined();
+      expect(sentenceCount(claim ?? "")).toBe(qualifier.inSentences);
       return;
     }
     for (const phrase of qualifier.names) {
