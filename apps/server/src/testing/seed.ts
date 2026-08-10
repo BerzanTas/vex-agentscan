@@ -14,7 +14,7 @@ export type SeedActivityOptions = {
   publicId: string;
   verificationState?: "none" | "queued" | "verified_full" | "verified_basic" | "mismatch";
   eventRole?: "swap" | "bridge_deposit";
-  usdInEst?: string;
+  usdInPriced?: string;
   confirmedDaysAgo?: number;
 };
 
@@ -25,12 +25,12 @@ export async function seedActivity(pool: pg.Pool, options: SeedActivityOptions):
     `INSERT INTO activities (
        agent_hash, source_row_id, public_id, source_execution_id, event_index,
        kind, event_role, status, protocol, chain_family, chain_id,
-       tx_hash, usd_in_est, client_created_at, client_confirmed_at,
+       tx_hash, usd_in_priced, pricing_state, client_created_at, client_confirmed_at,
        statuses_seen, verification_state, received_schema_version
      ) VALUES (
        $1, $2, $2, $2, 0,
        'swap', $3, 'confirmed', 'kyberswap', 'eip155', 8453,
-       '0x' || repeat('a', 64), $4::numeric, now(), now() - make_interval(days => $5::int),
+       '0x' || repeat('a', 64), $4::numeric, 'server_priced', now(), now() - make_interval(days => $5::int),
        ARRAY['confirmed'], $6, 1
      )
      RETURNING id`,
@@ -38,7 +38,7 @@ export async function seedActivity(pool: pg.Pool, options: SeedActivityOptions):
       agentHash,
       options.publicId,
       options.eventRole ?? "swap",
-      options.usdInEst ?? "0",
+      options.usdInPriced ?? "0",
       options.confirmedDaysAgo ?? 0,
       options.verificationState ?? "queued",
     ],

@@ -59,9 +59,12 @@ export function makeChainReader(entry: ChainEntry, config: Config, context: Chai
       return {
         status: receipt.status === "success" ? "success" : "reverted",
         blockTimestamp: new Date(Number(block.timestamp) * 1000),
+        blockNumber: receipt.blockNumber,
         erc20Transfers: erc20TransfersFrom(receipt.logs),
+        logs: rawLogsFrom(receipt.logs),
       };
     },
+    getHeadBlockNumber: () => client.getBlockNumber(),
   };
 }
 
@@ -76,6 +79,10 @@ async function receiptOrNull(client: PublicClient, txHash: string): Promise<Tran
     if (error instanceof TransactionReceiptNotFoundError) return null;
     throw error;
   }
+}
+
+function rawLogsFrom(logs: Log[]): NonNullable<ReceiptView["logs"]> {
+  return logs.map((log) => ({ address: log.address, topics: [...log.topics], data: log.data }));
 }
 
 function erc20TransfersFrom(logs: Log[]): ReceiptView["erc20Transfers"] {

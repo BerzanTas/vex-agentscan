@@ -58,7 +58,7 @@ async function seedAgent(agentHash: string): Promise<void> {
 type QueuedActivitySeed = {
   agentHash: string;
   protocol?: string;
-  kind?: "swap" | "bridge";
+  kind?: "swap" | "bridge" | "launch";
   eventRole?: string;
   chainId?: number;
   usdInEst?: string | null;
@@ -108,11 +108,14 @@ async function seedQueuedActivity(seed: QueuedActivitySeed): Promise<bigint> {
   return activityId;
 }
 
-async function activityStateOf(activityId: bigint): Promise<{ verification_state: string; verified_at: Date | null }> {
-  const result = await db.pool.query<{ verification_state: string; verified_at: Date | null }>(
-    "SELECT verification_state, verified_at FROM activities WHERE id = $1",
-    [activityId.toString()],
-  );
+async function activityStateOf(
+  activityId: bigint,
+): Promise<{ verification_state: string; verified_at: Date | null; block_time: Date | null }> {
+  const result = await db.pool.query<{
+    verification_state: string;
+    verified_at: Date | null;
+    block_time: Date | null;
+  }>("SELECT verification_state, verified_at, block_time FROM activities WHERE id = $1", [activityId.toString()]);
   return onlyRow(result.rows);
 }
 
@@ -194,6 +197,44 @@ describe("verification worker", () => {
       tx_count: 1,
     });
     expect((await agentRowOf(agent)).first_verified_at).not.toBeNull();
+  });
+
+  it("persists the on-chain block time and books volume under it when the client sent no confirmation time", async () => {
+    const agent = "c".repeat(64);
+    await seedAgent(agent);
+    const blockTimestamp = new Date("2026-07-26T23:30:00.000Z");
+    const activityId = await seedQueuedActivity({
+      agentHash: agent,
+      protocol: "p-block-time",
+      usdInEst: "40",
+      clientConfirmedAt: null,
+    });
+
+    await runVerificationPass(
+      depsWithReader(readerReturning({ status: "success", blockTimestamp, erc20Transfers: [] })),
+    );
+
+    expect((await activityStateOf(activityId)).block_time).toEqual(blockTimestamp);
+    expect(await aggregateOf("p-block-time")).toEqual({
+      day: "2026-07-26",
+      kind: "swap",
+      volume_usd: "40",
+      tx_count: 1,
+    });
+  });
+
+  it("leaves block_time null on a mismatch verdict, which carries no block timestamp", async () => {
+    const agent = "d".repeat(64);
+    await seedAgent(agent);
+    const activityId = await seedQueuedActivity({ agentHash: agent, protocol: "p-reverted" });
+
+    await runVerificationPass(
+      depsWithReader(readerReturning({ status: "reverted", blockTimestamp: new Date(), erc20Transfers: [] })),
+    );
+
+    const activity = await activityStateOf(activityId);
+    expect(activity.verification_state).toBe("mismatch");
+    expect(activity.block_time).toBeNull();
   });
 
   it("adds bridge volume only for the bridge_deposit leg while counting every verified leg", async () => {
@@ -352,6 +393,35 @@ describe("verification worker", () => {
     });
   });
 
+  it("books the aggregate day in UTC even when the session runs on a non-whole-hour timezone", async () => {
+    const agent = "e".repeat(64);
+    await seedAgent(agent);
+    const lateUtcEvening = new Date("2026-07-24T23:50:00.000Z");
+    const activityId = await seedQueuedActivity({
+      agentHash: agent,
+      protocol: "p-kathmandu",
+      usdInEst: "15",
+      clientConfirmedAt: lateUtcEvening,
+    });
+    const client = await db.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SET LOCAL TIME ZONE 'Asia/Kathmandu'");
+      await finalizeVerification(client, activityId, { result: "verified_full", blockTimestamp: lateUtcEvening }, config);
+      await client.query("COMMIT");
+    } finally {
+      await client.query("ROLLBACK").catch(() => undefined);
+      client.release();
+    }
+
+    expect(await aggregateOf("p-kathmandu")).toEqual({
+      day: "2026-07-24",
+      kind: "swap",
+      volume_usd: "15",
+      tx_count: 1,
+    });
+  });
+
   it("gives two concurrent claims disjoint job sets", async () => {
     await db.pool.query("DELETE FROM verification_jobs");
     const agent = "9".repeat(64);
@@ -411,6 +481,133 @@ describe("verification worker", () => {
       day: expectedDay,
       kind: "swap",
       volume_usd: "42.5",
+      tx_count: 1,
+    });
+  });
+
+  it("caps a launch activity at verified_basic on a full-tier chain, never checking declared amounts", async () => {
+    const agent = "c1".repeat(32);
+    await seedAgent(agent);
+    const activityId = await seedQueuedActivity({
+      agentHash: agent,
+      protocol: "p-launch-tier",
+      kind: "launch",
+      eventRole: "token_launch",
+      chainId: 8453,
+      tokenInAddress: "0xaaa",
+      executedInRaw: "1000000",
+    });
+    const receipt: ReceiptView = { status: "success", blockTimestamp: new Date(), erc20Transfers: [] };
+
+    await runVerificationPass(depsWithReader(readerReturning(receipt)));
+
+    expect((await activityStateOf(activityId)).verification_state).toBe("verified_basic");
+    expect(await strikesOf(agent)).toEqual([]);
+  });
+
+  it("marks a launch verification mismatch without incrementing strikes", async () => {
+    const agent = "c2".repeat(32);
+    await seedAgent(agent);
+    const activityId = await seedQueuedActivity({
+      agentHash: agent,
+      protocol: "p-launch-mismatch",
+      kind: "launch",
+      eventRole: "token_launch",
+    });
+    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [] };
+
+    await runVerificationPass(depsWithReader(readerReturning(reverted)));
+
+    expect((await activityStateOf(activityId)).verification_state).toBe("mismatch");
+    expect(await strikesOf(agent)).toEqual([]);
+    expect((await agentRowOf(agent)).strike_count).toBe(0);
+  });
+
+  it("still increments strikes for a swap verification mismatch (regression guard)", async () => {
+    const agent = "c3".repeat(32);
+    await seedAgent(agent);
+    const activityId = await seedQueuedActivity({ agentHash: agent, protocol: "p-swap-mismatch" });
+    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [] };
+
+    await runVerificationPass(depsWithReader(readerReturning(reverted)));
+
+    expect((await activityStateOf(activityId)).verification_state).toBe("mismatch");
+    expect(await strikesOf(agent)).toHaveLength(1);
+    expect((await agentRowOf(agent)).strike_count).toBe(1);
+  });
+
+  it("still increments strikes for a bridge verification mismatch (regression guard)", async () => {
+    const agent = "c5".repeat(32);
+    await seedAgent(agent);
+    const activityId = await seedQueuedActivity({
+      agentHash: agent,
+      protocol: "p-bridge-mismatch",
+      kind: "bridge",
+      eventRole: "bridge_deposit",
+    });
+    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [] };
+
+    await runVerificationPass(depsWithReader(readerReturning(reverted)));
+
+    expect((await activityStateOf(activityId)).verification_state).toBe("mismatch");
+    expect(await strikesOf(agent)).toHaveLength(1);
+    expect((await agentRowOf(agent)).strike_count).toBe(1);
+  });
+
+  it("strikes a launch-kind activity declaring a non-launch event role, closing the shape-mismatch exemption", async () => {
+    const agent = "c6".repeat(32);
+    await seedAgent(agent);
+    const activityId = await seedQueuedActivity({
+      agentHash: agent,
+      protocol: "p-launch-spoofed-role",
+      kind: "launch",
+      eventRole: "swap",
+    });
+    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [] };
+
+    await runVerificationPass(depsWithReader(readerReturning(reverted)));
+
+    expect((await activityStateOf(activityId)).verification_state).toBe("mismatch");
+    expect(await strikesOf(agent)).toEqual([{ activity_id: activityId.toString(), reason: "tx_reverted" }]);
+    expect((await agentRowOf(agent)).strike_count).toBe(1);
+  });
+
+  it("quarantines an agent after three mismatches from launch-kind activities declaring a spoofed swap role", async () => {
+    const agent = "c7".repeat(32);
+    await seedAgent(agent);
+    await seedQueuedActivity({ agentHash: agent, protocol: "p-launch-spoofed-quarantine", kind: "launch", eventRole: "swap" });
+    await seedQueuedActivity({ agentHash: agent, protocol: "p-launch-spoofed-quarantine", kind: "launch", eventRole: "swap" });
+    await seedQueuedActivity({ agentHash: agent, protocol: "p-launch-spoofed-quarantine", kind: "launch", eventRole: "swap" });
+    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [] };
+
+    await runVerificationPass(depsWithReader(readerReturning(reverted)));
+
+    const agentRow = await agentRowOf(agent);
+    expect(agentRow.strike_count).toBe(3);
+    expect(agentRow.status).toBe("quarantined");
+    expect(agentRow.quarantined_at).not.toBeNull();
+  });
+
+  it("books a verified launch under its own kind aggregate with zero volume but a counted transaction", async () => {
+    const agent = "c4".repeat(32);
+    await seedAgent(agent);
+    const confirmedAt = new Date("2026-07-29T10:00:00.000Z");
+    await seedQueuedActivity({
+      agentHash: agent,
+      protocol: "p-launch-agg",
+      kind: "launch",
+      eventRole: "token_launch",
+      usdInEst: "500",
+      clientConfirmedAt: confirmedAt,
+    });
+    const receipt: ReceiptView = { status: "success", blockTimestamp: confirmedAt, erc20Transfers: [] };
+
+    await runVerificationPass(depsWithReader(readerReturning(receipt)));
+
+    expect(await aggregateOf("p-launch-agg")).toEqual({
+      day: "2026-07-29",
+      kind: "launch",
+      volume_usd: "0",
       tx_count: 1,
     });
   });

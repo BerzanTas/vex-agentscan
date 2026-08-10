@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ACTIVITY_VERIFICATION_FILTERS,
   activityPath,
+  agentPagePath,
   agentsPath,
   chartPath,
+  fetchAgentPage,
   DEFAULT_CHART_RANGE,
   fetchNetworkDetail,
   fetchProtocolRanking,
@@ -156,6 +158,32 @@ describe("protocolRankingPath", () => {
 describe("agentsPath", () => {
   it("carries the range", () => {
     expect(agentsPath("all")).toBe("/api/agents?range=all");
+  });
+});
+
+describe("agentPagePath", () => {
+  it("puts the public name into the path and carries no window", () => {
+    expect(agentPagePath("Vex-9f2a41c8")).toBe("/api/agents/Vex-9f2a41c8");
+  });
+
+  it("keeps the name case, because the server matches it exactly", () => {
+    expect(agentPagePath("VEX-9F2A41C8")).toBe("/api/agents/VEX-9F2A41C8");
+  });
+
+  it("encodes a slash in the name instead of forging a path segment", () => {
+    expect(agentPagePath("a/b")).toBe("/api/agents/a%2Fb");
+  });
+});
+
+describe("fetchAgentPage", () => {
+  it("returns null only for a 404, which is the unknown-agent answer", async () => {
+    stubFetch(async () => new Response("", { status: 404 }));
+    await expect(fetchAgentPage("Vex-9f2a41c8")).resolves.toBeNull();
+  });
+
+  it("throws on a server error instead of pretending the agent is unknown", async () => {
+    stubFetch(async () => new Response("nope", { status: 503 }));
+    await expect(fetchAgentPage("Vex-9f2a41c8")).rejects.toThrow();
   });
 });
 

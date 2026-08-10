@@ -5,16 +5,18 @@ import { notFound } from "next/navigation";
 import { ChainBadge } from "../../../../components/ChainBadge";
 import { PageHeading } from "../../../../components/PageHeading";
 import { PanelHeading } from "../../../../components/PanelHeading";
+import { PricingCoverageNote } from "../../../../components/PricingCoverageNote";
 import { ProtocolRanking } from "../../../../components/ProtocolRanking";
 import { RangeChips } from "../../../../components/RangeChips";
 import { Sparkline } from "../../../../components/Sparkline";
 import { shortenAddress } from "../../../../components/TokensTable";
 import {
+  fetchPricingCoverage,
   fetchTokenDetail,
   type TokenDetailDto,
   type TokenPairStatDto,
 } from "../../../../lib/api";
-import { formatUsdCompact, formatUsdEstimate } from "../../../../lib/format";
+import { formatUsdCompact, formatUsdAmount } from "../../../../lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +50,10 @@ export async function generateMetadata({ params, searchParams }: TokenPageProps)
 export default async function TokenDetailPage({ params, searchParams }: TokenPageProps) {
   const { chainSlug, address } = await params;
   const range = parseChartRange((await searchParams).range);
-  const detail = await fetchTokenDetail(chainSlug, address, range);
+  const [detail, coverage] = await Promise.all([
+    fetchTokenDetail(chainSlug, address, range),
+    fetchPricingCoverage(range),
+  ]);
   if (detail === null) notFound();
 
   const windowLabel = range.toUpperCase();
@@ -80,9 +85,8 @@ export default async function TokenDetailPage({ params, searchParams }: TokenPag
             <span className="stat-card-label">Observed volume</span>
             <span className="stat-card-window">{windowLabel}</span>
           </div>
-          <p className="stat-card-value" title={`$${formatUsdEstimate(detail.volumeUsd)}`}>
+          <p className="stat-card-value" title={`$${formatUsdAmount(detail.volumeUsd)}`}>
             ${formatUsdCompact(detail.volumeUsd)}
-            <span className="stat-card-unit">est.</span>
           </p>
         </div>
         <div className="glass stat-card">
@@ -130,9 +134,10 @@ export default async function TokenDetailPage({ params, searchParams }: TokenPag
         </section>
       </div>
       <p className="section-enter max-w-3xl text-xs text-text-muted">
-        Volumes are estimates observed in Vex agent activity, not market volume. A swap counts on
-        both of its tokens.
+        Volumes are observed in Vex agent activity, not market volume. A swap counts on both of its
+        tokens.
       </p>
+      <PricingCoverageNote coverage={coverage} scope="the-whole-explorer" />
     </div>
   );
 }

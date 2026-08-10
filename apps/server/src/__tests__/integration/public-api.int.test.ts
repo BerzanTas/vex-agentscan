@@ -37,6 +37,7 @@ type ActivitySeed = {
   receivedSecondsAgo: number;
   txHash: string | null;
   usdInEst: string | null;
+  usdInPriced?: string;
 };
 
 async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
@@ -44,14 +45,26 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
     `INSERT INTO activities
        (agent_hash, source_row_id, public_id, source_execution_id, event_index, kind, event_role, status,
         protocol, chain_family, chain_id, token_in_symbol, token_in_decimals, token_out_symbol,
-        amount_in_raw, usd_in_est, tx_hash, client_created_at, client_confirmed_at, statuses_seen,
+        amount_in_raw, usd_in_est, usd_in_priced, pricing_state, tx_hash,
+        client_created_at, client_confirmed_at, statuses_seen,
         verification_state, received_at, received_schema_version)
      VALUES ($1, $2, $2, 'exec-1', 0, 'swap', 'swap', $3,
              'kyberswap', 'eip155', 8453, 'ETH', 18, 'VEX',
-             '1000000000000000000', $4, $5, now() - interval '2 hours',
+             '1000000000000000000', $4, $8::numeric,
+             CASE WHEN $8::numeric IS NULL THEN 'unpriced' ELSE 'server_priced' END, $5,
+             now() - interval '2 hours',
              CASE WHEN $3 = 'confirmed' THEN now() - interval '1 hour' ELSE NULL END,
              ARRAY['pending'], $6, now() - make_interval(secs => $7), 1)`,
-    [seed.agentHash, seed.publicId, seed.status, seed.usdInEst, seed.txHash, seed.verificationState, seed.receivedSecondsAgo],
+    [
+      seed.agentHash,
+      seed.publicId,
+      seed.status,
+      seed.usdInEst,
+      seed.txHash,
+      seed.verificationState,
+      seed.receivedSecondsAgo,
+      seed.usdInPriced ?? null,
+    ],
   );
 }
 
@@ -64,7 +77,7 @@ beforeAll(async () => {
   await seedAgent(db.pool, agentA, true);
   await seedAgent(db.pool, agentB, false);
   await seedAgent(db.pool, agentC, false);
-  await seedActivity(db.pool, { agentHash: agentA, publicId: "pub-verified-1", status: "confirmed", verificationState: "verified_full", receivedSecondsAgo: 300, txHash: "0xv1", usdInEst: "100.25" });
+  await seedActivity(db.pool, { agentHash: agentA, publicId: "pub-verified-1", status: "confirmed", verificationState: "verified_full", receivedSecondsAgo: 300, txHash: "0xv1", usdInEst: "100.25", usdInPriced: "100.5" });
   await seedActivity(db.pool, { agentHash: agentA, publicId: "pub-verified-2", status: "confirmed", verificationState: "verified_full", receivedSecondsAgo: 240, txHash: "0xv2", usdInEst: "40" });
   await seedActivity(db.pool, { agentHash: agentA, publicId: "pub-verified-3", status: "confirmed", verificationState: "verified_basic", receivedSecondsAgo: 180, txHash: "0xv3", usdInEst: "10" });
   await seedActivity(db.pool, { agentHash: agentA, publicId: "pub-pending-a", status: "pending", verificationState: "none", receivedSecondsAgo: 120, txHash: null, usdInEst: null });
@@ -72,9 +85,9 @@ beforeAll(async () => {
   await seedActivity(db.pool, { agentHash: agentA, publicId: "pub-mismatch-a", status: "confirmed", verificationState: "mismatch", receivedSecondsAgo: 60, txHash: "0xbad", usdInEst: "999" });
   await seedActivity(db.pool, { agentHash: agentC, publicId: "pub-mismatch-c", status: "confirmed", verificationState: "mismatch", receivedSecondsAgo: 30, txHash: "0xbadc", usdInEst: "888" });
   await db.pool.query(
-    `INSERT INTO daily_aggregates (day, protocol, kind, volume_usd, tx_count) VALUES
-       ((now() AT TIME ZONE 'utc')::date, 'kyberswap', 'swap', 100.5, 2),
-       ((now() AT TIME ZONE 'utc')::date - 1, 'relay', 'bridge', 50.25, 1)`,
+    `INSERT INTO daily_aggregates (day, protocol, kind, volume_usd, tx_count, volume_usd_priced) VALUES
+       ((now() AT TIME ZONE 'utc')::date, 'kyberswap', 'swap', 100.5, 2, 100.5),
+       ((now() AT TIME ZONE 'utc')::date - 1, 'relay', 'bridge', 50.25, 1, 0)`,
   );
   const dayRows = await db.pool.query<{ day: string }>("SELECT day::text AS day FROM daily_aggregates ORDER BY day");
   seededDays = dayRows.rows.map((row) => row.day);
@@ -155,12 +168,12 @@ describe("GET /api/tx/:publicId", () => {
 });
 
 describe("GET /api/stats", () => {
-  it("reads totals from daily aggregates and counts only verified activity", async () => {
+  it("totals the priced daily aggregates and never the client estimate series beside them", async () => {
     const response = await app.inject({ method: "GET", url: "/api/stats" });
     expect(response.statusCode).toBe(200);
     expect(response.json<StatsDto>()).toEqual({
       dailyVolumeUsd: "100.5",
-      totalVolumeUsd: "150.75",
+      totalVolumeUsd: "100.5",
       dailyTx: 2,
       totalTx: 3,
       activeAgents7d: 1,
@@ -173,13 +186,13 @@ function utcMidnightSecondsOf(day: string): number {
 }
 
 describe("GET /api/chart", () => {
-  it("returns daily buckets from aggregates for the 30d range", async () => {
+  it("serves daily buckets of priced volume and transaction counts from one table", async () => {
     const [yesterdayStart, todayStart] = seededDays.map(utcMidnightSecondsOf);
     const response = await app.inject({ method: "GET", url: "/api/chart?range=30d" });
     expect(response.statusCode).toBe(200);
     const seeded = response.json<ChartPointDto[]>().filter((point) => point.txCount > 0);
     expect(seeded).toEqual([
-      { bucketStart: yesterdayStart, volumeUsd: "50.25", txCount: 1 },
+      { bucketStart: yesterdayStart, volumeUsd: "0", txCount: 1 },
       { bucketStart: todayStart, volumeUsd: "100.5", txCount: 2 },
     ]);
   });
@@ -202,12 +215,12 @@ describe("GET /api/chart", () => {
 });
 
 describe("GET /api/protocols", () => {
-  it("ranks protocols by aggregated volume", async () => {
+  it("ranks protocols by priced volume, leaving a protocol with nothing priced at zero", async () => {
     const response = await app.inject({ method: "GET", url: "/api/protocols" });
     expect(response.statusCode).toBe(200);
     expect(response.json<ProtocolStatDto[]>()).toEqual([
       { protocol: "kyberswap", volumeUsd: "100.5", txCount: 2 },
-      { protocol: "relay", volumeUsd: "50.25", txCount: 1 },
+      { protocol: "relay", volumeUsd: "0", txCount: 1 },
     ]);
   });
 });

@@ -14,6 +14,12 @@ function intervalToMs(interval: string): number {
   return Number(count) * unitMs;
 }
 
+export function backoffDelayMs(attempts: number, schedule: readonly string[]): number {
+  const interval = schedule[Math.min(attempts, schedule.length - 1)];
+  if (interval === undefined) throw new Error("backoff schedule is empty");
+  return intervalToMs(interval);
+}
+
 export function nextBackoff(args: {
   attempts: number;
   schedule: string[];
@@ -22,7 +28,5 @@ export function nextBackoff(args: {
   now: Date;
 }): { delayMs: number } | { giveUp: true } {
   if (args.now.getTime() - args.firstAttemptAt.getTime() > args.maxAgeDays * dayMs) return { giveUp: true };
-  const interval = args.schedule[Math.min(args.attempts, args.schedule.length - 1)];
-  if (interval === undefined) throw new Error("backoff schedule is empty");
-  return { delayMs: intervalToMs(interval) };
+  return { delayMs: backoffDelayMs(args.attempts, args.schedule) };
 }

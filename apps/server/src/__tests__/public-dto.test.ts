@@ -46,17 +46,20 @@ it("lookup DTO contains only the publicId", () => {
 
 const rankedAgentHash = "0123456789abcdef".repeat(4);
 
+const rankedAgentRead = {
+  agentHash: rankedAgentHash,
+  volumeUsd: "10.5",
+  txCount: 2,
+  protocolCount: 2,
+  chainCount: 3,
+  lastSeenSeconds: 42,
+};
+
 it("agent stat DTO exposes only the ranking fields and never the agent hash", () => {
-  const dto = toAgentStatDto("agentscan-dev-salt", {
-    agentHash: rankedAgentHash,
-    volumeUsd: "10.5",
-    txCount: 2,
-    protocolCount: 2,
-    chainCount: 3,
-    lastSeenSeconds: 42,
-  });
+  const dto = toAgentStatDto("agentscan-dev-salt", rankedAgentRead, null);
   expect(Object.keys(dto)).toEqual([
     "alias",
+    "name",
     "volumeUsd",
     "txCount",
     "protocolCount",
@@ -64,6 +67,12 @@ it("agent stat DTO exposes only the ranking fields and never the agent hash", ()
     "lastSeenSeconds",
   ]);
   for (const key of BANNED) expect(key in dto).toBe(false);
+});
+
+it("agent stat DTO carries the public name of a bound agent beside its alias", () => {
+  const dto = toAgentStatDto("agentscan-dev-salt", rankedAgentRead, "Vex-01234567");
+  expect(dto.name).toBe("Vex-01234567");
+  expect(dto.alias).toMatch(/^agent-[0-9a-f]{8}$/);
 });
 
 it("agent alias is stable for the same salt", () => {
@@ -137,6 +146,15 @@ it("a bridge leg without a chain id becomes null", () => {
   const dto = toActivityRowDto(fixtureBridgeRow(null, 8453n), stubResolve, fakeResolveBridgeChain);
   expect(dto.fromChainSlug).toBe(null);
   expect(dto.toChainSlug).toBe("base");
+});
+
+it("a launch row serves with no bridge route slugs and its kind intact", () => {
+  const launchRow = { ...fixtureActivityRow(), kind: "launch", event_role: "token_launch" };
+  const dto = toActivityRowDto(launchRow, stubResolve, fakeResolveBridgeChain);
+  expect(dto.kind).toBe("launch");
+  expect(dto.eventRole).toBe("token_launch");
+  expect(dto.fromChainSlug).toBe(null);
+  expect(dto.toChainSlug).toBe(null);
 });
 
 const tokenStat: TokenStatDto = {

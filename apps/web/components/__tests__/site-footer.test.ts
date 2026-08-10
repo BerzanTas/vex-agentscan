@@ -19,8 +19,9 @@ describe("SiteFooter", () => {
     expect(rendered).toContain('rel="noopener"');
   });
 
-  it("keeps the estimate disclaimer that the old one-line footer carried", () => {
-    expect(markup()).toContain("All USD values are estimates");
+  it("separates the client estimate of a single activity from the priced aggregates", () => {
+    expect(markup()).toContain("Per-activity USD figures are client estimates");
+    expect(markup()).toContain("aggregate USD figures are priced by AgentScan");
   });
 
   it("states that activity is verified on-chain", () => {

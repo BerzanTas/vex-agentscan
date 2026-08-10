@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ChainEntry, ResolveChain } from "./app.js";
-import type { ActivityDbRow, AgentVolumeRead } from "./repos/read-repo.js";
+import type { ActivityDbRow, AgentVolumeRead, PricingCoverageRead } from "./repos/read-repo.js";
 
 export type ResolveBridgeChain = (protocol: string, chainId: bigint) => ChainEntry | null;
 
@@ -28,6 +28,7 @@ export type ProtocolRankingDto = ProtocolStatDto & {
 
 export type AgentStatDto = {
   alias: string;
+  name: string | null;
   volumeUsd: string;
   txCount: number;
   protocolCount: number;
@@ -40,9 +41,14 @@ export function agentAlias(salt: string, agentHash: string): string {
   return `agent-${digest.slice(0, 8)}`;
 }
 
-export function toAgentStatDto(salt: string, read: AgentVolumeRead): AgentStatDto {
+export function toAgentStatDto(
+  salt: string,
+  read: AgentVolumeRead,
+  name: string | null,
+): AgentStatDto {
   return {
     alias: agentAlias(salt, read.agentHash),
+    name,
     volumeUsd: read.volumeUsd,
     txCount: read.txCount,
     protocolCount: read.protocolCount,
@@ -273,3 +279,20 @@ export type VerificationStatsDto = {
   latencySeconds: VerificationLatencyDto;
   chains: ChainTierDto[];
 };
+
+export type PricingCoverageDto = {
+  pricedActivityCount: number;
+  unpricedActivityCount: number;
+  pendingActivityCount: number;
+  pricedCoverage: number;
+};
+
+export function toPricingCoverageDto(read: PricingCoverageRead): PricingCoverageDto {
+  const decided = read.pricedActivityCount + read.unpricedActivityCount;
+  return {
+    pricedActivityCount: read.pricedActivityCount,
+    unpricedActivityCount: read.unpricedActivityCount,
+    pendingActivityCount: read.pendingActivityCount,
+    pricedCoverage: decided === 0 ? 0 : read.pricedActivityCount / decided,
+  };
+}

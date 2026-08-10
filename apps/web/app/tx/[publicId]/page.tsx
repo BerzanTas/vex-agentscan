@@ -10,7 +10,7 @@ import { StatusTimeline } from "../../../components/StatusTimeline";
 import { TxHashChip } from "../../../components/TxHashChip";
 import { VerificationBadge } from "../../../components/VerificationBadge";
 import { fetchTxDetail, type TxDetailDto } from "../../../lib/api";
-import { formatAge, formatRawAmount, formatUsdEstimate } from "../../../lib/format";
+import { formatAge, formatRawAmount, formatUsdAmount } from "../../../lib/format";
 
 export const revalidate = 30;
 
@@ -111,7 +111,7 @@ export default async function TxDetailPage({ params }: TxPageProps) {
           </dd>
           <dt className="text-text-muted">Fee</dt>
           <dd className="font-mono text-text-secondary">
-            {detail.usdFeeEst === null ? "—" : `$${formatUsdEstimate(detail.usdFeeEst)} est.`}
+            {detail.usdFeeEst === null ? "—" : `$${formatUsdAmount(detail.usdFeeEst)} est.`}
           </dd>
           <dt className="text-text-muted">USD source</dt>
           <dd className="text-text-secondary">{detail.usdSource ?? "—"}</dd>

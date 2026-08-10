@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import type pg from "pg";
+import { revokeTokenAttestations } from "./cli/attestation-revoke.js";
 import { listAgentsAwaitingPurge } from "./cli/purge-status.js";
 import { liftQuarantine, listQuarantinedAgents } from "./cli/quarantine.js";
 import { retryVerification } from "./cli/verify-retry.js";
@@ -74,6 +75,20 @@ program
       process.exitCode = 1;
       return;
     }
+    printJson(outcome);
+  });
+
+const attestation = program.command("attestation");
+attestation
+  .command("revoke")
+  .description("revoke every attestation row for a token, stamping revoked_at and revoke_reason")
+  .argument("<chainId>")
+  .argument("<tokenAddress>")
+  .requiredOption("--reason <text>", "revocation reason")
+  .action(async (chainId: string, tokenAddress: string, options: { reason: string }) => {
+    const outcome = await withPool((pool) =>
+      revokeTokenAttestations(pool, BigInt(chainId), tokenAddress.toLowerCase(), options.reason),
+    );
     printJson(outcome);
   });
 

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { NetworkStatDto, VerificationTier } from "../lib/api";
-import { formatAge, formatUsdCompact, formatUsdEstimate } from "../lib/format";
+import { formatAge, formatUsdCompact, formatUsdAmount } from "../lib/format";
 import { ChainBadge } from "./ChainBadge";
 
 const TIER_BADGE_CLASS: Record<VerificationTier, string> = {
@@ -57,10 +57,9 @@ export function NetworksTable({ networks }: { networks: NetworkStatDto[] }) {
               </td>
               <td
                 className="text-right font-mono text-text-primary"
-                title={`$${formatUsdEstimate(network.volumeUsd)}`}
+                title={`$${formatUsdAmount(network.volumeUsd)}`}
               >
                 ${formatUsdCompact(network.volumeUsd)}
-                <span className="ml-1 text-xs text-text-muted">est.</span>
               </td>
               <td className="text-right font-mono text-xs text-text-secondary">
                 {network.txCount.toLocaleString("en-US")}
