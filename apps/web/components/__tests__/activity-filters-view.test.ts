@@ -78,4 +78,56 @@ describe("ActivityFilters", () => {
   it("omits the count from the clear label at zero active filters", () => {
     expect(markup({})).toContain(">Clear filters</button>");
   });
+
+  it("shortens the verification placeholder to what the column can show", () => {
+    expect(markup({})).toContain(">All verification</option>");
+  });
+});
+
+describe("ActivityFilters disclosure", () => {
+  it("wires the trigger to the panel it expands", () => {
+    const rendered = markup({});
+
+    expect(rendered).toContain('<button type="button" class="filter-disclosure-trigger"');
+    expect(rendered).toContain('aria-controls="activity-filter-console"');
+    expect(rendered).toContain('<div id="activity-filter-console"');
+  });
+
+  it("keeps the collapsed panel mounted instead of dropping it", () => {
+    const rendered = markup({});
+
+    expect(rendered).toMatch(/<div id="activity-filter-console"[^>]*data-collapsed="true"/);
+    expect(rendered).toContain(">Kind</span>");
+  });
+
+  it("collapses the console while no filter is active", () => {
+    expect(markup({})).toContain('aria-expanded="false"');
+  });
+
+  it("expands the console when a filter arrives with the page", () => {
+    const rendered = markup({ chain: "base" });
+
+    expect(rendered).toContain('aria-expanded="true"');
+    expect(rendered).not.toContain("data-collapsed");
+  });
+
+  it("counts the active filters on the trigger", () => {
+    expect(markup({ kind: "swap", status: "confirmed" })).toContain(">Filters (2 active)</button>");
+  });
+
+  it("names the trigger without a count at zero active filters", () => {
+    expect(markup({})).toContain(">Filters</button>");
+  });
+
+  it("still emits the whole console the wide layout lays out in columns", () => {
+    const rendered = markup({});
+
+    expect(rendered).toContain('class="glass filter-console"');
+    expect(rendered).toContain('role="group" aria-label="Activity filters"');
+    expect(rendered.match(/class="filter-field-select"/g)).toHaveLength(5);
+  });
+
+  it("carries no inline style attribute the production CSP would block", () => {
+    expect(markup({ kind: "swap" })).not.toContain("style=");
+  });
 });
