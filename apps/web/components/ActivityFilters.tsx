@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
+import { ActivityFilterDisclosure } from "./ActivityFilterDisclosure";
 import {
   ACTIVITY_KIND_FILTERS,
   ACTIVITY_STATUS_FILTERS,
@@ -87,7 +88,7 @@ export function ActivityFilters({
   };
 
   return (
-    <div className="glass filter-console" role="group" aria-label="Activity filters">
+    <ActivityFilterDisclosure activeFilterCount={activeFilterCount}>
       <FilterField
         name="kind"
         label="Kind"
@@ -123,7 +124,7 @@ export function ActivityFilters({
       <FilterField
         name="verification"
         label="Verification"
-        anyLabel="All verification states"
+        anyLabel="All verification"
         options={ACTIVITY_VERIFICATION_FILTERS}
         value={filters.verification}
         onSelect={selectFilter}
@@ -136,6 +137,6 @@ export function ActivityFilters({
       >
         {activeFilterCount === 0 ? "Clear filters" : `Clear filters (${activeFilterCount})`}
       </button>
-    </div>
+    </ActivityFilterDisclosure>
   );
 }

@@ -20,15 +20,83 @@
 
 .filter-console {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: 1fr;
   gap: 0.8rem 0.9rem;
   align-items: end;
   padding: 0.85rem 1rem 1rem;
 }
 
+@media (min-width: 640px) {
+  .filter-console {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+}
+
 @media (min-width: 1024px) {
   .filter-console {
     grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+  }
+}
+
+.filter-console[data-collapsed="true"] {
+  display: none;
+}
+
+.filter-console-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.filter-disclosure-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 2.75rem;
+  border: 1px solid var(--panel-hairline-bright);
+  border-radius: 0.5rem;
+  padding: 0 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  background: var(--panel-solid);
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.filter-disclosure-trigger::after {
+  content: "▾";
+  font-size: 0.625rem;
+  line-height: 1;
+  transition: transform 160ms ease;
+}
+
+.filter-disclosure-trigger[aria-expanded="true"] {
+  color: var(--color-text-primary);
+  border-color: var(--filter-active-border);
+  box-shadow: var(--filter-active-glow);
+}
+
+.filter-disclosure-trigger[aria-expanded="true"]::after {
+  transform: rotate(180deg);
+}
+
+.filter-disclosure-trigger:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@media (min-width: 640px) {
+  .filter-console[data-collapsed="true"] {
+    display: grid;
+  }
+
+  .filter-disclosure-trigger {
+    display: none;
   }
 }
 
@@ -82,7 +150,7 @@
   appearance: none;
   -webkit-appearance: none;
   width: 100%;
-  height: 2rem;
+  height: 2.75rem;
   border-radius: 0.5rem;
   border: 1px solid var(--panel-hairline);
   background: var(--panel-solid);
@@ -91,6 +159,9 @@
   font-size: 1rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--color-text-primary);
   cursor: pointer;
   transition: border-color 160ms ease, box-shadow 160ms ease;
@@ -98,6 +169,7 @@
 
 @media (min-width: 640px) {
   .filter-field-select {
+    height: 2rem;
     font-size: 0.6875rem;
   }
 }
@@ -137,6 +209,12 @@
   .filter-field-select,
   .filter-field-select::picker(select) {
     appearance: base-select;
+  }
+
+  .filter-field-select {
+    align-items: center;
+    overflow: clip;
+    overflow-clip-margin: content-box;
   }
 
   .filter-field-select::picker-icon {
@@ -217,7 +295,7 @@
   grid-column: -2 / -1;
   justify-self: end;
   align-self: end;
-  height: 2rem;
+  height: 2.75rem;
   overflow: hidden;
   border: 1px solid var(--panel-hairline);
   border-radius: 0.5rem;
@@ -230,6 +308,12 @@
   background: transparent;
   cursor: pointer;
   transition: color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+@media (min-width: 640px) {
+  .filter-clear-chip {
+    height: 2rem;
+  }
 }
 
 .filter-clear-chip:not(:disabled) {
@@ -289,7 +373,9 @@
   .filter-field-label,
   .filter-field-control::after,
   .filter-field-select,
-  .filter-clear-chip {
+  .filter-clear-chip,
+  .filter-disclosure-trigger,
+  .filter-disclosure-trigger::after {
     transition: none;
   }
 
