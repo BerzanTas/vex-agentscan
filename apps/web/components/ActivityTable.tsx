@@ -56,7 +56,7 @@ export function ActivityTable({ rows, emptyMessage }: { rows: ActivityRowDto[]; 
   }
   return (
     <div className="glass overflow-x-auto overflow-y-clip">
-      <table className="w-full text-left text-sm">
+      <table className="feed-table w-full text-left text-sm">
         <thead>
           <tr className="border-b border-bg-overlay text-xs text-text-muted">
             <th className="table-head px-4 py-3 font-normal">Protocol</th>

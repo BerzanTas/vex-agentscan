@@ -3,15 +3,17 @@ import { parseChartRange } from "../../../../lib/range";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChainBadge } from "../../../../components/ChainBadge";
+import {
+  ObservedVolumeCaveat,
+  TOKEN_FIGURE_VOLUME_CAVEAT,
+} from "../../../../components/ObservedVolumeCaveat";
 import { PageHeading } from "../../../../components/PageHeading";
 import { PanelHeading } from "../../../../components/PanelHeading";
-import { PricingCoverageNote } from "../../../../components/PricingCoverageNote";
 import { ProtocolRanking } from "../../../../components/ProtocolRanking";
 import { RangeChips } from "../../../../components/RangeChips";
 import { Sparkline } from "../../../../components/Sparkline";
 import { shortenAddress } from "../../../../components/TokensTable";
 import {
-  fetchPricingCoverage,
   fetchTokenDetail,
   type TokenDetailDto,
   type TokenPairStatDto,
@@ -21,6 +23,7 @@ import { formatUsdCompact, formatUsdAmount } from "../../../../lib/format";
 export const dynamic = "force-dynamic";
 
 const UNKNOWN_SYMBOL = "unknown";
+const VOLUME_CAVEAT_ID = "token-observed-volume-caveat";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -50,10 +53,7 @@ export async function generateMetadata({ params, searchParams }: TokenPageProps)
 export default async function TokenDetailPage({ params, searchParams }: TokenPageProps) {
   const { chainSlug, address } = await params;
   const range = parseChartRange((await searchParams).range);
-  const [detail, coverage] = await Promise.all([
-    fetchTokenDetail(chainSlug, address, range),
-    fetchPricingCoverage(range),
-  ]);
+  const detail = await fetchTokenDetail(chainSlug, address, range);
   if (detail === null) notFound();
 
   const windowLabel = range.toUpperCase();
@@ -79,10 +79,13 @@ export default async function TokenDetailPage({ params, searchParams }: TokenPag
           )}
         </div>
       </div>
-      <div className="section-enter grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="section-enter grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="glass stat-card">
-          <div className="stat-card-head">
-            <span className="stat-card-label">Observed volume</span>
+          <div className="stat-card-head figure-note-anchor">
+            <span className="stat-card-label">
+              Observed volume
+              <ObservedVolumeCaveat id={VOLUME_CAVEAT_ID} caveat={TOKEN_FIGURE_VOLUME_CAVEAT} />
+            </span>
             <span className="stat-card-window">{windowLabel}</span>
           </div>
           <p className="stat-card-value" title={`$${formatUsdAmount(detail.volumeUsd)}`}>
@@ -133,11 +136,6 @@ export default async function TokenDetailPage({ params, searchParams }: TokenPag
           )}
         </section>
       </div>
-      <p className="section-enter max-w-3xl text-xs text-text-muted">
-        Volumes are observed in Vex agent activity, not market volume. A swap counts on both of its
-        tokens.
-      </p>
-      <PricingCoverageNote coverage={coverage} scope="the-whole-explorer" />
     </div>
   );
 }

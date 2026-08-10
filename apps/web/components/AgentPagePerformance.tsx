@@ -36,7 +36,7 @@ export function AgentPagePerformance({ agent }: { agent: AgentPageDto }) {
   return (
     <section className="section-enter flex flex-col gap-4">
       <PanelHeading title="Performance" meta="PRICED ACTIVITY" />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <AgentPageStatCard
           label="Realized result"
           value={signedUsd(agent.realizedResultUsd, formatUsdCompact)}

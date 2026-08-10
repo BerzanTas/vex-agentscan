@@ -9,6 +9,7 @@ import "../styles/navbar.css";
 import "../styles/search.css";
 import "../styles/headings.css";
 import "../styles/filters.css";
+import "../styles/status.css";
 
 export const metadata: Metadata = {
   title: "AgentScan",
@@ -32,7 +33,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="flex min-h-screen flex-col bg-bg-primary font-sans text-text-primary antialiased">
         <AmbientBackdrop />
         <TopBar />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">{children}</main>
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">{children}</main>
         <SiteFooter />
       </body>
     </html>

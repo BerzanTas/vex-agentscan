@@ -74,8 +74,8 @@ export function ProtocolsRankingTable({
             <th className="table-head font-normal">Protocol</th>
             <th className="table-head font-normal">Observed volume</th>
             <th className="table-head font-normal">Txns</th>
-            <th className="table-head font-normal">Chains</th>
-            <th className="table-head font-normal">Swap / bridge split</th>
+            <th className="table-head hidden font-normal md:table-cell">Chains</th>
+            <th className="table-head hidden font-normal md:table-cell">Swap / bridge split</th>
           </tr>
         </thead>
         <tbody>
@@ -92,8 +92,10 @@ export function ProtocolsRankingTable({
                 ${formatUsdCompact(row.volumeUsd)}
               </td>
               <td className="font-mono text-xs text-text-secondary">{countLabel(row.txCount)}</td>
-              <td className="font-mono text-xs text-text-secondary">{countLabel(row.chainCount)}</td>
-              <td>
+              <td className="hidden font-mono text-xs text-text-secondary md:table-cell">
+                {countLabel(row.chainCount)}
+              </td>
+              <td className="hidden md:table-cell">
                 <SplitCell row={row} />
               </td>
             </tr>

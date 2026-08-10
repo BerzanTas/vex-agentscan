@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { NetworksTable } from "../NetworksTable";
+import {
+  bodyCellsHiddenBelowMd,
+  headersHiddenBelowMd,
+  headersShownBelowMd,
+} from "./table-column-visibility";
 import type { NetworkStatDto } from "../../lib/api";
 
 const activeNetwork: NetworkStatDto = {
@@ -109,5 +114,30 @@ describe("NetworksTable", () => {
     const markup = markupFor([activeNetwork, idleRegistryNetwork]);
 
     expect(markup).not.toContain("style=");
+  });
+});
+
+describe("NetworksTable column priority below the md breakpoint", () => {
+  it("keeps network, verification, observed volume and txns on a phone", () => {
+    const markup = markupFor([activeNetwork]);
+
+    expect(headersShownBelowMd(markup)).toEqual([
+      "Network",
+      "Verification",
+      "Observed volume",
+      "Txns",
+    ]);
+  });
+
+  it("drops the bridge legs and last seen on a phone", () => {
+    const markup = markupFor([activeNetwork]);
+
+    expect(headersHiddenBelowMd(markup)).toEqual(["Bridge in / out", "Last seen"]);
+  });
+
+  it("drops the body cells of exactly the two columns its header drops", () => {
+    const markup = markupFor([activeNetwork]);
+
+    expect(bodyCellsHiddenBelowMd(markup)).toEqual([false, false, false, false, true, true]);
   });
 });
