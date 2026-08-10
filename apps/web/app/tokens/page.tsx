@@ -36,7 +36,7 @@ export default async function TokensPage({
         These are volumes observed in Vex agent activity, not market volume. One swap contributes to
         both of its tokens, so this column does not sum to total volume.
       </p>
-      <PricingCoverageNote coverage={coverage} />
+      <PricingCoverageNote coverage={coverage} scope="these-figures" />
     </section>
   );
 }

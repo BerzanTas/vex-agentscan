@@ -30,7 +30,7 @@ export default async function ProtocolsPage({ searchParams }: ProtocolsPageProps
         actions={<RangeChips current={range} label="Protocol ranking range" />}
       />
       <ProtocolsRankingTable protocols={protocols} emptyMessage="No verified activity yet" />
-      <PricingCoverageNote coverage={coverage} />
+      <PricingCoverageNote coverage={coverage} scope="these-figures" />
     </section>
   );
 }

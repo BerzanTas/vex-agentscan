@@ -27,7 +27,7 @@ export default async function AgentsPage({ searchParams }: AgentsPageProps) {
         actions={<RangeChips current={range} label="Agent ranking range" />}
       />
       <AgentsRankingTable agents={agents} emptyMessage="No verified agent activity yet" />
-      <PricingCoverageNote coverage={coverage} />
+      <PricingCoverageNote coverage={coverage} scope="these-figures" />
     </section>
   );
 }

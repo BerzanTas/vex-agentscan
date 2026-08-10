@@ -137,7 +137,7 @@ export default async function TokenDetailPage({ params, searchParams }: TokenPag
         Volumes are observed in Vex agent activity, not market volume. A swap counts on both of its
         tokens.
       </p>
-      <PricingCoverageNote coverage={coverage} />
+      <PricingCoverageNote coverage={coverage} scope="the-whole-explorer" />
     </div>
   );
 }
