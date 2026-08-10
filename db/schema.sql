@@ -63,10 +63,34 @@ CREATE TABLE public.activities (
     backfill boolean DEFAULT false NOT NULL,
     received_at timestamp with time zone DEFAULT now() NOT NULL,
     received_schema_version integer NOT NULL,
+    usd_in_priced numeric,
+    usd_out_priced numeric,
+    pricing_state text DEFAULT 'pending'::text NOT NULL,
+    priced_at timestamp with time zone,
+    pricing_attempts smallint DEFAULT 0 NOT NULL,
+    pricing_next_attempt_at timestamp with time zone,
+    block_time timestamp with time zone,
+    token_in2_address text,
+    token_in2_symbol text,
+    token_in2_decimals smallint,
+    token_out2_address text,
+    token_out2_symbol text,
+    token_out2_decimals smallint,
+    amount_in2_raw text,
+    amount_out2_raw text,
+    executed_in2_raw text,
+    executed_out2_raw text,
+    usd_network_gas_est numeric,
+    usd_venue_fee_est numeric,
+    usd_vex_fee_est numeric,
+    usd_destination_prepay_est numeric,
     CONSTRAINT activities_chain_family_check CHECK ((chain_family = ANY (ARRAY['eip155'::text, 'solana'::text]))),
-    CONSTRAINT activities_event_role_check CHECK ((event_role = ANY (ARRAY['swap'::text, 'bridge_deposit'::text, 'bridge_fill_expected'::text, 'bridge_fill_observed'::text, 'bridge_refund'::text, 'token_launch'::text]))),
-    CONSTRAINT activities_kind_check CHECK ((kind = ANY (ARRAY['swap'::text, 'bridge'::text, 'launch'::text]))),
-    CONSTRAINT activities_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'definitively_failed'::text]))),
+    CONSTRAINT activities_event_role_check CHECK ((event_role = ANY (ARRAY['swap'::text, 'trench_fee'::text, 'swap_fee'::text, 'bridge_deposit'::text, 'bridge_fee'::text, 'bridge_fill_expected'::text, 'bridge_fill_observed'::text, 'bridge_refund'::text, 'lend_deposit'::text, 'lend_withdraw'::text, 'lend_borrow_operate'::text, 'predict_buy'::text, 'predict_sell'::text, 'predict_claim'::text, 'predict_close'::text, 'wrap'::text, 'unwrap'::text, 'yield_pt'::text, 'yield_yt'::text, 'yield_py'::text, 'yield_lp'::text, 'yield_sy'::text, 'yield_claim'::text, 'token_launch'::text]))),
+    CONSTRAINT activities_kind_check CHECK ((kind = ANY (ARRAY['swap'::text, 'bridge'::text, 'lend'::text, 'prediction'::text, 'wrap'::text, 'yield'::text, 'launch'::text]))),
+    CONSTRAINT activities_pricing_state_check CHECK ((pricing_state = ANY (ARRAY['pending'::text, 'server_priced'::text, 'unpriced'::text]))),
+    CONSTRAINT activities_second_leg_in_amount_has_token CHECK ((((amount_in2_raw IS NULL) AND (executed_in2_raw IS NULL)) OR ((token_in2_address IS NOT NULL) AND (token_in2_decimals IS NOT NULL)))),
+    CONSTRAINT activities_second_leg_out_amount_has_token CHECK ((((amount_out2_raw IS NULL) AND (executed_out2_raw IS NULL)) OR ((token_out2_address IS NOT NULL) AND (token_out2_decimals IS NOT NULL)))),
+    CONSTRAINT activities_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'definitively_failed'::text, 'superseded_unproven'::text]))),
     CONSTRAINT activities_verification_state_check CHECK ((verification_state = ANY (ARRAY['none'::text, 'queued'::text, 'verified_full'::text, 'verified_basic'::text, 'mismatch'::text])))
 );
 
@@ -91,6 +115,41 @@ ALTER SEQUENCE public.activities_id_seq OWNED BY public.activities.id;
 
 
 --
+-- Name: agent_wallets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.agent_wallets (
+    id bigint NOT NULL,
+    agent_hash text NOT NULL,
+    chain_family text NOT NULL,
+    address_hmac text NOT NULL,
+    hmac_version smallint DEFAULT 1 NOT NULL,
+    proof_signature text NOT NULL,
+    proven_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT agent_wallets_chain_family_check CHECK ((chain_family = ANY (ARRAY['eip155'::text, 'solana'::text])))
+);
+
+
+--
+-- Name: agent_wallets_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.agent_wallets_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: agent_wallets_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.agent_wallets_id_seq OWNED BY public.agent_wallets.id;
+
+
+--
 -- Name: agents; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -108,6 +167,8 @@ CREATE TABLE public.agents (
     purged_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    name text,
+    last_handshake_at timestamp with time zone,
     CONSTRAINT agents_agent_hash_check CHECK ((agent_hash ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT agents_status_check CHECK ((status = ANY (ARRAY['active'::text, 'revoked'::text, 'quarantined'::text])))
 );
@@ -122,8 +183,37 @@ CREATE TABLE public.daily_aggregates (
     protocol text NOT NULL,
     kind text NOT NULL,
     volume_usd numeric DEFAULT 0 NOT NULL,
-    tx_count integer DEFAULT 0 NOT NULL
+    tx_count integer DEFAULT 0 NOT NULL,
+    volume_usd_priced numeric DEFAULT 0 NOT NULL
 );
+
+
+--
+-- Name: handshake_challenges; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.handshake_challenges (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    agent_hash text NOT NULL,
+    nonce text NOT NULL,
+    domain text NOT NULL,
+    address_hmacs text[] NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    CONSTRAINT handshake_challenges_agent_hash_check CHECK ((agent_hash ~ '^[0-9a-f]{64}$'::text))
+);
+
+
+--
+-- Name: rate_limit_hits; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.rate_limit_hits (
+    key_hash text NOT NULL,
+    hits timestamp with time zone[] NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+)
+WITH (autovacuum_vacuum_scale_factor='0.01', autovacuum_vacuum_threshold='50');
 
 
 --
@@ -215,6 +305,23 @@ ALTER SEQUENCE public.token_attestations_id_seq OWNED BY public.token_attestatio
 
 
 --
+-- Name: token_prices; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.token_prices (
+    chain_family text NOT NULL,
+    chain_id bigint NOT NULL,
+    token_address text NOT NULL,
+    price_hour timestamp with time zone NOT NULL,
+    price_usd numeric,
+    confidence numeric,
+    source text NOT NULL,
+    fetched_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT token_prices_chain_family_check CHECK ((chain_family = ANY (ARRAY['eip155'::text, 'solana'::text])))
+);
+
+
+--
 -- Name: verification_jobs; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -243,6 +350,13 @@ CREATE TABLE public.worker_heartbeat (
 --
 
 ALTER TABLE ONLY public.activities ALTER COLUMN id SET DEFAULT nextval('public.activities_id_seq'::regclass);
+
+
+--
+-- Name: agent_wallets id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_wallets ALTER COLUMN id SET DEFAULT nextval('public.agent_wallets_id_seq'::regclass);
 
 
 --
@@ -284,6 +398,30 @@ ALTER TABLE ONLY public.activities
 
 
 --
+-- Name: agent_wallets agent_wallets_chain_family_address_hmac_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_wallets
+    ADD CONSTRAINT agent_wallets_chain_family_address_hmac_key UNIQUE (chain_family, address_hmac);
+
+
+--
+-- Name: agent_wallets agent_wallets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_wallets
+    ADD CONSTRAINT agent_wallets_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: agents agents_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agents
+    ADD CONSTRAINT agents_name_key UNIQUE (name);
+
+
+--
 -- Name: agents agents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -297,6 +435,30 @@ ALTER TABLE ONLY public.agents
 
 ALTER TABLE ONLY public.daily_aggregates
     ADD CONSTRAINT daily_aggregates_pkey PRIMARY KEY (day, protocol, kind);
+
+
+--
+-- Name: handshake_challenges handshake_challenges_nonce_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.handshake_challenges
+    ADD CONSTRAINT handshake_challenges_nonce_key UNIQUE (nonce);
+
+
+--
+-- Name: handshake_challenges handshake_challenges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.handshake_challenges
+    ADD CONSTRAINT handshake_challenges_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: rate_limit_hits rate_limit_hits_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rate_limit_hits
+    ADD CONSTRAINT rate_limit_hits_pkey PRIMARY KEY (key_hash);
 
 
 --
@@ -332,6 +494,14 @@ ALTER TABLE ONLY public.token_attestations
 
 
 --
+-- Name: token_prices token_prices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.token_prices
+    ADD CONSTRAINT token_prices_pkey PRIMARY KEY (chain_family, chain_id, token_address, price_hour);
+
+
+--
 -- Name: verification_jobs verification_jobs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -355,6 +525,27 @@ CREATE INDEX idx_activities_agent_confirmed ON public.activities USING btree (ag
 
 
 --
+-- Name: idx_activities_chain_event_time_feed; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_activities_chain_event_time_feed ON public.activities USING btree (chain_family, chain_id, date_trunc('milliseconds'::text, COALESCE(COALESCE(client_confirmed_at, block_time), client_created_at), 'UTC'::text) DESC, id DESC);
+
+
+--
+-- Name: idx_activities_chain_feed; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_activities_chain_feed ON public.activities USING btree (chain_family, chain_id, received_at DESC, id DESC);
+
+
+--
+-- Name: idx_activities_event_time_feed; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_activities_event_time_feed ON public.activities USING btree (date_trunc('milliseconds'::text, COALESCE(COALESCE(client_confirmed_at, block_time), client_created_at), 'UTC'::text) DESC, id DESC);
+
+
+--
 -- Name: idx_activities_feed; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -362,10 +553,87 @@ CREATE INDEX idx_activities_feed ON public.activities USING btree (received_at D
 
 
 --
+-- Name: idx_activities_pricing_due; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_activities_pricing_due ON public.activities USING btree (pricing_next_attempt_at) WHERE (pricing_state = 'pending'::text);
+
+
+--
+-- Name: idx_activities_protocol_event_time_feed; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_activities_protocol_event_time_feed ON public.activities USING btree (protocol, date_trunc('milliseconds'::text, COALESCE(COALESCE(client_confirmed_at, block_time), client_created_at), 'UTC'::text) DESC, id DESC);
+
+
+--
+-- Name: idx_activities_protocol_feed; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_activities_protocol_feed ON public.activities USING btree (protocol, received_at DESC, id DESC);
+
+
+--
+-- Name: idx_activities_tx_hash; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_activities_tx_hash ON public.activities USING btree (lower(tx_hash)) WHERE (tx_hash IS NOT NULL);
+
+
+--
+-- Name: idx_activities_verified_anchor; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_activities_verified_anchor ON public.activities USING btree (COALESCE(COALESCE(client_confirmed_at, block_time), verified_at)) WHERE (verification_state = ANY (ARRAY['verified_full'::text, 'verified_basic'::text]));
+
+
+--
+-- Name: idx_activities_verified_chain; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_activities_verified_chain ON public.activities USING btree (chain_family, chain_id) WHERE (verification_state = ANY (ARRAY['verified_full'::text, 'verified_basic'::text]));
+
+
+--
+-- Name: idx_activities_verified_token_in; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_activities_verified_token_in ON public.activities USING btree (chain_family, chain_id, lower(token_in_address)) WHERE (verification_state = ANY (ARRAY['verified_full'::text, 'verified_basic'::text]));
+
+
+--
+-- Name: idx_activities_verified_token_out; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_activities_verified_token_out ON public.activities USING btree (chain_family, chain_id, lower(token_out_address)) WHERE (verification_state = ANY (ARRAY['verified_full'::text, 'verified_basic'::text]));
+
+
+--
 -- Name: idx_activities_visibility; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_activities_visibility ON public.activities USING btree (status, verification_state);
+
+
+--
+-- Name: idx_agent_wallets_agent_hash; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_agent_wallets_agent_hash ON public.agent_wallets USING btree (agent_hash);
+
+
+--
+-- Name: idx_handshake_challenges_purge; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_handshake_challenges_purge ON public.handshake_challenges USING btree (created_at);
+
+
+--
+-- Name: idx_rate_limit_hits_updated_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_rate_limit_hits_updated_at ON public.rate_limit_hits USING btree (updated_at);
 
 
 --
@@ -405,6 +673,14 @@ ALTER TABLE ONLY public.activities
 
 
 --
+-- Name: agent_wallets agent_wallets_agent_hash_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_wallets
+    ADD CONSTRAINT agent_wallets_agent_hash_fkey FOREIGN KEY (agent_hash) REFERENCES public.agents(agent_hash);
+
+
+--
 -- Name: strikes strikes_agent_hash_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -433,4 +709,16 @@ ALTER TABLE ONLY public.verification_jobs
 
 INSERT INTO public.schema_migrations (version) VALUES
     ('0001'),
-    ('0008');
+    ('0002'),
+    ('0003'),
+    ('0004'),
+    ('0005'),
+    ('0006'),
+    ('0007'),
+    ('0008'),
+    ('0009'),
+    ('0010'),
+    ('0011'),
+    ('0012'),
+    ('0013'),
+    ('0014');

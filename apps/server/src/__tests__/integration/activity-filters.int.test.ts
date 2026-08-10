@@ -1,3 +1,4 @@
+import { EVENT_KINDS, type EventKind, type EventStatus } from "@agentscan/contract";
 import { resolveChain } from "@agentscan/core";
 import type { FastifyInstance } from "fastify";
 import type pg from "pg";
@@ -37,12 +38,12 @@ async function seedAgent(pool: pg.Pool, agentHash: string, everVerified: boolean
 type ActivitySeed = {
   publicId: string;
   agentHash: string;
-  kind: "swap" | "bridge" | "launch";
+  kind: EventKind;
   eventRole: string;
   protocol: string;
   chainFamily: "eip155" | "solana";
   chainId: string;
-  status: "pending" | "confirmed" | "definitively_failed";
+  status: EventStatus;
   verificationState: string;
   usdInPriced: string | null;
   receivedSecondsAgo: number;
@@ -287,9 +288,9 @@ describe("GET /api/activity with filters and the visibility rule", () => {
 
   it("never reveals a row of an agent without any verified activity under the verification filter", async () => {
     expect(await feedIds("?verification=pending")).toEqual([
+      "swap-base-queued",
       "bridge-base-failed",
       "swap-base-pending",
-      "swap-base-queued",
     ]);
   });
 
@@ -305,8 +306,8 @@ describe("GET /api/activity filter combinations", () => {
 
   it("combines protocol and verification with AND", async () => {
     expect(await feedIds("?protocol=kyberswap&verification=pending")).toEqual([
-      "swap-base-pending",
       "swap-base-queued",
+      "swap-base-pending",
     ]);
   });
 
@@ -315,7 +316,7 @@ describe("GET /api/activity filter combinations", () => {
   });
 
   it("matches both provider ids of a chain that has more than one", async () => {
-    expect(await feedIds("?chain=solana")).toEqual(["bridge-sol-relay", "bridge-sol-khalani"]);
+    expect(await feedIds("?chain=solana")).toEqual(["bridge-sol-khalani", "bridge-sol-relay"]);
   });
 
   it("matches only the single registry pair of an evm chain", async () => {
@@ -350,11 +351,11 @@ describe("GET /api/activity with values that are not offered", () => {
 describe("GET /api/activity paging with a filter", () => {
   it("returns disjoint pages that lose no row at the boundary", async () => {
     const firstPage = await feedPage("?kind=swap");
-    expect(firstPage.ids).toEqual(["swap-base-pending", "swap-base-queued", "swap-base-uniswap"]);
+    expect(firstPage.ids).toEqual(["swap-base-queued", "swap-arb-basic", "swap-base-full"]);
     expect(firstPage.nextCursor).not.toBeNull();
 
     const secondPage = await feedPage(`?kind=swap&cursor=${firstPage.nextCursor}`);
-    expect(secondPage.ids).toEqual(["swap-arb-basic", "swap-base-full"]);
+    expect(secondPage.ids).toEqual(["swap-base-pending", "swap-base-uniswap"]);
     expect(secondPage.nextCursor).toBeNull();
   });
 });
@@ -464,6 +465,80 @@ describe("GET /api/activity serving a launch kind row", () => {
       kind: "launch",
       eventRole: "token_launch",
     });
+  });
+});
+
+const KIND_SWEEP_PROTOCOL = "p-kind-sweep";
+
+const kindSweepRole: Record<EventKind, string> = {
+  swap: "swap",
+  bridge: "bridge_deposit",
+  lend: "lend_deposit",
+  prediction: "predict_buy",
+  wrap: "wrap",
+  yield: "yield_lp",
+  launch: "token_launch",
+};
+
+const kindSweepId = (kind: EventKind) => `kind-sweep-${kind}`;
+
+describe("GET /api/activity filtering by every kind the contract reports", () => {
+  beforeAll(async () => {
+    for (const kind of EVENT_KINDS) {
+      await seedActivity(db.pool, {
+        publicId: kindSweepId(kind),
+        agentHash: agentAlpha,
+        kind,
+        eventRole: kindSweepRole[kind],
+        protocol: KIND_SWEEP_PROTOCOL,
+        chainFamily: "eip155",
+        chainId: "8453",
+        status: "confirmed",
+        verificationState: "verified_full",
+        usdInPriced: null,
+        receivedSecondsAgo: 5,
+        confirmedDaysAgo: 0,
+      });
+    }
+  });
+
+  afterAll(async () => {
+    await db.pool.query("DELETE FROM activities WHERE protocol = $1", [KIND_SWEEP_PROTOCOL]);
+  });
+
+  it.each(EVENT_KINDS)("narrows the feed to the %s row of a protocol holding one row per kind", async (kind) => {
+    expect(await feedIds(`?protocol=${KIND_SWEEP_PROTOCOL}&kind=${kind}`)).toEqual([kindSweepId(kind)]);
+  });
+});
+
+describe("GET /api/activity filtering by the superseded status", () => {
+  afterAll(async () => {
+    await db.pool.query("DELETE FROM activities WHERE public_id = 'swap-base-superseded'");
+  });
+
+  beforeAll(async () => {
+    await seedActivity(db.pool, {
+      publicId: "swap-base-superseded",
+      agentHash: agentAlpha,
+      kind: "swap",
+      eventRole: "swap",
+      protocol: "p-superseded",
+      chainFamily: "eip155",
+      chainId: "8453",
+      status: "superseded_unproven",
+      verificationState: "none",
+      usdInPriced: null,
+      receivedSecondsAgo: 5,
+      confirmedDaysAgo: null,
+    });
+  });
+
+  it("offers superseded_unproven as a status filter and returns only its rows", async () => {
+    expect(await feedIds("?status=superseded_unproven")).toEqual(["swap-base-superseded"]);
+  });
+
+  it("never returns a superseded row under the failed status", async () => {
+    expect(await feedIds("?status=definitively_failed")).toEqual(["bridge-base-failed"]);
   });
 });
 

@@ -40,9 +40,9 @@ export function AgentsRankingTable({
             <th className="table-head font-normal">Agent</th>
             <th className="table-head font-normal">Observed volume</th>
             <th className="table-head font-normal">Txns</th>
-            <th className="table-head font-normal">Protocols</th>
-            <th className="table-head font-normal">Chains</th>
-            <th className="table-head font-normal">Last seen</th>
+            <th className="table-head hidden font-normal md:table-cell">Protocols</th>
+            <th className="table-head hidden font-normal md:table-cell">Chains</th>
+            <th className="table-head hidden font-normal md:table-cell">Last seen</th>
           </tr>
         </thead>
         <tbody>
@@ -59,13 +59,15 @@ export function AgentsRankingTable({
                 ${formatUsdCompact(agent.volumeUsd)}
               </td>
               <td className="font-mono text-xs text-text-secondary">{countLabel(agent.txCount)}</td>
-              <td className="font-mono text-xs text-text-secondary">
+              <td className="hidden font-mono text-xs text-text-secondary md:table-cell">
                 {countLabel(agent.protocolCount)}
               </td>
-              <td className="font-mono text-xs text-text-secondary">
+              <td className="hidden font-mono text-xs text-text-secondary md:table-cell">
                 {countLabel(agent.chainCount)}
               </td>
-              <td className="font-mono text-xs text-text-muted">{formatAge(agent.lastSeenSeconds)}</td>
+              <td className="hidden font-mono text-xs text-text-muted md:table-cell">
+                {formatAge(agent.lastSeenSeconds)}
+              </td>
             </tr>
           ))}
         </tbody>

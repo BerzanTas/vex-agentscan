@@ -3,14 +3,9 @@ import { parseChartRange } from "../../lib/range";
 import { NetworksTable } from "../../components/NetworksTable";
 import { PageHeading } from "../../components/PageHeading";
 import { PanelHeading } from "../../components/PanelHeading";
-import { PricingCoverageNote } from "../../components/PricingCoverageNote";
 import { RangeChips } from "../../components/RangeChips";
 import { RoutesList } from "../../components/RoutesList";
-import {
-  fetchBridgeRoutes,
-  fetchNetworks,
-  fetchPricingCoverage,
-} from "../../lib/api";
+import { fetchBridgeRoutes, fetchNetworks } from "../../lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -23,11 +18,7 @@ type NetworksPageProps = { searchParams: Promise<Record<string, string | string[
 
 export default async function NetworksPage({ searchParams }: NetworksPageProps) {
   const range = parseChartRange((await searchParams).range);
-  const [networks, routes, coverage] = await Promise.all([
-    fetchNetworks(range),
-    fetchBridgeRoutes(range),
-    fetchPricingCoverage(range),
-  ]);
+  const [networks, routes] = await Promise.all([fetchNetworks(range), fetchBridgeRoutes(range)]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -44,7 +35,6 @@ export default async function NetworksPage({ searchParams }: NetworksPageProps) 
         <PanelHeading title="Bridge routes" meta={range} />
         <RoutesList routes={routes} emptyMessage="No bridge legs observed in this window" />
       </section>
-      <PricingCoverageNote coverage={coverage} scope="these-figures" />
     </div>
   );
 }

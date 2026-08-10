@@ -1,5 +1,5 @@
 import type pg from "pg";
-import type { ChartRangePlan } from "@agentscan/core";
+import { capitalDeployingRolesIn, type ChartRangePlan } from "@agentscan/core";
 import { activityTimeAnchorSql } from "./activity-time-anchor.js";
 import { serverPricedUsdIn, serverPricedUsdOut } from "./server-priced-usd.js";
 
@@ -29,7 +29,7 @@ const SPAN_CTE = `
 
 const IN_WINDOW = `((SELECT first_start FROM span) IS NULL
        OR ${OBSERVED_AT} >= to_timestamp((SELECT first_start FROM span)))`;
-const VOLUME_LEG = "a.event_role IN ('swap','bridge_deposit')";
+const VOLUME_LEG = capitalDeployingRolesIn("a.event_role");
 
 const LISTED_LEGS_CTE = `
   legs AS (

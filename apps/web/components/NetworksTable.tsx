@@ -33,8 +33,10 @@ export function NetworksTable({ networks }: { networks: NetworkStatDto[] }) {
             <th className="table-head font-normal">Verification</th>
             <th className="table-head font-normal text-right">Observed volume</th>
             <th className="table-head font-normal text-right">Txns</th>
-            <th className="table-head font-normal text-right">Bridge in / out</th>
-            <th className="table-head font-normal text-right">Last seen</th>
+            <th className="table-head hidden text-right font-normal md:table-cell">
+              Bridge in / out
+            </th>
+            <th className="table-head hidden text-right font-normal md:table-cell">Last seen</th>
           </tr>
         </thead>
         <tbody>
@@ -64,10 +66,10 @@ export function NetworksTable({ networks }: { networks: NetworkStatDto[] }) {
               <td className="text-right font-mono text-xs text-text-secondary">
                 {network.txCount.toLocaleString("en-US")}
               </td>
-              <td className="text-right font-mono text-xs text-text-secondary">
+              <td className="hidden text-right font-mono text-xs text-text-secondary md:table-cell">
                 {bridgeLegLabel(network)}
               </td>
-              <td className="text-right font-mono text-xs text-text-muted">
+              <td className="hidden text-right font-mono text-xs text-text-muted md:table-cell">
                 {lastSeenLabel(network.lastSeenSeconds)}
               </td>
             </tr>

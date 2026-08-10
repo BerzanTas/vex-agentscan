@@ -19,13 +19,34 @@ describe("SiteFooter", () => {
     expect(rendered).toContain('rel="noopener"');
   });
 
+  it("describes the reported activity without narrowing it to swaps and bridges", () => {
+    const rendered = markup();
+
+    expect(rendered).toContain("On-chain actions reported by Vex installations");
+    expect(rendered).not.toContain("Swaps and bridges reported by Vex installations");
+  });
+
   it("separates the client estimate of a single activity from the priced aggregates", () => {
-    expect(markup()).toContain("Per-activity USD figures are client estimates");
-    expect(markup()).toContain("aggregate USD figures are priced by AgentScan");
+    expect(markup()).toContain("Per-activity USD figures are client estimates captured at quote time");
+    expect(markup()).toContain(
+      "aggregate USD figures are priced by AgentScan from its own historical lookups",
+    );
+  });
+
+  it("names the label a per-activity estimate carries in the tables", () => {
+    expect(markup()).toContain("are labeled &quot;est.&quot;");
+  });
+
+  it("says the priced aggregates may not cover every activity", () => {
+    expect(markup()).toContain("may not cover every activity");
   });
 
   it("states that activity is verified on-chain", () => {
-    expect(markup()).toContain("verified on-chain");
+    expect(markup()).toContain("Activity is reported by Vex installations and verified on-chain");
+  });
+
+  it("is the only place the coverage share used to be explained, so it carries no percentage", () => {
+    expect(markup()).not.toContain("priced by AgentScan and cover");
   });
 
   it("ships both logo variants so CSS can pick one per theme", () => {

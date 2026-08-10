@@ -1,6 +1,7 @@
 import type pg from "pg";
-import type { ChainFamily, ChartRangePlan } from "@agentscan/core";
-import { activityTimeAnchorSql } from "./activity-time-anchor.js";
+import { EVENT_KINDS, EVENT_STATUSES, type EventKind, type EventStatus } from "@agentscan/contract";
+import { capitalDeployingRolesIn, type ChainFamily, type ChartRangePlan } from "@agentscan/core";
+import { activityEventTimeCursorSql, activityTimeAnchorSql } from "./activity-time-anchor.js";
 import {
   awaitingAPrice,
   contributesNoUsd,
@@ -49,9 +50,10 @@ export type ActivityDbRow = {
   backfill: boolean;
   received_at: Date;
   received_schema_version: number;
+  event_time: Date;
 };
 
-export type FeedCursor = { receivedAt: Date; id: bigint };
+export type FeedCursor = { eventTime: Date; id: bigint };
 
 type ActivityQueryRow = Omit<ActivityDbRow, "id" | "chain_id" | "from_chain_id" | "to_chain_id"> & {
   id: string;
@@ -60,7 +62,10 @@ type ActivityQueryRow = Omit<ActivityDbRow, "id" | "chain_id" | "from_chain_id" 
   to_chain_id: string | null;
 };
 
+const ACTIVITY_EVENT_TIME = activityEventTimeCursorSql("a");
+
 const ACTIVITY_COLUMNS = `
+  ${ACTIVITY_EVENT_TIME} AS event_time,
   a.id, a.agent_hash, a.source_row_id, a.public_id, a.source_execution_id, a.event_index,
   a.kind, a.event_role, a.status, a.protocol, a.chain_family, a.chain_id, a.from_chain_id, a.to_chain_id,
   a.token_in_address, a.token_in_symbol, a.token_in_decimals,
@@ -117,6 +122,7 @@ function activityDbRowFrom(raw: ActivityQueryRow): ActivityDbRow {
     backfill: raw.backfill,
     received_at: raw.received_at,
     received_schema_version: raw.received_schema_version,
+    event_time: raw.event_time,
   };
 }
 
@@ -126,8 +132,8 @@ function singleRow<T extends pg.QueryResultRow>(result: pg.QueryResult<T>): T {
   return row;
 }
 
-export type ActivityKindFilter = "swap" | "bridge";
-export type ActivityStatusFilter = "pending" | "confirmed" | "definitively_failed";
+export type ActivityKindFilter = EventKind;
+export type ActivityStatusFilter = EventStatus;
 export type ActivityVerificationFilter = "verified_full" | "verified_basic" | "pending";
 
 export type ActivityFilters = {
@@ -140,12 +146,8 @@ export type ActivityFilters = {
 
 export type RawActivityFilters = { [Dimension in keyof ActivityFilters]?: unknown };
 
-const ACTIVITY_KIND_FILTERS: readonly ActivityKindFilter[] = ["swap", "bridge"];
-const ACTIVITY_STATUS_FILTERS: readonly ActivityStatusFilter[] = [
-  "pending",
-  "confirmed",
-  "definitively_failed",
-];
+const ACTIVITY_KIND_FILTERS: readonly ActivityKindFilter[] = EVENT_KINDS;
+const ACTIVITY_STATUS_FILTERS: readonly ActivityStatusFilter[] = EVENT_STATUSES;
 const ACTIVITY_VERIFICATION_FILTERS: readonly ActivityVerificationFilter[] = [
   "verified_full",
   "verified_basic",
@@ -221,7 +223,7 @@ export async function visibleActivityPage(
   query: ActivityFeedQuery,
 ): Promise<ActivityDbRow[]> {
   const params: unknown[] = [
-    query.cursor?.receivedAt ?? null,
+    query.cursor?.eventTime ?? null,
     query.cursor?.id.toString() ?? null,
     query.limit,
   ];
@@ -234,9 +236,9 @@ export async function visibleActivityPage(
      FROM activities a
      JOIN agents ag ON ag.agent_hash = a.agent_hash
      WHERE ${VISIBILITY_PREDICATE}
-       AND ($1::timestamptz IS NULL OR (a.received_at, a.id) < ($1::timestamptz, $2::bigint))
+       AND ($1::timestamptz IS NULL OR (${ACTIVITY_EVENT_TIME}, a.id) < ($1::timestamptz, $2::bigint))
        ${filterSql}
-     ORDER BY a.received_at DESC, a.id DESC
+     ORDER BY ${ACTIVITY_EVENT_TIME} DESC, a.id DESC
      LIMIT $3`,
     params,
   );
@@ -321,10 +323,9 @@ export type ChartBucketRead = { bucketStart: number; volumeUsd: string; txCount:
 
 type ChartBucketQueryRow = { bucket_start: string; volume_usd: string; tx_count: number };
 
-const VERIFIED_VOLUME_ROLES = "('swap','bridge_deposit')";
 const ACTIVITY_TIME_ANCHOR = activityTimeAnchorSql("a");
 const VERIFIED_STATES_PREDICATE = "a.verification_state IN ('verified_full','verified_basic')";
-const VOLUME_LEG_PREDICATE = `a.event_role IN ${VERIFIED_VOLUME_ROLES}`;
+const VOLUME_LEG_PREDICATE = capitalDeployingRolesIn("a.event_role");
 const VOLUME_LEG_USD_SUM = serverPricedUsdInSumOf("a", VOLUME_LEG_PREDICATE);
 const CURRENT_UTC_DAY = "(now() AT TIME ZONE 'utc')::date";
 
@@ -449,7 +450,7 @@ export async function agentLeaderboard(
               now() - COALESCE(MAX(${ACTIVITY_TIME_ANCHOR}), MAX(a.received_at)))))::int AS last_seen_seconds
      FROM activities a
      WHERE ${VERIFIED_STATES_PREDICATE}
-       AND a.event_role IN ${VERIFIED_VOLUME_ROLES}
+       AND ${VOLUME_LEG_PREDICATE}
        AND ${windowPredicate(1)}
      GROUP BY a.agent_hash
      ORDER BY ${USD_IN_SUM} DESC, a.agent_hash

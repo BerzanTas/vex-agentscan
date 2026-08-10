@@ -2,6 +2,7 @@ import type pg from "pg";
 import type { Logger } from "pino";
 import {
   decidePricingOutcome,
+  deploysCapitalRole,
   isPriceAcceptable,
   legUsd,
   presentLeg,
@@ -30,7 +31,6 @@ import {
 } from "../repos/activity-pricing-repo.js";
 
 const HOUR_MS = 3_600_000;
-const PRICED_VOLUME_ROLES = ["swap", "bridge_deposit"];
 
 export type PricingLoopDeps = {
   pool: pg.Pool;
@@ -202,7 +202,7 @@ function retryBudgetOf(deps: PricingLoopDeps, row: ClaimedPricingRow) {
 }
 
 function pricedVolumeOf(row: ClaimedPricingRow, usdIn: string | null): string {
-  if (!PRICED_VOLUME_ROLES.includes(row.eventRole)) return "0";
+  if (!deploysCapitalRole(row.eventRole)) return "0";
   return usdIn ?? "0";
 }
 

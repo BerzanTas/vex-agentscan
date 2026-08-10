@@ -135,7 +135,7 @@ export function VerificationPanels({ stats }: { stats: VerificationStatsDto }) {
         <VerificationSplit full={stats.verifiedFull} basic={stats.verifiedBasic} />
         <p className="mt-4 text-sm text-text-secondary">{TIER_DIFFERENCE}</p>
       </section>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <VerificationStat
           label="Median verification latency"
           value={latencyLabel(stats.latencySeconds.median)}

@@ -1,3 +1,4 @@
+import { deploysCapitalRole } from "../capital-deploying-roles.js";
 import type { ChainFamily } from "../chain-registry/catalog.js";
 
 export type PricingState = "pending" | "server_priced" | "unpriced";
@@ -22,14 +23,12 @@ export type AgentActivity = {
   received: AgentActivityLeg;
 };
 
-const DEPLOYED_ROLES: readonly string[] = ["swap", "bridge_deposit"];
-
 export function isServerPriced(activity: AgentActivity): boolean {
   return activity.pricingState === "server_priced";
 }
 
 export function deploysCapital(activity: AgentActivity): boolean {
-  return DEPLOYED_ROLES.includes(activity.eventRole);
+  return deploysCapitalRole(activity.eventRole);
 }
 
 export function chronological(activities: readonly AgentActivity[]): AgentActivity[] {
