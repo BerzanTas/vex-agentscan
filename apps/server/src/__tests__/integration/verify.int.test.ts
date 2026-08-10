@@ -1,5 +1,6 @@
 import { pino } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { EventStatus } from "@agentscan/contract";
 import { resolveChain, type ChainReader, type ReceiptView } from "@agentscan/core";
 import { loadConfig } from "../../config.js";
 import { claimDueJobs, finalizeVerification } from "../../repos/activities-verify-repo.js";
@@ -59,6 +60,7 @@ type QueuedActivitySeed = {
   agentHash: string;
   protocol?: string;
   kind?: "swap" | "bridge" | "launch";
+  status?: EventStatus;
   eventRole?: string;
   chainId?: number;
   usdInEst?: string | null;
@@ -80,8 +82,8 @@ async function seedQueuedActivity(seed: QueuedActivitySeed): Promise<bigint> {
         protocol, chain_family, chain_id, token_in_address, token_out_address,
         executed_in_raw, executed_out_raw, usd_in_est, tx_hash,
         client_created_at, client_confirmed_at, statuses_seen, verification_state, received_schema_version)
-     VALUES ($1, $2, $2, $2, 0, $3, $4, 'confirmed', $5, 'eip155', $6, $7, $8, $9, $10, $11, $12,
-             now() - interval '1 hour', $13, ARRAY['pending','confirmed'], 'queued', 1)
+     VALUES ($1, $2, $2, $2, 0, $3, $4, $14, $5, 'eip155', $6, $7, $8, $9, $10, $11, $12,
+             now() - interval '1 hour', $13, ARRAY['pending', $14], 'queued', 1)
      RETURNING id`,
     [
       seed.agentHash,
@@ -97,6 +99,7 @@ async function seedQueuedActivity(seed: QueuedActivitySeed): Promise<bigint> {
       seed.usdInEst ?? null,
       `0xtx-${seedCounter}`,
       seed.clientConfirmedAt === undefined ? new Date() : seed.clientConfirmedAt,
+      seed.status ?? "confirmed",
     ],
   );
   const activityId = BigInt(onlyRow(inserted.rows).id);
@@ -442,6 +445,25 @@ describe("verification worker", () => {
     expect(secondIds).toHaveLength(2);
     expect(firstIds.filter((id) => secondIds.includes(id))).toEqual([]);
     expect([...firstIds, ...secondIds].sort()).toEqual([...seededIds].sort());
+    await db.pool.query("DELETE FROM verification_jobs");
+  });
+
+  it("never claims a job whose activity ended superseded_unproven, so it can neither be verified nor struck", async () => {
+    await db.pool.query("DELETE FROM verification_jobs");
+    const agent = "f".repeat(64);
+    await seedAgent(agent);
+    const supersededId = await seedQueuedActivity({
+      agentHash: agent,
+      protocol: "p-superseded",
+      status: "superseded_unproven",
+    });
+    const confirmedId = await seedQueuedActivity({ agentHash: agent, protocol: "p-still-claimed" });
+
+    const claimed = await claimDueJobs(db.pool, 10, config.WORKER_LEASE_SEC);
+
+    expect(claimed.map((job) => job.activityId)).toEqual([confirmedId]);
+    expect((await activityStateOf(supersededId)).verification_state).toBe("queued");
+    expect(await strikesOf(agent)).toEqual([]);
     await db.pool.query("DELETE FROM verification_jobs");
   });
 

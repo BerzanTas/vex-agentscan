@@ -28,6 +28,7 @@ const fixtureActivityRow = () => ({
   client_created_at: new Date(), client_confirmed_at: new Date(), client_observed_at: null,
   statuses_seen: ["pending", "confirmed"], verification_state: "verified_full",
   verified_at: new Date(), backfill: false, received_at: new Date(), received_schema_version: 1,
+  event_time: new Date(),
 });
 
 const BANNED = ["agentHash", "agent_hash", "sourceRowId", "source_row_id", "sourceExecutionId", "source_execution_id", "eventIndex", "event_index"];
@@ -35,6 +36,61 @@ const BANNED = ["agentHash", "agent_hash", "sourceRowId", "source_row_id", "sour
 it("public DTOs never expose banned identifiers", () => {
   for (const dto of [toActivityRowDto(fixtureActivityRow(), stubResolve), toTxDetailDto(fixtureActivityRow(), stubResolve)]) {
     for (const key of BANNED) expect(key in (dto as object)).toBe(false);
+  }
+});
+
+const secondLegAndCostColumns = {
+  token_in2_address: "0x111",
+  token_in2_symbol: "PT-USDC",
+  token_in2_decimals: 6,
+  token_out2_address: "0x222",
+  token_out2_symbol: "YT-USDC",
+  token_out2_decimals: 6,
+  amount_in2_raw: "1000000",
+  amount_out2_raw: "2000000",
+  executed_in2_raw: "999000",
+  executed_out2_raw: "1999000",
+  usd_network_gas_est: "0.42",
+  usd_venue_fee_est: "0.15",
+  usd_vex_fee_est: "0.05",
+  usd_destination_prepay_est: "1.20",
+};
+
+const widenedActivityRow = () => ({ ...fixtureActivityRow(), ...secondLegAndCostColumns });
+
+it("public DTOs never expose banned identifiers on a row carrying the widened columns", () => {
+  for (const dto of [
+    toActivityRowDto(widenedActivityRow(), stubResolve),
+    toTxDetailDto(widenedActivityRow(), stubResolve),
+  ]) {
+    for (const key of BANNED) expect(key in (dto as object)).toBe(false);
+  }
+});
+
+const UNPUBLISHED_ESTIMATE_FIELDS = [
+  "tokenIn2Symbol",
+  "tokenOut2Symbol",
+  "tokenIn2Decimals",
+  "tokenOut2Decimals",
+  "amountIn2Raw",
+  "amountOut2Raw",
+  "executedIn2Raw",
+  "executedOut2Raw",
+  "usdNetworkGasEst",
+  "usdVenueFeeEst",
+  "usdVexFeeEst",
+  "usdDestinationPrepayEst",
+];
+
+it("public DTOs publish no second-leg or cost-breakdown client estimate", () => {
+  for (const dto of [
+    toActivityRowDto(widenedActivityRow(), stubResolve),
+    toTxDetailDto(widenedActivityRow(), stubResolve),
+  ]) {
+    for (const field of UNPUBLISHED_ESTIMATE_FIELDS) expect(field in (dto as object)).toBe(false);
+    const serialised = JSON.stringify(dto);
+    expect(serialised).not.toContain("PT-USDC");
+    expect(serialised).not.toContain("YT-USDC");
   }
 });
 
@@ -146,6 +202,19 @@ it("a bridge leg without a chain id becomes null", () => {
   const dto = toActivityRowDto(fixtureBridgeRow(null, 8453n), stubResolve, fakeResolveBridgeChain);
   expect(dto.fromChainSlug).toBe(null);
   expect(dto.toChainSlug).toBe("base");
+});
+
+it("ages a row from the event time the feed sorts on, not from any other stamp it carries", () => {
+  const row = {
+    ...fixtureActivityRow(),
+    event_time: new Date(Date.now() - 600_000),
+    client_created_at: new Date(Date.now() - 7_200_000),
+    client_confirmed_at: new Date(Date.now() - 3_600_000),
+    received_at: new Date(),
+  };
+
+  expect(Math.round(toActivityRowDto(row, stubResolve).ageSeconds / 60)).toBe(10);
+  expect(Math.round(toTxDetailDto(row, stubResolve).ageSeconds / 60)).toBe(10);
 });
 
 it("a launch row serves with no bridge route slugs and its kind intact", () => {

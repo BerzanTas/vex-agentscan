@@ -14,19 +14,19 @@ import {
 function decodeCursor(value: string): FeedCursor | null {
   try {
     const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as {
-      receivedAt: string;
+      eventTime: string;
       id: string;
     };
-    const receivedAt = new Date(parsed.receivedAt);
-    if (Number.isNaN(receivedAt.getTime())) return null;
-    return { receivedAt, id: BigInt(parsed.id) };
+    const eventTime = new Date(parsed.eventTime);
+    if (Number.isNaN(eventTime.getTime())) return null;
+    return { eventTime, id: BigInt(parsed.id) };
   } catch {
     return null;
   }
 }
 
 function encodeCursor(row: ActivityDbRow): string {
-  const payload = JSON.stringify({ receivedAt: row.received_at.toISOString(), id: row.id.toString() });
+  const payload = JSON.stringify({ eventTime: row.event_time.toISOString(), id: row.id.toString() });
   return Buffer.from(payload, "utf8").toString("base64url");
 }
 

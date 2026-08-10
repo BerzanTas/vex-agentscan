@@ -127,8 +127,7 @@ function bridgeRouteFor(row: ActivityDbRow, resolveBridgeChain: ResolveBridgeCha
 }
 
 function ageSecondsOf(row: ActivityDbRow): number {
-  const anchor = row.client_confirmed_at ?? row.client_created_at;
-  return Math.max(0, Math.floor((Date.now() - anchor.getTime()) / 1000));
+  return Math.max(0, Math.floor((Date.now() - row.event_time.getTime()) / 1000));
 }
 
 export function toActivityRowDto(

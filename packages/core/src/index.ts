@@ -23,11 +23,18 @@ export {
 } from "./verification/verification-policy.js";
 export {
   decideIngest,
+  isFailedIngestStatus,
+  isTerminalIngestStatus,
   type ExistingActivityState,
   type IngestDecision,
   type IngestEventStatus,
   type IngestOutcome,
 } from "./ingest-decision.js";
+export {
+  CAPITAL_DEPLOYING_ROLES,
+  capitalDeployingRolesIn,
+  deploysCapitalRole,
+} from "./capital-deploying-roles.js";
 export { backoffDelayMs, nextBackoff } from "./backoff.js";
 export { generatePublicId } from "./public-id.js";
 export type { PriceFeed, PricePoint, PriceQuery } from "./pricing/price-feed.js";
