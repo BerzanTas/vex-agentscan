@@ -48,6 +48,22 @@ variable "rate_limit_key_salt" {
   sensitive = true
 }
 
+variable "handshake_domain" {
+  type = string
+}
+
+# Rotating this invalidates every wallet binding already stored: addresses are
+# kept only as HMACs under it and cannot be recovered from the database.
+variable "wallet_hmac_pepper" {
+  type      = string
+  sensitive = true
+
+  validation {
+    condition     = length(var.wallet_hmac_pepper) >= 32
+    error_message = "wallet_hmac_pepper must be at least 32 characters; the server refuses to boot below that."
+  }
+}
+
 variable "rpc_url_overrides" {
   type        = map(string)
   default     = {}

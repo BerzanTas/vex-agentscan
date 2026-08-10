@@ -26,6 +26,10 @@ resource "azurerm_container_app" "api" {
     name  = "rate-limit-key-salt"
     value = var.rate_limit_key_salt
   }
+  secret {
+    name  = "wallet-hmac-pepper"
+    value = var.wallet_hmac_pepper
+  }
 
   ingress {
     external_enabled = false
@@ -72,6 +76,14 @@ resource "azurerm_container_app" "api" {
       env {
         name        = "RATE_LIMIT_KEY_SALT"
         secret_name = "rate-limit-key-salt"
+      }
+      env {
+        name        = "WALLET_HMAC_PEPPER"
+        secret_name = "wallet-hmac-pepper"
+      }
+      env {
+        name  = "HANDSHAKE_DOMAIN"
+        value = var.handshake_domain
       }
       env {
         name  = "TRUST_PROXY"
@@ -158,6 +170,10 @@ resource "azurerm_container_app" "worker" {
     name  = "rate-limit-key-salt"
     value = var.rate_limit_key_salt
   }
+  secret {
+    name  = "wallet-hmac-pepper"
+    value = var.wallet_hmac_pepper
+  }
   dynamic "secret" {
     for_each = var.rpc_url_overrides
     content {
@@ -203,6 +219,14 @@ resource "azurerm_container_app" "worker" {
       env {
         name        = "RATE_LIMIT_KEY_SALT"
         secret_name = "rate-limit-key-salt"
+      }
+      env {
+        name        = "WALLET_HMAC_PEPPER"
+        secret_name = "wallet-hmac-pepper"
+      }
+      env {
+        name  = "HANDSHAKE_DOMAIN"
+        value = var.handshake_domain
       }
       env {
         name  = "DATABASE_POOL_MAX"
