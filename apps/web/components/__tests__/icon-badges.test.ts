@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createElement, type FunctionComponent } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ChainBadge } from "../ChainBadge";
@@ -31,11 +33,93 @@ describe("ProtocolBadge", () => {
     expect(markup).toContain('title="relay"');
   });
 
+  it("renders the jupiter png icon", () => {
+    const markup = render(ProtocolBadge, { protocol: "jupiter" });
+
+    expect(markup).toContain('src="/protocols/jupiter.png"');
+    expect(markup).toContain('title="jupiter"');
+  });
+
+  it("renders the pendle jpg icon", () => {
+    const markup = render(ProtocolBadge, { protocol: "pendle" });
+
+    expect(markup).toContain('src="/protocols/pendle.jpg"');
+    expect(markup).toContain('title="pendle"');
+  });
+
+  it("renders the trench jpg icon", () => {
+    const markup = render(ProtocolBadge, { protocol: "trench" });
+
+    expect(markup).toContain('src="/protocols/trench.jpg"');
+    expect(markup).toContain('title="trench"');
+  });
+
+  it("renders the dexscreener jpg icon", () => {
+    const markup = render(ProtocolBadge, { protocol: "dexscreener" });
+
+    expect(markup).toContain('src="/protocols/dexscreener.jpg"');
+    expect(markup).toContain('title="dexscreener"');
+  });
+
+  it("renders the khalani svg icon", () => {
+    const markup = render(ProtocolBadge, { protocol: "khalani" });
+
+    expect(markup).toContain('src="/protocols/khalani.svg"');
+  });
+
   it("falls back to the text badge for an unknown protocol", () => {
     const markup = render(ProtocolBadge, { protocol: "newdex" });
 
     expect(markup).not.toContain("<img");
     expect(markup).toContain(">newdex<");
+  });
+
+  it("falls back to the text badge for a protocol emitted by the client without an icon", () => {
+    const markup = render(ProtocolBadge, { protocol: "debridge_dln" });
+
+    expect(markup).not.toContain("<img");
+    expect(markup).toContain(">debridge_dln<");
+  });
+
+  it("falls back to the text badge for a protocol named after an Object prototype member", () => {
+    const markup = render(ProtocolBadge, { protocol: "toString" });
+
+    expect(markup).not.toContain("<img");
+    expect(markup).toContain(">toString<");
+  });
+});
+
+describe("the protocol icon registry against the shipped assets", () => {
+  const assetDirectory = fileURLToPath(new URL("../../public/protocols", import.meta.url));
+  const ICON_EXTENSIONS = [".jpg", ".png", ".svg"];
+
+  function shippedIconFiles(): string[] {
+    return readdirSync(assetDirectory)
+      .filter((fileName) => ICON_EXTENSIONS.some((extension) => fileName.endsWith(extension)))
+      .sort();
+  }
+
+  it("renders every icon file present in public/protocols", () => {
+    for (const fileName of shippedIconFiles()) {
+      const protocol = fileName.slice(0, fileName.lastIndexOf("."));
+
+      const markup = render(ProtocolBadge, { protocol });
+
+      expect(markup).toContain(`src="/protocols/${fileName}"`);
+    }
+  });
+
+  it("ships the eight protocol icons the registry maps", () => {
+    expect(shippedIconFiles()).toEqual([
+      "dexscreener.jpg",
+      "jupiter.png",
+      "khalani.svg",
+      "kyberswap.svg",
+      "pendle.jpg",
+      "relay.jpg",
+      "trench.jpg",
+      "uniswap.svg",
+    ]);
   });
 });
 

@@ -1,9 +1,13 @@
-const PROTOCOL_ICON_SRC: Record<string, string> = {
-  kyberswap: "/protocols/kyberswap.svg",
-  uniswap: "/protocols/uniswap.svg",
-  khalani: "/protocols/khalani.svg",
-  relay: "/protocols/relay.jpg",
-};
+const PROTOCOL_ICON_SRC = new Map<string, string>([
+  ["dexscreener", "/protocols/dexscreener.jpg"],
+  ["jupiter", "/protocols/jupiter.png"],
+  ["khalani", "/protocols/khalani.svg"],
+  ["kyberswap", "/protocols/kyberswap.svg"],
+  ["pendle", "/protocols/pendle.jpg"],
+  ["relay", "/protocols/relay.jpg"],
+  ["trench", "/protocols/trench.jpg"],
+  ["uniswap", "/protocols/uniswap.svg"],
+]);
 
 export function ProtocolBadge({
   protocol,
@@ -12,7 +16,7 @@ export function ProtocolBadge({
   protocol: string;
   withName?: boolean;
 }) {
-  const iconSrc = PROTOCOL_ICON_SRC[protocol];
+  const iconSrc = PROTOCOL_ICON_SRC.get(protocol);
   if (iconSrc === undefined) {
     return <span className="rounded bg-bg-overlay px-2 py-0.5 text-xs text-accent">{protocol}</span>;
   }
