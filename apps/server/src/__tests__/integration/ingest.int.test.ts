@@ -322,6 +322,91 @@ describe("POST /v1/events", () => {
     expect(retry.json()).toEqual({ accepted: 0, duplicates: 1, rejected: [] });
   });
 
+  it("stores both legs and the cost breakdown of a two-leg yield event", async () => {
+    const response = await postEvents(
+      activeToken,
+      batchOf([
+        goldenEvent({
+          sourceRowId: "r40",
+          kind: "yield",
+          eventRole: "yield_lp",
+          tokenIn2: { address: "0xpt", symbol: "PT-USDC", decimals: 6 },
+          tokenOut2: { address: "0xyt", symbol: "YT-USDC", decimals: 6 },
+          amountIn2Raw: "1000000",
+          amountOut2Raw: "2000000",
+          executedIn2Raw: "999000",
+          executedOut2Raw: "1999000",
+          usdNetworkGasEst: "0.42",
+          usdVenueFeeEst: "0.15",
+          usdVexFeeEst: "0.05",
+          usdDestinationPrepayEst: "1.20",
+        }),
+      ]),
+    );
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ accepted: 1, duplicates: 0, rejected: [] });
+
+    const row = await activityRow("r40");
+    expect(row.kind).toBe("yield");
+    expect(row.event_role).toBe("yield_lp");
+    expect(row.token_in2_address).toBe("0xpt");
+    expect(row.token_in2_symbol).toBe("PT-USDC");
+    expect(row.token_in2_decimals).toBe(6);
+    expect(row.token_out2_address).toBe("0xyt");
+    expect(row.token_out2_symbol).toBe("YT-USDC");
+    expect(row.token_out2_decimals).toBe(6);
+    expect(row.amount_in2_raw).toBe("1000000");
+    expect(row.amount_out2_raw).toBe("2000000");
+    expect(row.executed_in2_raw).toBe("999000");
+    expect(row.executed_out2_raw).toBe("1999000");
+    expect(row.usd_network_gas_est).toBe("0.42");
+    expect(row.usd_venue_fee_est).toBe("0.15");
+    expect(row.usd_vex_fee_est).toBe("0.05");
+    expect(row.usd_destination_prepay_est).toBe("1.20");
+  });
+
+  it("fills the executed amounts of both legs when a pending two-leg yield event is promoted", async () => {
+    const pendingLeg = goldenEvent({
+      sourceRowId: "r41",
+      kind: "yield",
+      eventRole: "yield_lp",
+      status: "pending",
+      txHash: null,
+      confirmedAt: null,
+      executedInRaw: null,
+      executedOutRaw: null,
+      tokenIn2: { address: "0xpt", symbol: "PT-USDC", decimals: 6 },
+      tokenOut2: { address: "0xyt", symbol: "YT-USDC", decimals: 6 },
+      amountIn2Raw: "1000000",
+      amountOut2Raw: "2000000",
+    });
+    const pendingPost = await postEvents(activeToken, batchOf([pendingLeg]));
+    expect(pendingPost.statusCode).toBe(200);
+    expect((await activityRow("r41")).executed_in2_raw).toBeNull();
+
+    const confirmedPost = await postEvents(
+      activeToken,
+      batchOf([
+        goldenEvent({
+          ...pendingLeg,
+          status: "confirmed",
+          txHash: "0x123",
+          confirmedAt: "2026-07-28T11:58:41.940Z",
+          executedIn2Raw: "999000",
+          executedOut2Raw: "1999000",
+        }),
+      ]),
+    );
+    expect(confirmedPost.statusCode).toBe(200);
+    expect(confirmedPost.json()).toEqual({ accepted: 1, duplicates: 0, rejected: [] });
+
+    const promoted = await activityRow("r41");
+    expect(promoted.status).toBe("confirmed");
+    expect(promoted.executed_in2_raw).toBe("999000");
+    expect(promoted.executed_out2_raw).toBe("1999000");
+    expect(promoted.token_in2_decimals).toBe(6);
+  });
+
   it("accepts an event carrying wallet_address, never stores the field and warns with the field name only", async () => {
     const response = await postEvents(
       activeToken,

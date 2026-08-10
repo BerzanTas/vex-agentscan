@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TokensTable } from "../TokensTable";
+import {
+  bodyCellsHiddenBelowMd,
+  headersHiddenBelowMd,
+  headersShownBelowMd,
+} from "./table-column-visibility";
 import type { TokenStatDto } from "../../lib/api";
 
 const SEVEN_DAY_SERIES = Array.from({ length: 7 }, (_, index) => ({
@@ -49,9 +54,7 @@ function markupFor(rows: TokenStatDto[]): string {
 
 describe("TokensTable", () => {
   it("names the eight columns in order", () => {
-    const headers = [...markupFor([usdc]).matchAll(/<th\s[^>]*>(.*?)<\/th>/g)].map(
-      (match) => match[1],
-    );
+    const headers = [...markupFor([usdc]).matchAll(/<th\s[^>]*>([^<]*)/g)].map((match) => match[1]);
 
     expect(headers).toEqual([
       "#",
@@ -141,6 +144,63 @@ describe("TokensTable", () => {
     const markup = markupFor([usdc, unnamed, manyProtocols]);
 
     expect(markup).not.toContain("style=");
+  });
+});
+
+describe("TokensTable observed volume caveat", () => {
+  it("warns that the column is agent activity rather than market volume", () => {
+    const markup = markupFor([usdc]);
+
+    expect(markup).toContain(
+      "These are volumes observed in Vex agent activity, not market volume. One swap contributes to both of its tokens, so this column does not sum to total volume.",
+    );
+  });
+
+  it("describes the volume header marker with the caveat it carries", () => {
+    const markup = markupFor([usdc]);
+
+    expect(markup).toContain('aria-describedby="tokens-observed-volume-caveat"');
+    expect(markup).toContain('id="tokens-observed-volume-caveat"');
+  });
+
+  it("puts the caveat behind a keyboard focusable marker rather than hover alone", () => {
+    const markup = markupFor([usdc]);
+
+    expect(markup).toContain('<button type="button" class="figure-note-marker"');
+  });
+
+  it("names the marker for a reader who cannot see the volume header it sits in", () => {
+    const markup = markupFor([usdc]);
+
+    expect(markup).toContain('aria-label="What observed volume means"');
+  });
+});
+
+describe("TokensTable column priority below the md breakpoint", () => {
+  it("keeps rank, token, observed volume and txns on a phone", () => {
+    const markup = markupFor([usdc]);
+
+    expect(headersShownBelowMd(markup)).toEqual(["#", "Token", "Observed volume", "Txns"]);
+  });
+
+  it("drops agents, protocols, the seven day trend and last seen on a phone", () => {
+    const markup = markupFor([usdc]);
+
+    expect(headersHiddenBelowMd(markup)).toEqual(["Agents", "Protocols", "7d", "Last seen"]);
+  });
+
+  it("drops the body cells of exactly the four columns its header drops", () => {
+    const markup = markupFor([usdc]);
+
+    expect(bodyCellsHiddenBelowMd(markup)).toEqual([false, false, false, false, true, true, true, true]);
+  });
+
+  it("keeps the dropped columns in the markup so they return at md", () => {
+    const markup = markupFor([usdc]);
+
+    expect(markup).toContain('src="/protocols/kyberswap.svg"');
+    expect(markup).toContain("Seven day observed volume for USDC");
+    expect(markup).toContain(">42s<");
   });
 });
 

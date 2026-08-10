@@ -34,6 +34,9 @@ function statusStep(source: TimelineSource): TimelineStep {
   if (source.status === "definitively_failed") {
     return { label: "Definitively failed", at: null, tone: "danger", reached: true };
   }
+  if (source.status === "superseded_unproven") {
+    return { label: "No longer tracked, inclusion unproven", at: null, tone: "muted", reached: true };
+  }
   return { label: "Pending", at: null, tone: "warning", reached: false };
 }
 

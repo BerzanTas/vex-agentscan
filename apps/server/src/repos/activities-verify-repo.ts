@@ -1,5 +1,5 @@
 import type pg from "pg";
-import { isLaunchShaped, type Verdict, type VerificationKind } from "@agentscan/core";
+import { deploysCapitalRole, isLaunchShaped, type Verdict, type VerificationKind } from "@agentscan/core";
 import type { Config } from "../config.js";
 import { activityAggregateDaySql } from "./activity-time-anchor.js";
 
@@ -39,6 +39,8 @@ type ClaimedJobRow = {
   token_out_address: string | null;
 };
 
+const ACTIVITY_CLAIMS_AN_INCLUSION = "a.status <> 'superseded_unproven'";
+
 export async function claimDueJobs(
   pool: pg.Pool,
   limit: number,
@@ -49,6 +51,7 @@ export async function claimDueJobs(
      SET next_attempt_at = now() + make_interval(secs => $2::float8)
      FROM activities a
      WHERE a.id = vj.activity_id
+       AND ${ACTIVITY_CLAIMS_AN_INCLUSION}
        AND vj.activity_id IN (
          SELECT activity_id FROM verification_jobs
          WHERE next_attempt_at <= now()
@@ -186,7 +189,7 @@ async function recordVerifiedSuccess(client: SqlExecutor, activity: FinalizedAct
 }
 
 function volumeContribution(activity: Pick<FinalizedActivityRow, "event_role" | "usd_in_est">): string {
-  if (activity.event_role !== "swap" && activity.event_role !== "bridge_deposit") return "0";
+  if (!deploysCapitalRole(activity.event_role)) return "0";
   return activity.usd_in_est ?? "0";
 }
 

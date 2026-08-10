@@ -455,7 +455,7 @@ export function VolumeChart({
 
   return (
     <div ref={frameRef} className="chart-frame">
-      <div ref={containerRef} className="chart-glow h-80 w-full" />
+      <div ref={containerRef} className="chart-glow h-56 w-full sm:h-80" />
       <span
         ref={liveDotRef}
         className="chart-live-dot"

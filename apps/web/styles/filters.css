@@ -88,12 +88,18 @@
   background: var(--panel-solid);
   padding: 0 1.6rem 0 0.6rem;
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-size: 1rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--color-text-primary);
   cursor: pointer;
   transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+@media (min-width: 640px) {
+  .filter-field-select {
+    font-size: 0.6875rem;
+  }
 }
 
 .filter-field-select:hover {

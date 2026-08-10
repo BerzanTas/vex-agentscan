@@ -3,6 +3,11 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AgentsRankingTable } from "../AgentsRankingTable";
 import { ProtocolsRankingTable } from "../ProtocolsRankingTable";
+import {
+  bodyCellsHiddenBelowMd,
+  headersHiddenBelowMd,
+  headersShownBelowMd,
+} from "./table-column-visibility";
 import type { AgentStatDto, ProtocolRankingDto } from "../../lib/api";
 
 const agent: AgentStatDto = {
@@ -125,6 +130,26 @@ describe("AgentsRankingTable", () => {
   });
 });
 
+describe("AgentsRankingTable column priority below the md breakpoint", () => {
+  it("keeps rank, agent, observed volume and txns on a phone", () => {
+    const markup = agentsMarkup([agent]);
+
+    expect(headersShownBelowMd(markup)).toEqual(["#", "Agent", "Observed volume", "Txns"]);
+  });
+
+  it("drops protocols, chains and last seen on a phone", () => {
+    const markup = agentsMarkup([agent]);
+
+    expect(headersHiddenBelowMd(markup)).toEqual(["Protocols", "Chains", "Last seen"]);
+  });
+
+  it("drops the body cells of exactly the three columns its header drops", () => {
+    const markup = agentsMarkup([agent]);
+
+    expect(bodyCellsHiddenBelowMd(markup)).toEqual([false, false, false, false, true, true, true]);
+  });
+});
+
 describe("ProtocolsRankingTable", () => {
   it("names its six columns in order", () => {
     const markup = protocolsMarkup([protocol]);
@@ -183,5 +208,31 @@ describe("ProtocolsRankingTable", () => {
     const markup = protocolsMarkup([protocol]);
 
     expect(markup).not.toContain("style=");
+  });
+});
+
+describe("ProtocolsRankingTable column priority below the md breakpoint", () => {
+  it("keeps rank, protocol, observed volume and txns on a phone", () => {
+    const markup = protocolsMarkup([protocol]);
+
+    expect(headersShownBelowMd(markup)).toEqual(["#", "Protocol", "Observed volume", "Txns"]);
+  });
+
+  it("drops chains and the swap bridge split on a phone", () => {
+    const markup = protocolsMarkup([protocol]);
+
+    expect(headersHiddenBelowMd(markup)).toEqual(["Chains", "Swap / bridge split"]);
+  });
+
+  it("drops the body cells of exactly the two columns its header drops", () => {
+    const markup = protocolsMarkup([protocol]);
+
+    expect(bodyCellsHiddenBelowMd(markup)).toEqual([false, false, false, false, true, true]);
+  });
+
+  it("keeps the min width floor of the split cell out of the phone layout", () => {
+    const markup = protocolsMarkup([protocol]);
+
+    expect(markup).toContain('<td class="hidden md:table-cell"><span class="flex min-w-32');
   });
 });

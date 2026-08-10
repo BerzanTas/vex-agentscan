@@ -47,6 +47,20 @@ describe("StatusTimeline", () => {
     expect(markup.match(/timeline-dot-reached/g)).toHaveLength(3);
   });
 
+  it("closes the status step of a superseded activity without calling it pending or failed", () => {
+    const markup = markupFor({
+      clientCreatedAt: "2026-08-06T10:00:00.000Z",
+      clientConfirmedAt: null,
+      status: "superseded_unproven",
+      verificationState: "none",
+    });
+
+    expect(markup).toContain("No longer tracked, inclusion unproven");
+    expect(markup).not.toContain("Pending");
+    expect(markup).not.toContain("failed");
+    expect(markup).not.toContain("text-danger");
+  });
+
   it("leaves the dots of unreached steps unlit", () => {
     const markup = markupFor({
       clientCreatedAt: "2026-08-06T10:00:00.000Z",

@@ -138,13 +138,6 @@ export type VerificationStatsDto = {
   chains: ChainTierDto[];
 };
 
-export type PricingCoverageDto = {
-  pricedActivityCount: number;
-  unpricedActivityCount: number;
-  pendingActivityCount: number;
-  pricedCoverage: number;
-};
-
 export type ActivityRowDto = {
   publicId: string;
   kind: string;
@@ -179,9 +172,22 @@ export type TxDetailDto = ActivityRowDto & {
   failureCode: string | null;
 };
 
-export const ACTIVITY_KIND_FILTERS = ["swap", "bridge"] as const;
+export const ACTIVITY_KIND_FILTERS = [
+  "swap",
+  "bridge",
+  "lend",
+  "prediction",
+  "wrap",
+  "yield",
+  "launch",
+] as const;
 
-export const ACTIVITY_STATUS_FILTERS = ["pending", "confirmed", "definitively_failed"] as const;
+export const ACTIVITY_STATUS_FILTERS = [
+  "pending",
+  "confirmed",
+  "definitively_failed",
+  "superseded_unproven",
+] as const;
 
 export const ACTIVITY_VERIFICATION_FILTERS = ["verified_full", "verified_basic", "pending"] as const;
 
@@ -288,10 +294,6 @@ export function verificationPath(): string {
   return "/api/verification";
 }
 
-export function pricingCoveragePath(range: ChartRange): string {
-  return pathWithQuery("/api/pricing-coverage", [["range", range]]);
-}
-
 export function protocolsPath(): string {
   return "/api/protocols";
 }
@@ -355,12 +357,6 @@ export async function fetchBridgeRoutes(
 
 export async function fetchVerificationStats(): Promise<VerificationStatsDto> {
   return readApiJson(verificationPath());
-}
-
-export async function fetchPricingCoverage(
-  range: ChartRange = DEFAULT_CHART_RANGE,
-): Promise<PricingCoverageDto> {
-  return readApiJson(pricingCoveragePath(range));
 }
 
 export async function fetchProtocols(): Promise<ProtocolStatDto[]> {

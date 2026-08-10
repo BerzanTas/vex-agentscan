@@ -1,5 +1,5 @@
 import type pg from "pg";
-import { rangeWindowSeconds, type ChartRangePlan } from "@agentscan/core";
+import { capitalDeployingRolesIn, rangeWindowSeconds, type ChartRangePlan } from "@agentscan/core";
 import type { ChainEntry, ResolveBridgeChain } from "../app.js";
 import type {
   BridgeRouteDto,
@@ -16,11 +16,11 @@ import { serverPricedUsdIn, serverPricedUsdInSumOf, serverPricedUsdOut } from ".
 
 const DAY_SECONDS = 86_400;
 const VERIFIED_STATES = "('verified_full','verified_basic')";
-const VOLUME_ROLES = "('swap','bridge_deposit')";
-const VOLUME_LEG = `a.event_role IN ${VOLUME_ROLES}`;
+const VOLUME_LEG = capitalDeployingRolesIn("a.event_role");
+const SCOPED_VOLUME_LEG = capitalDeployingRolesIn("event_role");
 const OBSERVED_AT = activityTimeAnchorSql("a");
 const NETWORK_CHAINS = "a.chain_family = $1 AND a.chain_id = ANY($2::bigint[])";
-const VOLUME_SUM = serverPricedUsdInSumOf("a", `a.event_role IN ${VOLUME_ROLES}`);
+const VOLUME_SUM = serverPricedUsdInSumOf("a", VOLUME_LEG);
 const DEPOSIT_VOLUME_SUM = serverPricedUsdInSumOf("a", "a.event_role = 'bridge_deposit'");
 
 type ChainFamily = "eip155" | "solana";
@@ -146,7 +146,7 @@ async function networkTotalsBySlug(
      SELECT m.chain_slug,
             ${serverPricedUsdInSumOf(
               "a",
-              `a.event_role IN ${VOLUME_ROLES} AND ${withinWindow("$1")}`,
+              `${VOLUME_LEG} AND ${withinWindow("$1")}`,
             )}::text AS volume_usd,
             COUNT(*) FILTER (WHERE ${withinWindow("$1")})::int AS tx_count,
             floor(extract(epoch FROM now() - MAX(${OBSERVED_AT})))::bigint::text AS last_seen_seconds
@@ -463,7 +463,7 @@ async function networkSeries(
      ),
      bucketed AS (
        SELECT (floor(extract(epoch FROM observed_at) / $3::bigint) * $3::bigint)::bigint AS bucket_start,
-              COALESCE(SUM(priced_usd_in) FILTER (WHERE event_role IN ${VOLUME_ROLES}), 0) AS volume_usd,
+              COALESCE(SUM(priced_usd_in) FILTER (WHERE ${SCOPED_VOLUME_LEG}), 0) AS volume_usd,
               COUNT(*)::int AS tx_count
        FROM scoped
        WHERE observed_at >= to_timestamp((SELECT first_start FROM span))

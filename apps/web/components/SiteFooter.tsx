@@ -1,15 +1,15 @@
 import Link from "next/link";
 
 const TAGLINE =
-  "Public explorer of Vex agent activity. Swaps and bridges reported by Vex installations, each checked against the chain it declares.";
+  "Public explorer of Vex agent activity. On-chain actions reported by Vex installations, each checked against the chain it declares.";
 
 const DISCLAIMER =
-  "Per-activity USD figures are client estimates supplied at quote time; aggregate USD figures are priced by AgentScan. Activity is reported by Vex installations and verified on-chain.";
+  'Per-activity USD figures are client estimates captured at quote time and are labeled "est."; aggregate USD figures are priced by AgentScan from its own historical lookups and may not cover every activity. Activity is reported by Vex installations and verified on-chain.';
 
 export function SiteFooter() {
   return (
     <footer className="site-footer">
-      <div className="mx-auto max-w-6xl px-6">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <div className="footer-grid">
           <div className="footer-brand">
             <Link href="/" aria-label="AgentScan" className="inline-flex">

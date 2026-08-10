@@ -1,0 +1,6 @@
+@layer components {
+  .status-pill-unproven {
+    color: var(--color-text-muted);
+    background: color-mix(in oklab, #939aad 12%, transparent);
+  }
+}

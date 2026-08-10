@@ -1,14 +1,40 @@
 import type { VerificationInput } from "./evaluate.js";
 
-export type VerificationKind = "swap" | "bridge" | "launch";
+type VerificationTier = VerificationInput["tier"];
+
+export type VerificationKind =
+  | "swap"
+  | "bridge"
+  | "lend"
+  | "prediction"
+  | "wrap"
+  | "yield"
+  | "launch";
+
+type KindVerificationPolicy = {
+  tierCap: VerificationTier | null;
+  strikeExemptRoles: readonly string[];
+};
+
+const followsChainTier: KindVerificationPolicy = { tierCap: null, strikeExemptRoles: [] };
+
+const kindVerificationPolicies: Record<VerificationKind, KindVerificationPolicy> = {
+  swap: followsChainTier,
+  bridge: followsChainTier,
+  lend: followsChainTier,
+  prediction: followsChainTier,
+  wrap: { tierCap: "basic", strikeExemptRoles: [] },
+  yield: followsChainTier,
+  launch: { tierCap: "basic", strikeExemptRoles: ["token_launch"] },
+};
 
 export function resolveVerificationTier(
   kind: VerificationKind,
   chainTier: VerificationInput["tier"],
 ): VerificationInput["tier"] {
-  return kind === "launch" ? "basic" : chainTier;
+  return kindVerificationPolicies[kind].tierCap ?? chainTier;
 }
 
 export function isLaunchShaped(kind: VerificationKind, eventRole: string): boolean {
-  return kind === "launch" && eventRole === "token_launch";
+  return kindVerificationPolicies[kind].strikeExemptRoles.includes(eventRole);
 }

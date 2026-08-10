@@ -2,9 +2,8 @@ import type { Metadata } from "next";
 import { parseChartRange } from "../../lib/range";
 import { AgentsRankingTable } from "../../components/AgentsRankingTable";
 import { PageHeading } from "../../components/PageHeading";
-import { PricingCoverageNote } from "../../components/PricingCoverageNote";
 import { RangeChips } from "../../components/RangeChips";
-import { fetchAgents, fetchPricingCoverage } from "../../lib/api";
+import { fetchAgents } from "../../lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +16,7 @@ type AgentsPageProps = { searchParams: Promise<{ range?: string | string[] }> };
 
 export default async function AgentsPage({ searchParams }: AgentsPageProps) {
   const range = parseChartRange((await searchParams).range);
-  const [agents, coverage] = await Promise.all([fetchAgents(range), fetchPricingCoverage(range)]);
+  const agents = await fetchAgents(range);
 
   return (
     <section className="section-enter flex flex-col gap-6">
@@ -27,7 +26,6 @@ export default async function AgentsPage({ searchParams }: AgentsPageProps) {
         actions={<RangeChips current={range} label="Agent ranking range" />}
       />
       <AgentsRankingTable agents={agents} emptyMessage="No verified agent activity yet" />
-      <PricingCoverageNote coverage={coverage} scope="these-figures" />
     </section>
   );
 }

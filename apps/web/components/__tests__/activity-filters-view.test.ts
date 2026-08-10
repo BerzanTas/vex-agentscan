@@ -41,6 +41,22 @@ describe("ActivityFilters", () => {
     expect(rendered).toContain(">Verification</span>");
   });
 
+  it("offers every activity kind the contract can report", () => {
+    const rendered = markup({});
+
+    for (const kind of ["swap", "bridge", "lend", "prediction", "wrap", "yield", "launch"]) {
+      expect(rendered).toContain(`<option value="${kind}">`);
+    }
+  });
+
+  it("offers the superseded status beside the three it already offered", () => {
+    const rendered = markup({});
+
+    for (const status of ["pending", "confirmed", "definitively_failed", "superseded_unproven"]) {
+      expect(rendered).toContain(`<option value="${status}">`);
+    }
+  });
+
   it("marks only the fields with a selected value as active", () => {
     const rendered = markup({ kind: "swap", status: "confirmed" });
 

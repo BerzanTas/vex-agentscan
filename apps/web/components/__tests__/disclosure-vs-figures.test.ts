@@ -18,7 +18,6 @@ import type {
   ChartPointDto,
   NetworkDetailDto,
   NetworkStatDto,
-  PricingCoverageDto,
   ProtocolRankingDto,
   ProtocolStatDto,
   StatsDto,
@@ -62,18 +61,10 @@ type Qualifier = { names: readonly string[] } | SilentQualifier;
 
 const MEASURED_POPULATION = "bridge deposit";
 
-const EXPLORER_WIDE_LEAD = "Across the whole explorer";
-
 const AGENT_PAGE_SILENCE: SilentQualifier = {
   silentBecause: "F4",
   claiming: "could not be fully priced",
   inSentences: 3,
-};
-
-const COVERAGE_NOTE_SILENCE: SilentQualifier = {
-  silentBecause: "F4",
-  claiming: "cannot be measured",
-  inSentences: 2,
 };
 
 const AGENT_PAGE_WORDS: Record<UsdContribution, Qualifier> = {
@@ -89,86 +80,6 @@ const AGENT_PAGE_WORDS: Record<UsdContribution, Qualifier> = {
   awaiting_a_price: { names: [MEASURED_POPULATION, "still being priced"] },
   outside_usd_figures: AGENT_PAGE_SILENCE,
 };
-
-const COVERAGE_NOTE_WORDS: Record<UsdContribution, Qualifier> = {
-  contributes_usd: { names: [MEASURED_POPULATION, "priced by AgentScan"] },
-  contributes_no_usd: {
-    names: [MEASURED_POPULATION, "could not fully price", "not fully reflected in the USD figures"],
-  },
-  awaiting_a_price: { names: [MEASURED_POPULATION, "still being priced"] },
-  outside_usd_figures: COVERAGE_NOTE_SILENCE,
-};
-
-const EXPLORER_WIDE_NOTE_WORDS: Record<UsdContribution, Qualifier> = {
-  contributes_usd: { names: [MEASURED_POPULATION, "priced by AgentScan", EXPLORER_WIDE_LEAD] },
-  contributes_no_usd: {
-    names: [
-      MEASURED_POPULATION,
-      "could not fully price",
-      "not fully reflected in the USD figures",
-      EXPLORER_WIDE_LEAD,
-    ],
-  },
-  awaiting_a_price: { names: [MEASURED_POPULATION, "still being priced", EXPLORER_WIDE_LEAD] },
-  outside_usd_figures: COVERAGE_NOTE_SILENCE,
-};
-
-function wordsFor(surface: SurfaceId, state: UsdContribution): Qualifier {
-  switch (surface) {
-    case "/":
-    case "/agents":
-    case "/protocols":
-    case "/tokens":
-    case "/networks":
-      return COVERAGE_NOTE_WORDS[state];
-    case "/agent/[name]":
-      return AGENT_PAGE_WORDS[state];
-    case "/tokens/[chainSlug]/[address]":
-    case "/networks/[slug]":
-      return EXPLORER_WIDE_NOTE_WORDS[state];
-    default: {
-      const unreachableSurface: never = surface;
-      throw new Error(`no qualifier declared for ${String(unreachableSurface)}`);
-    }
-  }
-}
-
-function coverageFor(state: UsdContribution): PricingCoverageDto {
-  switch (state) {
-    case "contributes_usd":
-      return {
-        pricedActivityCount: 1,
-        unpricedActivityCount: 0,
-        pendingActivityCount: 0,
-        pricedCoverage: 1,
-      };
-    case "contributes_no_usd":
-      return {
-        pricedActivityCount: 0,
-        unpricedActivityCount: 1,
-        pendingActivityCount: 0,
-        pricedCoverage: 0,
-      };
-    case "awaiting_a_price":
-      return {
-        pricedActivityCount: 0,
-        unpricedActivityCount: 0,
-        pendingActivityCount: 1,
-        pricedCoverage: 0,
-      };
-    case "outside_usd_figures":
-      return {
-        pricedActivityCount: 0,
-        unpricedActivityCount: 0,
-        pendingActivityCount: 0,
-        pricedCoverage: 0,
-      };
-    default: {
-      const unpricedState: never = state;
-      throw new Error(`no coverage seed for ${String(unpricedState)}`);
-    }
-  }
-}
 
 function agentPageFor(state: UsdContribution): AgentPageDto {
   const base: AgentPageDto = {
@@ -320,7 +231,6 @@ function serveApi(state: UsdContribution): void {
     if (path === "/api/agents") return jsonResponse(agents);
     if (path.startsWith("/api/agents/")) return jsonResponse(agentPageFor(state));
     if (path === "/api/activity") return jsonResponse(activity);
-    if (path === "/api/pricing-coverage") return jsonResponse(coverageFor(state));
     if (path === "/api/tokens") return jsonResponse(tokens);
     if (path.startsWith("/api/tokens/")) return jsonResponse(tokenDetail);
     if (path === "/api/networks") return jsonResponse(networks);
@@ -396,12 +306,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe.each(SURFACES)("%s publishes USD", (surface) => {
+describe("/agent/[name] publishes USD", () => {
   it.each(USD_CONTRIBUTIONS)("names the %s state it renders, or is a recorded gap", async (state) => {
     serveApi(state);
 
-    const markup = await renderSurface(surface);
-    const qualifier = wordsFor(surface, state);
+    const markup = await renderSurface("/agent/[name]");
+    const qualifier = AGENT_PAGE_WORDS[state];
 
     if ("silentBecause" in qualifier) {
       const claim = qualifierParagraphs(markup).find((paragraph) =>
@@ -415,7 +325,9 @@ describe.each(SURFACES)("%s publishes USD", (surface) => {
       expect(visibleText(markup)).toContain(phrase);
     }
   });
+});
 
+describe.each(SURFACES)("%s publishes USD", (surface) => {
   it("labels no aggregate USD figure as an estimate", async () => {
     serveApi("contributes_usd");
 
@@ -423,19 +335,43 @@ describe.each(SURFACES)("%s publishes USD", (surface) => {
 
     expect(markup).not.toContain(">est.<");
   });
+
+  it("leaves the priced-coverage share to the footer instead of a prose note", async () => {
+    serveApi("contributes_usd");
+
+    const markup = await renderSurface(surface);
+
+    expect(markup).not.toContain("priced by AgentScan and cover");
+    expect(markup).not.toContain("Across the whole explorer");
+  });
 });
 
+describe.each(["/tokens", "/tokens/[chainSlug]/[address]"] as const)(
+  "%s qualifies its observed volume",
+  (surface) => {
+    it("warns that the figure is agent activity rather than market volume", async () => {
+      serveApi("contributes_usd");
+
+      const markup = await renderSurface(surface);
+
+      expect(visibleText(markup)).toContain("not market volume");
+    });
+
+    it("hangs the warning off the volume label instead of a prose block", async () => {
+      serveApi("contributes_usd");
+
+      const markup = await renderSurface(surface);
+
+      expect(markup).toContain('aria-describedby="');
+      expect(markup).toContain('class="figure-note-text"');
+    });
+  },
+);
+
 describe("the union of USD contributions", () => {
-  it("has words on the two qualifying surfaces for every state that is not a recorded gap", () => {
-    const silent = USD_CONTRIBUTIONS.filter(
-      (state) =>
-        "silentBecause" in AGENT_PAGE_WORDS[state] || "silentBecause" in COVERAGE_NOTE_WORDS[state],
-    );
+  it("has words on the agent page for every state that is not a recorded gap", () => {
+    const silent = USD_CONTRIBUTIONS.filter((state) => "silentBecause" in AGENT_PAGE_WORDS[state]);
 
     expect(silent).toEqual(["outside_usd_figures"]);
-  });
-
-  it("says the same thing about a row still being priced wherever it appears", () => {
-    expect(AGENT_PAGE_WORDS.awaiting_a_price).toEqual(COVERAGE_NOTE_WORDS.awaiting_a_price);
   });
 });

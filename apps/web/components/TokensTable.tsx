@@ -3,12 +3,14 @@ import type { TokenStatDto } from "../lib/api";
 import { formatAge, formatUsdCompact, formatUsdAmount } from "../lib/format";
 import { ChainBadge } from "./ChainBadge";
 import { EmptyPanel } from "./EmptyPanel";
+import { ObservedVolumeCaveat, TOKEN_COLUMN_VOLUME_CAVEAT } from "./ObservedVolumeCaveat";
 import { ProtocolBadge } from "./ProtocolBadge";
 import { Sparkline } from "./Sparkline";
 
 const ADDRESS_HEAD_LENGTH = 6;
 const ADDRESS_TAIL_LENGTH = 4;
 const MAX_PROTOCOL_ICONS = 3;
+const VOLUME_CAVEAT_ID = "tokens-observed-volume-caveat";
 
 export function shortenAddress(address: string): string {
   if (address.length <= ADDRESS_HEAD_LENGTH + ADDRESS_TAIL_LENGTH) return address;
@@ -56,15 +58,18 @@ export function TokensTable({ rows, emptyMessage }: { rows: TokenStatDto[]; empt
     <div className="glass overflow-x-auto overflow-y-clip">
       <table className="dimension-table">
         <thead>
-          <tr>
+          <tr className="figure-note-anchor">
             <th className="table-head font-normal">#</th>
             <th className="table-head font-normal">Token</th>
-            <th className="table-head font-normal">Observed volume</th>
+            <th className="table-head font-normal">
+              Observed volume
+              <ObservedVolumeCaveat id={VOLUME_CAVEAT_ID} caveat={TOKEN_COLUMN_VOLUME_CAVEAT} />
+            </th>
             <th className="table-head font-normal">Txns</th>
-            <th className="table-head font-normal">Agents</th>
-            <th className="table-head font-normal">Protocols</th>
-            <th className="table-head font-normal">7d</th>
-            <th className="table-head font-normal">Last seen</th>
+            <th className="table-head hidden font-normal md:table-cell">Agents</th>
+            <th className="table-head hidden font-normal md:table-cell">Protocols</th>
+            <th className="table-head hidden font-normal md:table-cell">7d</th>
+            <th className="table-head hidden font-normal md:table-cell">Last seen</th>
           </tr>
         </thead>
         <tbody>
@@ -90,16 +95,16 @@ export function TokensTable({ rows, emptyMessage }: { rows: TokenStatDto[]; empt
               <td className="font-mono text-xs text-text-secondary">
                 {token.txCount.toLocaleString("en-US")}
               </td>
-              <td className="font-mono text-xs text-text-secondary">
+              <td className="hidden font-mono text-xs text-text-secondary md:table-cell">
                 {token.agentCount.toLocaleString("en-US")}
               </td>
-              <td>
+              <td className="hidden md:table-cell">
                 <ProtocolIcons protocols={token.protocols} />
               </td>
-              <td className="w-24">
+              <td className="hidden w-24 md:table-cell">
                 <Sparkline series={token.series} label={`Seven day observed volume for ${tokenLabel(token)}`} />
               </td>
-              <td className="font-mono text-xs text-text-muted">
+              <td className="hidden font-mono text-xs text-text-muted md:table-cell">
                 {formatAge(token.lastSeenSeconds)}
               </td>
             </tr>

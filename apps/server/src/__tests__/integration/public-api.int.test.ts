@@ -105,7 +105,7 @@ describe("GET /api/activity", () => {
     const response = await app.inject({ method: "GET", url: "/api/activity" });
     expect(response.statusCode).toBe(200);
     const feed = response.json<ActivityFeedDto>();
-    expect(feed.items.map((item) => item.publicId)).toEqual(["pub-pending-a", "pub-verified-3"]);
+    expect(feed.items.map((item) => item.publicId)).toEqual(["pub-verified-3", "pub-verified-2"]);
     expect(feed.nextCursor).not.toBeNull();
   });
 
@@ -115,8 +115,8 @@ describe("GET /api/activity", () => {
     const secondResponse = await app.inject({ method: "GET", url: `/api/activity?cursor=${firstPage.nextCursor}` });
     expect(secondResponse.statusCode).toBe(200);
     const secondPage = secondResponse.json<ActivityFeedDto>();
-    expect(firstPage.items.map((item) => item.publicId)).toEqual(["pub-pending-a", "pub-verified-3"]);
-    expect(secondPage.items.map((item) => item.publicId)).toEqual(["pub-verified-2", "pub-verified-1"]);
+    expect(firstPage.items.map((item) => item.publicId)).toEqual(["pub-verified-3", "pub-verified-2"]);
+    expect(secondPage.items.map((item) => item.publicId)).toEqual(["pub-verified-1", "pub-pending-a"]);
     expect(secondPage.nextCursor).toBeNull();
   });
 

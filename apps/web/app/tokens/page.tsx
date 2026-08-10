@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import { parseChartRange } from "../../lib/range";
 import { PageHeading } from "../../components/PageHeading";
-import { PricingCoverageNote } from "../../components/PricingCoverageNote";
 import { RangeChips } from "../../components/RangeChips";
 import { TokensTable } from "../../components/TokensTable";
-import { fetchPricingCoverage, fetchTokens } from "../../lib/api";
+import { fetchTokens } from "../../lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +20,7 @@ export default async function TokensPage({
   searchParams: Promise<SearchParams>;
 }) {
   const range = parseChartRange((await searchParams).range);
-  const [tokens, coverage] = await Promise.all([fetchTokens(range), fetchPricingCoverage(range)]);
+  const tokens = await fetchTokens(range);
 
   return (
     <section className="section-enter flex flex-col gap-6">
@@ -32,11 +31,6 @@ export default async function TokensPage({
         actions={<RangeChips current={range} label="Token window" />}
       />
       <TokensTable rows={tokens} emptyMessage="No token activity in this window" />
-      <p className="max-w-3xl text-xs text-text-muted">
-        These are volumes observed in Vex agent activity, not market volume. One swap contributes to
-        both of its tokens, so this column does not sum to total volume.
-      </p>
-      <PricingCoverageNote coverage={coverage} scope="these-figures" />
     </section>
   );
 }
