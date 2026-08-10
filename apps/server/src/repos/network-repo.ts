@@ -10,15 +10,18 @@ import type {
   ProtocolStatDto,
   VerificationTier,
 } from "../public-dto.js";
+import { activityTimeAnchorSql } from "./activity-time-anchor.js";
+import { serverPricedUsdIn, serverPricedUsdInSumOf, serverPricedUsdOut } from "./server-priced-usd.js";
 
 
 const DAY_SECONDS = 86_400;
 const VERIFIED_STATES = "('verified_full','verified_basic')";
 const VOLUME_ROLES = "('swap','bridge_deposit')";
-const OBSERVED_AT = "COALESCE(a.client_confirmed_at, a.verified_at)";
+const VOLUME_LEG = `a.event_role IN ${VOLUME_ROLES}`;
+const OBSERVED_AT = activityTimeAnchorSql("a");
 const NETWORK_CHAINS = "a.chain_family = $1 AND a.chain_id = ANY($2::bigint[])";
-const VOLUME_SUM = `COALESCE(SUM(a.usd_in_est) FILTER (WHERE a.event_role IN ${VOLUME_ROLES}), 0)`;
-const DEPOSIT_VOLUME_SUM = "COALESCE(SUM(a.usd_in_est) FILTER (WHERE a.event_role = 'bridge_deposit'), 0)";
+const VOLUME_SUM = serverPricedUsdInSumOf("a", `a.event_role IN ${VOLUME_ROLES}`);
+const DEPOSIT_VOLUME_SUM = serverPricedUsdInSumOf("a", "a.event_role = 'bridge_deposit'");
 
 type ChainFamily = "eip155" | "solana";
 
@@ -141,9 +144,10 @@ async function networkTotalsBySlug(
        SELECT * FROM unnest($2::text[], $3::bigint[], $4::text[])
      )
      SELECT m.chain_slug,
-            COALESCE(SUM(a.usd_in_est) FILTER (
-              WHERE a.event_role IN ${VOLUME_ROLES} AND ${withinWindow("$1")}
-            ), 0)::text AS volume_usd,
+            ${serverPricedUsdInSumOf(
+              "a",
+              `a.event_role IN ${VOLUME_ROLES} AND ${withinWindow("$1")}`,
+            )}::text AS volume_usd,
             COUNT(*) FILTER (WHERE ${withinWindow("$1")})::int AS tx_count,
             floor(extract(epoch FROM now() - MAX(${OBSERVED_AT})))::bigint::text AS last_seen_seconds
      FROM activities a
@@ -394,18 +398,20 @@ async function networkTokens(
     `WITH token_legs AS (
        SELECT lower(a.token_in_address) AS address,
               a.token_in_symbol AS symbol,
-              COALESCE(a.usd_in_est, 0) AS usd
+              COALESCE(${serverPricedUsdIn("a")}, 0) AS usd
        FROM activities a
        WHERE a.verification_state IN ${VERIFIED_STATES}
+         AND ${VOLUME_LEG}
          AND ${NETWORK_CHAINS}
          AND ${withinWindow("$3")}
          AND a.token_in_address IS NOT NULL
        UNION ALL
        SELECT lower(a.token_out_address) AS address,
               a.token_out_symbol AS symbol,
-              COALESCE(a.usd_out_est, 0) AS usd
+              COALESCE(${serverPricedUsdOut("a")}, 0) AS usd
        FROM activities a
        WHERE a.verification_state IN ${VERIFIED_STATES}
+         AND ${VOLUME_LEG}
          AND ${NETWORK_CHAINS}
          AND ${withinWindow("$3")}
          AND a.token_out_address IS NOT NULL
@@ -435,7 +441,7 @@ async function networkSeries(
 ): Promise<ChartPointDto[]> {
   const result = await pool.query<{ bucket_start: string; volume_usd: string; tx_count: number }>(
     `WITH scoped AS (
-       SELECT ${OBSERVED_AT} AS observed_at, a.event_role, a.usd_in_est
+       SELECT ${OBSERVED_AT} AS observed_at, a.event_role, ${serverPricedUsdIn("a")} AS priced_usd_in
        FROM activities a
        WHERE a.verification_state IN ${VERIFIED_STATES}
          AND ${NETWORK_CHAINS}
@@ -457,7 +463,7 @@ async function networkSeries(
      ),
      bucketed AS (
        SELECT (floor(extract(epoch FROM observed_at) / $3::bigint) * $3::bigint)::bigint AS bucket_start,
-              SUM(CASE WHEN event_role IN ${VOLUME_ROLES} THEN COALESCE(usd_in_est, 0) ELSE 0 END) AS volume_usd,
+              COALESCE(SUM(priced_usd_in) FILTER (WHERE event_role IN ${VOLUME_ROLES}), 0) AS volume_usd,
               COUNT(*)::int AS tx_count
        FROM scoped
        WHERE observed_at >= to_timestamp((SELECT first_start FROM span))

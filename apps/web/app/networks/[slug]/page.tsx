@@ -6,15 +6,17 @@ import { ChainBadge } from "../../../components/ChainBadge";
 import { TierBadge } from "../../../components/NetworksTable";
 import { PageHeading } from "../../../components/PageHeading";
 import { PanelHeading } from "../../../components/PanelHeading";
+import { PricingCoverageNote } from "../../../components/PricingCoverageNote";
 import { ProtocolRanking } from "../../../components/ProtocolRanking";
 import { RangeChips } from "../../../components/RangeChips";
 import { RoutesList } from "../../../components/RoutesList";
 import { Sparkline } from "../../../components/Sparkline";
 import {
   fetchNetworkDetail,
+  fetchPricingCoverage,
   type NetworkTokenStatDto,
 } from "../../../lib/api";
-import { formatUsdCompact, formatUsdEstimate } from "../../../lib/format";
+import { formatUsdCompact, formatUsdAmount } from "../../../lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -62,10 +64,9 @@ function NetworkTokens({
           </span>
           <span
             className="font-mono text-text-primary"
-            title={`$${formatUsdEstimate(token.volumeUsd)}`}
+            title={`$${formatUsdAmount(token.volumeUsd)}`}
           >
             ${formatUsdCompact(token.volumeUsd)}
-            <span className="ml-1 text-xs text-text-muted">est.</span>
           </span>
         </li>
       ))}
@@ -89,7 +90,10 @@ export async function generateMetadata({
 export default async function NetworkDetailPage({ params, searchParams }: NetworkDetailPageProps) {
   const { slug } = await params;
   const range = parseChartRange((await searchParams).range);
-  const detail = await fetchNetworkDetail(slug, range);
+  const [detail, coverage] = await Promise.all([
+    fetchNetworkDetail(slug, range),
+    fetchPricingCoverage(range),
+  ]);
   if (detail === null) notFound();
 
   return (
@@ -113,11 +117,10 @@ export default async function NetworkDetailPage({ params, searchParams }: Networ
           <span className="table-head">Observed volume</span>
           <span
             className="verification-stat-value"
-            title={`$${formatUsdEstimate(detail.volumeUsd)}`}
+            title={`$${formatUsdAmount(detail.volumeUsd)}`}
           >
             ${formatUsdCompact(detail.volumeUsd)}
           </span>
-          <span className="text-xs text-text-muted">est.</span>
         </div>
         <div className="glass verification-stat">
           <span className="table-head">Transactions</span>
@@ -146,6 +149,7 @@ export default async function NetworkDetailPage({ params, searchParams }: Networ
           emptyMessage="No bridge legs touching this network in this window"
         />
       </section>
+      <PricingCoverageNote coverage={coverage} scope="the-whole-explorer" />
     </div>
   );
 }

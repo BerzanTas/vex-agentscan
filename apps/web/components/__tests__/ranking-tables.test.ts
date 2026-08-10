@@ -7,6 +7,7 @@ import type { AgentStatDto, ProtocolRankingDto } from "../../lib/api";
 
 const agent: AgentStatDto = {
   alias: "quiet-otter-1f3a",
+  name: null,
   volumeUsd: "1284310.55",
   txCount: 412,
   protocolCount: 3,
@@ -64,18 +65,43 @@ describe("AgentsRankingTable", () => {
     expect(markup).toMatch(/<td class="[^"]*font-mono[^"]*">quiet-otter-1f3a<\/td>/);
   });
 
-  it("links no agent row anywhere, so no alias gets a permanent page", () => {
+  it("leaves an unbound agent row unlinked, so no alias gets a permanent page", () => {
     const markup = agentsMarkup([agent]);
 
     expect(markup).not.toContain("<a");
-    expect(markup).not.toContain("/agents/");
+    expect(markup).not.toContain("/agent/");
   });
 
-  it("marks the observed volume as an estimate and keeps the exact value in the title", () => {
+  it("leaves a row unlinked when the API answers without a name field at all", () => {
+    const rowFromApiWithoutName = {
+      alias: "quiet-otter-1f3a",
+      volumeUsd: "1284310.55",
+      txCount: 412,
+      protocolCount: 3,
+      chainCount: 4,
+      lastSeenSeconds: 7200,
+    } as unknown as AgentStatDto;
+
+    const markup = agentsMarkup([rowFromApiWithoutName]);
+
+    expect(markup).toContain("quiet-otter-1f3a");
+    expect(markup).not.toContain("<a");
+    expect(markup).not.toContain("undefined");
+  });
+
+  it("links a bound agent row to its public page and shows the public name", () => {
+    const markup = agentsMarkup([{ ...agent, name: "Vex-9f2a41c8" }]);
+
+    expect(markup).toContain('href="/agent/Vex-9f2a41c8"');
+    expect(markup).toContain(">Vex-9f2a41c8</a>");
+    expect(markup).not.toContain("quiet-otter-1f3a");
+  });
+
+  it("keeps the exact volume in the title and carries no estimate badge", () => {
     const markup = agentsMarkup([agent]);
 
     expect(markup).toContain('title="$1,284,310.55"');
-    expect(markup).toContain(">est.<");
+    expect(markup).not.toContain(">est.<");
   });
 
   it("ranks the rows by their position in the list", () => {
@@ -139,11 +165,11 @@ describe("ProtocolsRankingTable", () => {
     expect(markup).toContain("300 bridge");
   });
 
-  it("marks the observed volume as an estimate and keeps the exact value in the title", () => {
+  it("keeps the exact volume in the title and carries no estimate badge", () => {
     const markup = protocolsMarkup([protocol]);
 
     expect(markup).toContain('title="$985,420.10"');
-    expect(markup).toContain(">est.<");
+    expect(markup).not.toContain(">est.<");
   });
 
   it("shows the empty message instead of a table when there are no protocols", () => {

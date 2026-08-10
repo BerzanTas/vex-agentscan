@@ -262,6 +262,66 @@ describe("POST /v1/events", () => {
     expect(job.activity_id).toBe(row.id);
   });
 
+  it("accepts a confirmed launch event under a v2 envelope, inserts the row and queues verification", async () => {
+    const response = await postEvents(
+      activeToken,
+      batchOf(
+        [
+          goldenEvent({
+            sourceRowId: "r30",
+            kind: "launch",
+            eventRole: "token_launch",
+            tokenIn: null,
+            tokenOut: null,
+            amountInRaw: null,
+            amountOutRaw: null,
+            executedInRaw: null,
+            executedOutRaw: null,
+            usdInEst: null,
+            usdOutEst: null,
+            usdFeeEst: null,
+          }),
+        ],
+        { schemaVersion: 2 },
+      ),
+    );
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ accepted: 1, duplicates: 0, rejected: [] });
+    const row = await activityRow("r30");
+    expect(row.kind).toBe("launch");
+    expect(row.event_role).toBe("token_launch");
+    expect(row.status).toBe("confirmed");
+    expect(row.verification_state).toBe("queued");
+    expect(row.received_schema_version).toBe(2);
+    const job = await verificationJobRow(row.id);
+    expect(job.activity_id).toBe(row.id);
+
+    const retry = await postEvents(
+      activeToken,
+      batchOf(
+        [
+          goldenEvent({
+            sourceRowId: "r30",
+            kind: "launch",
+            eventRole: "token_launch",
+            tokenIn: null,
+            tokenOut: null,
+            amountInRaw: null,
+            amountOutRaw: null,
+            executedInRaw: null,
+            executedOutRaw: null,
+            usdInEst: null,
+            usdOutEst: null,
+            usdFeeEst: null,
+          }),
+        ],
+        { schemaVersion: 2 },
+      ),
+    );
+    expect(retry.statusCode).toBe(200);
+    expect(retry.json()).toEqual({ accepted: 0, duplicates: 1, rejected: [] });
+  });
+
   it("accepts an event carrying wallet_address, never stores the field and warns with the field name only", async () => {
     const response = await postEvents(
       activeToken,
@@ -277,5 +337,32 @@ describe("POST /v1/events", () => {
     const joinedLogs = logLines.join("");
     expect(joinedLogs).toContain("wallet_address");
     expect(joinedLogs).not.toContain(walletValue);
+  });
+
+  it("logs exactly one ingest outcome line per batch with accepted/duplicates/rejected/events/backfill", async () => {
+    const linesBefore = logLines.length;
+    const response = await postEvents(
+      activeToken,
+      batchOf([goldenEvent({ sourceRowId: "r23" }), { sourceRowId: "r23-broken" }]),
+    );
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      accepted: 1,
+      duplicates: 0,
+      rejected: [{ index: 1, code: "validation_failed" }],
+    });
+    const outcomeEntries = logLines
+      .slice(linesBefore)
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .filter((entry) => entry.msg === "ingest batch outcome");
+    expect(outcomeEntries).toHaveLength(1);
+    expect(outcomeEntries[0]).toMatchObject({
+      accepted: 1,
+      duplicates: 0,
+      rejected: 1,
+      events: 2,
+      backfill: false,
+    });
+    expect(JSON.stringify(outcomeEntries[0])).not.toContain(activeAgentHash);
   });
 });

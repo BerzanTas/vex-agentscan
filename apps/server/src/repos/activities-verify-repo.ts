@@ -1,6 +1,7 @@
 import type pg from "pg";
-import type { Verdict } from "@agentscan/core";
+import { isLaunchShaped, type Verdict, type VerificationKind } from "@agentscan/core";
 import type { Config } from "../config.js";
+import { activityAggregateDaySql } from "./activity-time-anchor.js";
 
 export type SqlExecutor = Pick<pg.PoolClient, "query">;
 
@@ -14,6 +15,7 @@ export type ClaimedJob = {
   protocol: string;
   chainFamily: "eip155" | "solana";
   chainId: bigint;
+  kind: VerificationKind;
   clientConfirmedAt: Date | null;
   executedInRaw: string | null;
   executedOutRaw: string | null;
@@ -29,6 +31,7 @@ type ClaimedJobRow = {
   protocol: string;
   chain_family: "eip155" | "solana";
   chain_id: string;
+  kind: VerificationKind;
   client_confirmed_at: Date | null;
   executed_in_raw: string | null;
   executed_out_raw: string | null;
@@ -54,7 +57,7 @@ export async function claimDueJobs(
          FOR UPDATE SKIP LOCKED
        )
      RETURNING vj.activity_id, vj.attempts, vj.first_attempt_at,
-               a.tx_hash, a.protocol, a.chain_family, a.chain_id,
+               a.tx_hash, a.protocol, a.chain_family, a.chain_id, a.kind,
                a.client_confirmed_at, a.executed_in_raw, a.executed_out_raw,
                a.token_in_address, a.token_out_address`,
     [limit, leaseSec],
@@ -67,6 +70,7 @@ export async function claimDueJobs(
     protocol: row.protocol,
     chainFamily: row.chain_family,
     chainId: BigInt(row.chain_id),
+    kind: row.kind,
     clientConfirmedAt: row.client_confirmed_at,
     executedInRaw: row.executed_in_raw,
     executedOutRaw: row.executed_out_raw,
@@ -75,14 +79,48 @@ export async function claimDueJobs(
   }));
 }
 
+export type QueueDepth = {
+  dueJobs: number;
+  totalPending: number;
+  oldestDueAgeSec: number | null;
+};
+
+type QueueDepthRow = {
+  due_jobs: number;
+  total_pending: number;
+  oldest_due_age_sec: number | null;
+};
+
+export async function queueDepth(pool: pg.Pool): Promise<QueueDepth> {
+  const result = await pool.query<QueueDepthRow>(
+    `SELECT
+       count(*) FILTER (WHERE next_attempt_at <= now())::int AS due_jobs,
+       count(*)::int AS total_pending,
+       EXTRACT(EPOCH FROM (now() - min(next_attempt_at) FILTER (WHERE next_attempt_at <= now())))::float8
+         AS oldest_due_age_sec
+     FROM verification_jobs`,
+  );
+  const row = result.rows[0];
+  if (row === undefined) throw new Error("queue depth query returned no rows");
+  return {
+    dueJobs: row.due_jobs,
+    totalPending: row.total_pending,
+    oldestDueAgeSec: row.oldest_due_age_sec,
+  };
+}
+
 type FinalizedActivityRow = {
   agent_hash: string;
   protocol: string;
-  kind: string;
+  kind: VerificationKind;
   event_role: string;
   usd_in_est: string | null;
-  client_confirmed_at: Date | null;
+  aggregate_day: string;
 };
+
+function blockTimeOf(verdict: TerminalVerdict): Date | null {
+  return verdict.result === "strike" ? null : verdict.blockTimestamp;
+}
 
 export async function finalizeVerification(
   client: SqlExecutor,
@@ -92,17 +130,18 @@ export async function finalizeVerification(
 ): Promise<void> {
   const state = verdict.result === "strike" ? "mismatch" : verdict.result;
   const finalized = await client.query<FinalizedActivityRow>(
-    `UPDATE activities SET verification_state = $2, verified_at = now()
+    `UPDATE activities SET verification_state = $2, verified_at = now(), block_time = $3::timestamptz
      WHERE id = $1 AND verification_state = 'queued'
-     RETURNING agent_hash, protocol, kind, event_role, usd_in_est, client_confirmed_at`,
-    [activityId.toString(), state],
+     RETURNING agent_hash, protocol, kind, event_role, usd_in_est,
+               ${activityAggregateDaySql("activities")}::text AS aggregate_day`,
+    [activityId.toString(), state, blockTimeOf(verdict)],
   );
   const activity = finalized.rows[0];
   if (activity === undefined) return;
-  if (verdict.result === "strike") {
+  if (verdict.result === "strike" && !isLaunchShaped(activity.kind, activity.event_role)) {
     await recordStrike(client, activityId, activity.agent_hash, verdict.reason, config);
-  } else {
-    await recordVerifiedSuccess(client, activity, verdict.blockTimestamp);
+  } else if (verdict.result !== "strike") {
+    await recordVerifiedSuccess(client, activity);
   }
   await deleteJob(client, activityId);
 }
@@ -131,22 +170,18 @@ export async function closeUnverifiable(client: SqlExecutor, activityId: bigint)
   await deleteJob(client, activityId);
 }
 
-async function recordVerifiedSuccess(
-  client: SqlExecutor,
-  activity: FinalizedActivityRow,
-  blockTimestamp: Date,
-): Promise<void> {
+async function recordVerifiedSuccess(client: SqlExecutor, activity: FinalizedActivityRow): Promise<void> {
   await client.query(
     "UPDATE agents SET first_verified_at = COALESCE(first_verified_at, now()), updated_at = now() WHERE agent_hash = $1",
     [activity.agent_hash],
   );
   await client.query(
     `INSERT INTO daily_aggregates (day, protocol, kind, volume_usd, tx_count)
-     VALUES (($1::timestamptz AT TIME ZONE 'utc')::date, $2, $3, $4::numeric, 1)
+     VALUES ($1::date, $2, $3, $4::numeric, 1)
      ON CONFLICT (day, protocol, kind)
      DO UPDATE SET volume_usd = daily_aggregates.volume_usd + EXCLUDED.volume_usd,
                    tx_count = daily_aggregates.tx_count + 1`,
-    [activity.client_confirmed_at ?? blockTimestamp, activity.protocol, activity.kind, volumeContribution(activity)],
+    [activity.aggregate_day, activity.protocol, activity.kind, volumeContribution(activity)],
   );
 }
 

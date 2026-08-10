@@ -5,7 +5,7 @@ import {
   formatRawAmountDisplay,
   formatUsdCompact,
   formatLatency,
-  formatUsdEstimate,
+  formatUsdAmount,
 } from "../format";
 
 describe("formatRawAmount", () => {
@@ -48,22 +48,22 @@ describe("formatRawAmountDisplay", () => {
   });
 });
 
-describe("formatUsdEstimate", () => {
+describe("formatUsdAmount", () => {
   it("groups thousands and caps the fraction at two digits", () => {
-    expect(formatUsdEstimate("1234567.891")).toBe("1,234,567.89");
+    expect(formatUsdAmount("1234567.891")).toBe("1,234,567.89");
   });
 
   it("always shows two fraction digits so a money column stays aligned", () => {
-    expect(formatUsdEstimate("42")).toBe("42.00");
-    expect(formatUsdEstimate("1139862.7")).toBe("1,139,862.70");
+    expect(formatUsdAmount("42")).toBe("42.00");
+    expect(formatUsdAmount("1139862.7")).toBe("1,139,862.70");
   });
 
   it("truncates without rounding up so an estimate never inflates", () => {
-    expect(formatUsdEstimate("9.999")).toBe("9.99");
+    expect(formatUsdAmount("9.999")).toBe("9.99");
   });
 
   it("keeps the integer part of a high-scale numeric from the api", () => {
-    expect(formatUsdEstimate("5888494.0000000000000000")).toBe("5,888,494.00");
+    expect(formatUsdAmount("5888494.0000000000000000")).toBe("5,888,494.00");
   });
 });
 

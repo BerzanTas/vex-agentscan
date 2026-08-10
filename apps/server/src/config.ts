@@ -1,8 +1,11 @@
 import { z } from "zod";
 
 const RPC_URLS_PREFIX = "RPC_URLS_";
+const ATTEST_FACTORY_ADDRESSES_PREFIX = "ATTEST_FACTORY_ADDRESSES_";
 const DEFAULT_AGENT_ALIAS_SALT = "agentscan-dev-salt";
 const DEFAULT_RATE_LIMIT_KEY_SALT = "agentscan-dev-rate-salt";
+const DEFAULT_HANDSHAKE_DOMAIN = "localhost";
+const DEFAULT_WALLET_HMAC_PEPPER = "agentscan-dev-wallet-hmac-pepper";
 
 const commaSeparated = (value: string) =>
   value
@@ -43,13 +46,45 @@ const envSchema = z.object({
     .transform((value) => value === "true"),
   PUBLIC_FEED_PAGE_SIZE: z.coerce.number().int().default(25),
   PUBLIC_TOKEN_ROWS_MAX: z.coerce.number().int().min(1).default(100),
+  PUBLIC_AGENT_ROWS_MAX: z.coerce.number().int().min(1).default(5000),
   PUBLIC_PANEL_ROWS: z.coerce.number().int().min(1).default(10),
   READ_CACHE_TTL_SEC: z.coerce.number().int().min(0).default(5),
   AGENT_ALIAS_SALT: z.string().min(1).default(DEFAULT_AGENT_ALIAS_SALT),
   RATE_LIMIT_KEY_SALT: z.string().min(1).default(DEFAULT_RATE_LIMIT_KEY_SALT),
+  ATTEST_RATE_LIMIT_PER_IP: z.coerce.number().int().default(20),
+  ATTEST_RATE_WINDOW_SEC: z.coerce.number().int().default(3600),
+  ATTEST_MAX_PENDING_PER_IP: z.coerce.number().int().default(100),
+  ATTEST_MAX_PENDING_GLOBAL: z.coerce.number().int().default(10000),
+  ATTEST_CANDIDATES_MAX: z.coerce.number().int().min(1).default(50),
+  ATTEST_MIN_CONFIRMATIONS: z.coerce.number().int().min(0).default(5),
+  ATTEST_MAX_AGE_DAYS: z.coerce.number().int().default(14),
+  ATTEST_WORKER_BATCH: z.coerce.number().int().default(20),
+  ATTEST_WORKER_LEASE_SEC: z.coerce.number().int().min(1).default(120),
+  ATTEST_BACKOFF_SCHEDULE: z.string().default("1m,5m,30m,2h,12h").transform(commaSeparated),
+  HANDSHAKE_RATE_LIMIT_PER_IP: z.coerce.number().int().default(10),
+  HANDSHAKE_RATE_WINDOW_SEC: z.coerce.number().int().default(3600),
+  HANDSHAKE_DOMAIN: z.string().min(1).regex(/^[a-z0-9.:-]+$/i).default(DEFAULT_HANDSHAKE_DOMAIN),
+  HANDSHAKE_CHALLENGE_TTL_MIN: z.coerce.number().int().min(1).default(5),
+  WALLET_HMAC_PEPPER: z.string().min(32).default(DEFAULT_WALLET_HMAC_PEPPER),
+  PRICE_FEED_BASE_URL: z.string().url().default("https://coins.llama.fi"),
+  PRICE_MIN_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.9),
+  PRICE_MAX_DRIFT_SEC: z.coerce.number().int().min(1).default(3600),
+  PRICE_MISS_RETRY_HOURS: z.coerce.number().int().min(1).default(24),
+  PRICE_FEED_COINS_PER_REQUEST: z.coerce.number().int().min(1).default(50),
+  PRICE_FEED_TIMEOUT_MS: z.coerce.number().int().min(1).default(10_000),
+  PRICE_DIVERGENCE_WARN_RATIO: z.coerce.number().min(1).default(5),
+  PRICING_BATCH_MAX: z.coerce.number().int().min(1).default(50),
+  PRICING_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(6),
+  PRICING_POLL_INTERVAL_SEC: z.coerce.number().int().min(1).default(30),
+  PRICING_LEASE_SEC: z.coerce.number().int().min(1).default(600),
+  PRICING_BACKOFF_SCHEDULE: z.string().default("1m,5m,30m,2h,12h").transform(commaSeparated),
+  WIN_RATE_MIN_ROUND_TRIPS: z.coerce.number().int().min(1).default(5),
 });
 
-export type Config = z.infer<typeof envSchema> & { rpcUrlOverrides: Map<string, string[]> };
+export type Config = z.infer<typeof envSchema> & {
+  rpcUrlOverrides: Map<string, string[]>;
+  attestFactoryAddressesByChainId: Map<bigint, string[]>;
+};
 
 function rpcUrlOverridesFrom(env: NodeJS.ProcessEnv): Map<string, string[]> {
   const overrides = new Map<string, string[]>();
@@ -58,6 +93,15 @@ function rpcUrlOverridesFrom(env: NodeJS.ProcessEnv): Map<string, string[]> {
     overrides.set(key.slice(RPC_URLS_PREFIX.length).toLowerCase(), commaSeparated(value));
   }
   return overrides;
+}
+
+function attestFactoryAddressesByChainIdFrom(env: NodeJS.ProcessEnv): Map<bigint, string[]> {
+  const byChainId = new Map<bigint, string[]>();
+  for (const [key, value] of Object.entries(env)) {
+    if (!key.startsWith(ATTEST_FACTORY_ADDRESSES_PREFIX) || !value) continue;
+    byChainId.set(BigInt(key.slice(ATTEST_FACTORY_ADDRESSES_PREFIX.length)), commaSeparated(value));
+  }
+  return byChainId;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
@@ -71,5 +115,15 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   if (parsed.RATE_LIMIT_KEY_SALT === DEFAULT_RATE_LIMIT_KEY_SALT && env.NODE_ENV === "production") {
     throw new Error("RATE_LIMIT_KEY_SALT must be set to a random value when NODE_ENV=production");
   }
-  return { ...parsed, rpcUrlOverrides: rpcUrlOverridesFrom(env) };
+  if (parsed.HANDSHAKE_DOMAIN === DEFAULT_HANDSHAKE_DOMAIN && env.NODE_ENV === "production") {
+    throw new Error("HANDSHAKE_DOMAIN must be set to the real domain when NODE_ENV=production");
+  }
+  if (parsed.WALLET_HMAC_PEPPER === DEFAULT_WALLET_HMAC_PEPPER && env.NODE_ENV === "production") {
+    throw new Error("WALLET_HMAC_PEPPER must be set to a random value when NODE_ENV=production");
+  }
+  return {
+    ...parsed,
+    rpcUrlOverrides: rpcUrlOverridesFrom(env),
+    attestFactoryAddressesByChainId: attestFactoryAddressesByChainIdFrom(env),
+  };
 }

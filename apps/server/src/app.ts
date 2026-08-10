@@ -1,5 +1,5 @@
 import { resolveBridgeChain } from "@agentscan/core";
-import { fastify, type FastifyInstance } from "fastify";
+import { fastify, type FastifyBaseLogger, type FastifyInstance } from "fastify";
 import type pg from "pg";
 import type { Config } from "./config.js";
 import { errorEnvelope } from "./plugins/error-envelope.js";
@@ -27,13 +27,16 @@ export type Deps = {
   config: Config;
   resolveChain: ResolveChain;
   resolveBridgeChain?: ResolveBridgeChain;
+  loggerInstance?: FastifyBaseLogger;
 };
 
 export type WiredDeps = Deps & { resolveBridgeChain: ResolveBridgeChain };
 
 export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   const app = fastify({
-    logger: { redact: { paths: ["req.headers.authorization"], censor: "[redacted]" } },
+    ...(deps.loggerInstance
+      ? { loggerInstance: deps.loggerInstance }
+      : { logger: { redact: { paths: ["req.headers.authorization"], censor: "[redacted]" } } }),
     bodyLimit: deps.config.MAX_BODY_BYTES,
     trustProxy: deps.config.TRUST_PROXY ?? false,
   });

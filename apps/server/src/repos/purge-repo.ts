@@ -16,12 +16,18 @@ export async function purgeAgentData(pool: pg.Pool, agentHash: string): Promise<
     await client.query("BEGIN");
     const activities = await client.query("DELETE FROM activities WHERE agent_hash = $1", [agentHash]);
     const strikes = await client.query("DELETE FROM strikes WHERE agent_hash = $1", [agentHash]);
+    const wallets = await client.query("DELETE FROM agent_wallets WHERE agent_hash = $1", [agentHash]);
     const stamped = await client.query(
       "UPDATE agents SET purged_at = now(), updated_at = now() WHERE agent_hash = $1 AND purged_at IS NULL",
       [agentHash],
     );
     await client.query("COMMIT");
-    return (activities.rowCount ?? 0) > 0 || (strikes.rowCount ?? 0) > 0 || (stamped.rowCount ?? 0) > 0;
+    return (
+      (activities.rowCount ?? 0) > 0 ||
+      (strikes.rowCount ?? 0) > 0 ||
+      (wallets.rowCount ?? 0) > 0 ||
+      (stamped.rowCount ?? 0) > 0
+    );
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw error;

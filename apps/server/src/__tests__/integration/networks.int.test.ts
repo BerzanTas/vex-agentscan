@@ -21,8 +21,9 @@ type ActivitySeed = {
   kind: "swap" | "bridge";
   eventRole: string;
   verificationState: string;
-  usdInEst: string | null;
-  usdOutEst?: string | null;
+  usdInPriced: string | null;
+  usdOutPriced?: string | null;
+  pricingState?: "server_priced" | "unpriced" | "pending";
   fromChainId?: string | null;
   toChainId?: string | null;
   tokenInAddress?: string | null;
@@ -38,14 +39,14 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
         kind, event_role, status, protocol, chain_family, chain_id, from_chain_id, to_chain_id,
         token_in_address, token_in_symbol, token_in_decimals,
         token_out_address, token_out_symbol, token_out_decimals,
-        amount_in_raw, usd_in_est, usd_out_est, tx_hash,
+        amount_in_raw, usd_in_priced, usd_out_priced, pricing_state, tx_hash,
         client_created_at, client_confirmed_at, statuses_seen, verification_state, verified_at,
         received_at, received_schema_version)
      VALUES ($1, $2, $2, $2, 0,
              $3, $4, 'confirmed', $5, $6, $7::bigint, $8::bigint, $9::bigint,
              $10, $11, 6,
              $12, $13, 18,
-             '1000000000000000000', $14::numeric, $15::numeric, '0xhash' || $2,
+             '1000000000000000000', $14::numeric, $15::numeric, $18, '0xhash' || $2,
              now() - make_interval(mins => $16::int), now() - make_interval(mins => $16::int),
              ARRAY['confirmed'], $17, now(),
              now(), 1)`,
@@ -63,10 +64,11 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
       seed.tokenInSymbol ?? null,
       seed.tokenOutAddress ?? null,
       seed.tokenOutSymbol ?? null,
-      seed.usdInEst,
-      seed.usdOutEst ?? null,
+      seed.usdInPriced,
+      seed.usdOutPriced ?? null,
       confirmedMinutesAgo,
       seed.verificationState,
+      seed.pricingState ?? "server_priced",
     ],
   );
 }
@@ -89,8 +91,8 @@ beforeAll(async () => {
     kind: "swap",
     eventRole: "swap",
     verificationState: "verified_full",
-    usdInEst: "100.50",
-    usdOutEst: "100.00",
+    usdInPriced: "100.50",
+    usdOutPriced: "100.00",
     tokenInAddress: usdcOnBase,
     tokenInSymbol: "USDC",
     tokenOutAddress: wethOnBase,
@@ -104,7 +106,7 @@ beforeAll(async () => {
     kind: "bridge",
     eventRole: "bridge_fill_observed",
     verificationState: "verified_full",
-    usdInEst: "77.00",
+    usdInPriced: "77.00",
   });
   await seedActivity(db.pool, {
     publicId: "base-deposit",
@@ -114,7 +116,36 @@ beforeAll(async () => {
     kind: "bridge",
     eventRole: "bridge_deposit",
     verificationState: "verified_full",
-    usdInEst: "25.00",
+    usdInPriced: "25.00",
+    fromChainId: "8453",
+    toChainId: "42161",
+  });
+  await seedActivity(db.pool, {
+    publicId: "base-stale-priced-swap",
+    protocol: "kyberswap",
+    chainFamily: "eip155",
+    chainId: "8453",
+    kind: "swap",
+    eventRole: "swap",
+    verificationState: "verified_full",
+    pricingState: "unpriced",
+    usdInPriced: "700.00",
+    usdOutPriced: "600.00",
+    tokenInAddress: usdcOnBase,
+    tokenInSymbol: "USDC",
+    tokenOutAddress: wethOnBase,
+    tokenOutSymbol: "WETH",
+  });
+  await seedActivity(db.pool, {
+    publicId: "base-stale-priced-deposit",
+    protocol: "relay",
+    chainFamily: "eip155",
+    chainId: "8453",
+    kind: "bridge",
+    eventRole: "bridge_deposit",
+    verificationState: "verified_full",
+    pricingState: "pending",
+    usdInPriced: "900.00",
     fromChainId: "8453",
     toChainId: "42161",
   });
@@ -126,7 +157,7 @@ beforeAll(async () => {
     kind: "swap",
     eventRole: "swap",
     verificationState: "none",
-    usdInEst: "999.00",
+    usdInPriced: "999.00",
   });
   await seedActivity(db.pool, {
     publicId: "solana-deposit",
@@ -136,7 +167,7 @@ beforeAll(async () => {
     kind: "bridge",
     eventRole: "bridge_deposit",
     verificationState: "verified_basic",
-    usdInEst: "40.00",
+    usdInPriced: "40.00",
     fromChainId: "20011000000",
     toChainId: "8453",
   });
@@ -148,7 +179,7 @@ beforeAll(async () => {
     kind: "bridge",
     eventRole: "bridge_deposit",
     verificationState: "verified_full",
-    usdInEst: "60.00",
+    usdInPriced: "60.00",
     fromChainId: "999999",
     toChainId: "888888",
   });
@@ -193,6 +224,38 @@ function bridgeCountsOf(row: NetworkStatDto): { bridgeInCount: number; bridgeOut
   return { bridgeInCount: row.bridgeInCount, bridgeOutCount: row.bridgeOutCount };
 }
 
+describe("the fixture the volume assertions rely on", () => {
+  it("carries a stale server price on every row the server has not priced", async () => {
+    const stale = await db.pool.query<{
+      public_id: string;
+      usd_in_priced: string | null;
+      usd_out_priced: string | null;
+      pricing_state: string;
+    }>(
+      `SELECT public_id, usd_in_priced::text AS usd_in_priced, usd_out_priced::text AS usd_out_priced,
+              pricing_state
+       FROM activities
+       WHERE pricing_state <> 'server_priced'
+       ORDER BY public_id`,
+    );
+
+    expect(stale.rows).toEqual([
+      {
+        public_id: "base-stale-priced-deposit",
+        usd_in_priced: "900.00",
+        usd_out_priced: null,
+        pricing_state: "pending",
+      },
+      {
+        public_id: "base-stale-priced-swap",
+        usd_in_priced: "700.00",
+        usd_out_priced: "600.00",
+        pricing_state: "unpriced",
+      },
+    ]);
+  });
+});
+
 describe("GET /api/networks", () => {
   it("lists one row per network in the chain registry", async () => {
     const rows = await listNetworks();
@@ -230,7 +293,7 @@ describe("GET /api/networks", () => {
     const base = await networkNamed("base");
 
     expect(base.volumeUsd).toBe("125.50");
-    expect(base.txCount).toBe(3);
+    expect(base.txCount).toBe(5);
   });
 
   it("leaves a network whose only activity is unverified at zero with no last seen", async () => {
@@ -254,7 +317,7 @@ describe("GET /api/networks", () => {
   });
 
   it("counts a bridge leg out of the network its from_chain_id resolves to", async () => {
-    expect(bridgeCountsOf(await networkNamed("base"))).toEqual({ bridgeInCount: 1, bridgeOutCount: 1 });
+    expect(bridgeCountsOf(await networkNamed("base"))).toEqual({ bridgeInCount: 1, bridgeOutCount: 2 });
     expect(bridgeCountsOf(await networkNamed("solana"))).toEqual({ bridgeInCount: 0, bridgeOutCount: 1 });
   });
 
@@ -265,7 +328,7 @@ describe("GET /api/networks", () => {
       verificationTier: "full",
       volumeUsd: "0",
       txCount: 0,
-      bridgeInCount: 1,
+      bridgeInCount: 2,
       bridgeOutCount: 0,
       lastSeenSeconds: null,
     });
@@ -275,7 +338,7 @@ describe("GET /api/networks", () => {
     const rows = await listNetworks();
     const legsCounted = rows.reduce((total, row) => total + row.bridgeInCount + row.bridgeOutCount, 0);
 
-    expect(legsCounted).toBe(4);
+    expect(legsCounted).toBe(6);
     expect(bridgeCountsOf(await networkNamed("polygon"))).toEqual({ bridgeInCount: 0, bridgeOutCount: 0 });
   });
 });
@@ -285,7 +348,7 @@ describe("GET /api/networks/:slug", () => {
     const detail = await detailOf("base");
 
     expect(detail.volumeUsd).toBe("125.50");
-    expect(detail.txCount).toBe(3);
+    expect(detail.txCount).toBe(5);
     expect(detail.displayName).toBe("Base");
     expect(detail.verificationTier).toBe("full");
   });
@@ -294,8 +357,8 @@ describe("GET /api/networks/:slug", () => {
     const detail = await detailOf("base");
 
     expect(detail.protocols).toEqual([
-      { protocol: "kyberswap", volumeUsd: "100.50", txCount: 1 },
-      { protocol: "relay", volumeUsd: "25.00", txCount: 2 },
+      { protocol: "kyberswap", volumeUsd: "100.50", txCount: 2 },
+      { protocol: "relay", volumeUsd: "25.00", txCount: 3 },
     ]);
   });
 
@@ -307,13 +370,13 @@ describe("GET /api/networks/:slug", () => {
         address: usdcOnBase.toLowerCase(),
         symbol: "USDC",
         volumeUsd: "100.50",
-        txCount: 1,
+        txCount: 2,
       },
       {
         address: wethOnBase,
         symbol: "WETH",
         volumeUsd: "100.00",
-        txCount: 1,
+        txCount: 2,
       },
     ]);
   });
@@ -323,7 +386,7 @@ describe("GET /api/networks/:slug", () => {
 
     expect(detail.routes).toEqual([
       { fromChainSlug: "solana", toChainSlug: "base", legCount: 1, volumeUsd: "40.00" },
-      { fromChainSlug: "base", toChainSlug: "arbitrum", legCount: 1, volumeUsd: "25.00" },
+      { fromChainSlug: "base", toChainSlug: "arbitrum", legCount: 2, volumeUsd: "25.00" },
     ]);
   });
 
@@ -341,7 +404,7 @@ describe("GET /api/networks/:slug", () => {
     expect(detail.series).toHaveLength(24);
     expect(detail.series.every((point) => point.bucketStart % 3600 === 0)).toBe(true);
     expect(observed.map(({ volumeUsd, txCount }) => ({ volumeUsd, txCount }))).toEqual([
-      { volumeUsd: "125.50", txCount: 3 },
+      { volumeUsd: "125.50", txCount: 5 },
     ]);
   });
 

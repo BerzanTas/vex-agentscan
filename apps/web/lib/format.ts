@@ -30,7 +30,7 @@ const compactUsdFormatter = new Intl.NumberFormat("en", {
   maximumFractionDigits: 1,
 });
 
-export function formatUsdEstimate(usd: string): string {
+export function formatUsdAmount(usd: string): string {
   const [whole = "0", fraction = ""] = usd.split(".");
   const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   return `${grouped}.${fraction.slice(0, 2).padEnd(2, "0")}`;
@@ -39,7 +39,7 @@ export function formatUsdEstimate(usd: string): string {
 export function formatUsdCompact(usd: string): string {
   const value = Number(usd);
   if (!Number.isFinite(value) || Math.abs(value) < COMPACT_USD_THRESHOLD) {
-    return formatUsdEstimate(usd);
+    return formatUsdAmount(usd);
   }
   return compactUsdFormatter.format(value);
 }

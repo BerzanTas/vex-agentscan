@@ -1,6 +1,8 @@
 import type pg from "pg";
 import { rangeWindowSeconds, type ChartRangePlan } from "@agentscan/core";
 import type { ResolveBridgeChain } from "../app.js";
+import { activityTimeAnchorSql } from "./activity-time-anchor.js";
+import { serverPricedUsdInSumOf } from "./server-priced-usd.js";
 
 
 export type BridgeRouteRead = {
@@ -49,13 +51,13 @@ function widestScaleOf(amounts: readonly string[]): number {
   return amounts.reduce((widest, amount) => Math.max(widest, fractionScaleOf(amount)), 0);
 }
 
-function sumUsdEstimates(amounts: readonly string[]): string {
+function sumUsdAmounts(amounts: readonly string[]): string {
   const scale = widestScaleOf(amounts);
   const total = amounts.reduce((sum, amount) => sum + unitsAtScale(amount, scale), 0n);
   return amountFromUnits(total, scale);
 }
 
-function compareUsdEstimates(left: string, right: string): number {
+function compareUsdAmounts(left: string, right: string): number {
   const scale = widestScaleOf([left, right]);
   const leftUnits = unitsAtScale(left, scale);
   const rightUnits = unitsAtScale(right, scale);
@@ -69,14 +71,14 @@ async function bridgeLegGroups(pool: pg.Pool, plan: ChartRangePlan): Promise<Bri
             a.from_chain_id::text AS from_chain_id,
             a.to_chain_id::text AS to_chain_id,
             COUNT(*)::int AS leg_count,
-            COALESCE(SUM(a.usd_in_est) FILTER (WHERE a.event_role = 'bridge_deposit'), 0)::text AS volume_usd
+            ${serverPricedUsdInSumOf("a", "a.event_role = 'bridge_deposit'")}::text AS volume_usd
      FROM activities a
      WHERE a.kind = 'bridge'
        AND a.verification_state IN ('verified_full','verified_basic')
        AND a.from_chain_id IS NOT NULL
        AND a.to_chain_id IS NOT NULL
        AND ($1::int IS NULL
-            OR COALESCE(a.client_confirmed_at, a.verified_at) >= now() - make_interval(secs => $1::int))
+            OR ${activityTimeAnchorSql("a")} >= now() - make_interval(secs => $1::int))
      GROUP BY a.protocol, a.from_chain_id, a.to_chain_id`,
     [rangeWindowSeconds(plan)],
   );
@@ -123,7 +125,7 @@ function tallyRoutesBySlugPair(
 }
 
 function byVolumeThenLegCountDescending(left: BridgeRouteRead, right: BridgeRouteRead): number {
-  const byVolume = compareUsdEstimates(right.volumeUsd, left.volumeUsd);
+  const byVolume = compareUsdAmounts(right.volumeUsd, left.volumeUsd);
   if (byVolume !== 0) return byVolume;
   const byLegCount = right.legCount - left.legCount;
   if (byLegCount !== 0) return byLegCount;
@@ -143,7 +145,7 @@ export async function bridgeRoutes(
       fromChainSlug,
       toChainSlug,
       legCount,
-      volumeUsd: sumUsdEstimates(volumes),
+      volumeUsd: sumUsdAmounts(volumes),
     }))
     .sort(byVolumeThenLegCountDescending);
 }

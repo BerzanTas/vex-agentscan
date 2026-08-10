@@ -73,6 +73,16 @@ async function ingestBatch(
   } finally {
     client.release();
   }
+  log.info(
+    {
+      accepted: result.accepted,
+      duplicates: result.duplicates,
+      rejected: result.rejected.length,
+      events: rawEvents.length,
+      backfill,
+    },
+    "ingest batch outcome",
+  );
   return result;
 }
 

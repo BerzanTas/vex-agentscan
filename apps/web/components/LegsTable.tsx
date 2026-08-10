@@ -1,5 +1,5 @@
 import type { TxDetailDto } from "../lib/api";
-import { formatRawAmount, formatRawAmountDisplay, formatUsdEstimate } from "../lib/format";
+import { formatRawAmount, formatRawAmountDisplay, formatUsdAmount } from "../lib/format";
 
 type Leg = {
   label: string;
@@ -56,7 +56,7 @@ function AmountStack({
         <span className="text-text-muted">—</span>
       )}
       {usdEst !== null && (
-        <span className="font-mono text-xs text-text-muted">${formatUsdEstimate(usdEst)} est.</span>
+        <span className="font-mono text-xs text-text-muted">${formatUsdAmount(usdEst)} est.</span>
       )}
       {!hasAmount && missingCaption !== null && (
         <span className="text-xs text-text-muted">{missingCaption}</span>

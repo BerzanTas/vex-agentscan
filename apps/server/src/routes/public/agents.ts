@@ -4,6 +4,7 @@ import type { Deps } from "../../app.js";
 import { toAgentStatDto, type AgentStatDto } from "../../public-dto.js";
 import { TtlCache } from "../../plugins/ttl-cache.js";
 import { agentLeaderboard } from "../../repos/read-repo.js";
+import { publishedAgentNames } from "../../repos/agent-page-repo.js";
 
 function cacheKeyOf(windowSeconds: number | null): string {
   return `agents:${windowSeconds ?? "all"}`;
@@ -19,7 +20,17 @@ export const agentsRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
       reply.header("cache-control", `public, s-maxage=${deps.config.READ_CACHE_TTL_SEC}`);
       return cache.get(cacheKeyOf(windowSeconds), async () => {
         const leaders = await agentLeaderboard(deps.pool, windowSeconds);
-        return leaders.map((leader) => toAgentStatDto(deps.config.AGENT_ALIAS_SALT, leader));
+        const names = await publishedAgentNames(
+          deps.pool,
+          leaders.map((leader) => leader.agentHash),
+        );
+        return leaders.map((leader) =>
+          toAgentStatDto(
+            deps.config.AGENT_ALIAS_SALT,
+            leader,
+            names.get(leader.agentHash) ?? null,
+          ),
+        );
       });
     },
   );

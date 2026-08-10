@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { formatUsdCompact, formatUsdEstimate } from "../lib/format";
+import { formatUsdCompact, formatUsdAmount } from "../lib/format";
 
 export type RankingRow = {
   key: string;
@@ -44,10 +44,9 @@ export function RankingList({
               <span className="ranking-label min-w-0 flex-1">{row.label}</span>
               <span
                 className="whitespace-nowrap font-mono text-sm text-text-primary"
-                title={`$${formatUsdEstimate(row.volumeUsd)}`}
+                title={`$${formatUsdAmount(row.volumeUsd)}`}
               >
                 ${formatUsdCompact(row.volumeUsd)}
-                <span className="ml-1 text-xs text-text-muted">est.</span>
               </span>
               <span className="w-12 whitespace-nowrap text-right font-mono text-xs text-text-muted">
                 {row.txCount.toLocaleString("en-US")}

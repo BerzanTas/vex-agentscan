@@ -92,11 +92,11 @@ describe("NetworksTable", () => {
     expect(markup).toContain(">42s<");
   });
 
-  it("labels the observed volume as an estimate", () => {
+  it("shows the observed volume without an estimate badge", () => {
     const markup = markupFor([activeNetwork]);
 
     expect(markup).toContain("$5.4K");
-    expect(markup).toContain(">est.<");
+    expect(markup).not.toContain(">est.<");
   });
 
   it("counts bridge legs in both directions", () => {

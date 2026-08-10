@@ -1,6 +1,7 @@
 import {
   evaluateVerification,
   nextBackoff,
+  resolveVerificationTier,
   type ChainEntry,
   type ChainReader,
   type ReceiptView,
@@ -31,7 +32,7 @@ export type JobOutcome =
   | { kind: "close_unverifiable" }
   | { kind: "finalize"; verdict: TerminalVerdict };
 
-type ReceiptRead =
+export type ReceiptRead =
   | { outcome: "receipt"; receipt: ReceiptView }
   | { outcome: "not_found" }
   | { outcome: "error"; message: string };
@@ -88,7 +89,7 @@ export async function resolveJobOutcome(job: ClaimedJob, deps: VerifyJobDeps): P
   return { kind: "close_unverifiable" };
 }
 
-async function readReceipt(reader: ChainReader, txHash: string): Promise<ReceiptRead> {
+export async function readReceipt(reader: ChainReader, txHash: string): Promise<ReceiptRead> {
   try {
     const receipt = await reader.getReceipt(txHash);
     return receipt === null ? { outcome: "not_found" } : { outcome: "receipt", receipt };
@@ -116,7 +117,7 @@ function verificationInputFrom(
     executedOutRaw: job.executedOutRaw,
     tokenInAddress: job.tokenInAddress,
     tokenOutAddress: job.tokenOutAddress,
-    tier: entry.verificationTier,
+    tier: resolveVerificationTier(job.kind, entry.verificationTier),
     timeToleranceMin: config.VERIFY_TIME_TOLERANCE_MIN,
     amountTolerancePct: config.VERIFY_AMOUNT_TOLERANCE_PCT,
   };

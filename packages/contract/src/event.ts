@@ -37,7 +37,7 @@ export const eventSchema = z.object({
 export type IngestEvent = z.infer<typeof eventSchema>;
 
 export const eventsBatchSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.union([z.literal(1), z.literal(2)]),
   agentHash: z.string().regex(/^[0-9a-f]{64}$/),
   backfill: z.boolean().default(false),
   events: z.array(z.unknown()),
