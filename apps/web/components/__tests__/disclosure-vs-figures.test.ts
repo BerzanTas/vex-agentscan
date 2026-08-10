@@ -52,17 +52,30 @@ type SurfaceId =
   | "/tokens/[chainSlug]/[address]"
   | "/networks/[slug]";
 
-type Qualifier = { names: readonly string[] } | { silentBecause: string };
+type Qualifier =
+  | { names: readonly string[] }
+  | { silentBecause: string; whileTheQualifierReads: string };
 
 const MEASURED_POPULATION = "bridge deposit";
+
+const AGENT_PAGE_SILENCE =
+  "Of this agent's swaps and bridge deposits we have finished pricing, 0% could not be fully priced. Those transactions are not fully reflected in the realized result, the win rate or the breakdown volumes, and are still counted in the transaction counts. Over the trailing 30 days that share is 0%, not fully reflected in the capital deployed figure or the daily chart.";
+
+const COVERAGE_NOTE_SILENCE =
+  "USD figures are priced by AgentScan from the swaps and bridge deposits it holds. None remain on record for this window, so the coverage of any figure shown here cannot be measured.";
 
 const AGENT_PAGE_WORDS: Record<UsdContribution, Qualifier> = {
   contributes_usd: { names: [MEASURED_POPULATION, "could not be fully priced"] },
   contributes_no_usd: {
-    names: [MEASURED_POPULATION, "could not be fully priced", "not fully reflected"],
+    names: [
+      MEASURED_POPULATION,
+      "could not be fully priced",
+      "not fully reflected in the realized result",
+      "not fully reflected in the capital deployed figure",
+    ],
   },
   awaiting_a_price: { names: [MEASURED_POPULATION, "still being priced"] },
-  outside_usd_figures: { silentBecause: "F4" },
+  outside_usd_figures: { silentBecause: "F4", whileTheQualifierReads: AGENT_PAGE_SILENCE },
 };
 
 const COVERAGE_NOTE_WORDS: Record<UsdContribution, Qualifier> = {
@@ -71,14 +84,7 @@ const COVERAGE_NOTE_WORDS: Record<UsdContribution, Qualifier> = {
     names: [MEASURED_POPULATION, "could not fully price", "not fully reflected in the USD figures"],
   },
   awaiting_a_price: { names: [MEASURED_POPULATION, "still being priced"] },
-  outside_usd_figures: { silentBecause: "F4" },
-};
-
-const NO_QUALIFIER_AT_ALL: Record<UsdContribution, Qualifier> = {
-  contributes_usd: { silentBecause: "F5" },
-  contributes_no_usd: { silentBecause: "F5" },
-  awaiting_a_price: { silentBecause: "F5" },
-  outside_usd_figures: { silentBecause: "F5" },
+  outside_usd_figures: { silentBecause: "F4", whileTheQualifierReads: COVERAGE_NOTE_SILENCE },
 };
 
 function wordsFor(surface: SurfaceId, state: UsdContribution): Qualifier {
@@ -93,7 +99,7 @@ function wordsFor(surface: SurfaceId, state: UsdContribution): Qualifier {
       return AGENT_PAGE_WORDS[state];
     case "/tokens/[chainSlug]/[address]":
     case "/networks/[slug]":
-      return NO_QUALIFIER_AT_ALL[state];
+      return COVERAGE_NOTE_WORDS[state];
     default: {
       const unreachableSurface: never = surface;
       throw new Error(`no qualifier declared for ${String(unreachableSurface)}`);
@@ -350,6 +356,12 @@ function visibleText(markup: string): string {
   return markup.replace(/<[^>]*>/g, " ").replace(/&#x27;/g, "'").replace(/\s+/g, " ");
 }
 
+function qualifierParagraphs(markup: string): string[] {
+  return [...markup.matchAll(/<p class="[^"]*max-w-3xl text-xs text-text-muted">(.*?)<\/p>/g)].map(
+    (match) => visibleText(match[1] ?? "").trim(),
+  );
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -358,15 +370,15 @@ describe.each(SURFACES)("%s publishes USD", (surface) => {
   it.each(USD_CONTRIBUTIONS)("names the %s state it renders, or is a recorded gap", async (state) => {
     serveApi(state);
 
-    const text = visibleText(await renderSurface(surface));
+    const markup = await renderSurface(surface);
     const qualifier = wordsFor(surface, state);
 
     if ("silentBecause" in qualifier) {
-      expect(qualifier.silentBecause).toMatch(/^F[0-9]+$/);
+      expect(qualifierParagraphs(markup)).toContain(qualifier.whileTheQualifierReads);
       return;
     }
     for (const phrase of qualifier.names) {
-      expect(text).toContain(phrase);
+      expect(visibleText(markup)).toContain(phrase);
     }
   });
 
