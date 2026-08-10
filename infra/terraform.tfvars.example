@@ -1,20 +1,21 @@
 subscription_id         = "00000000-0000-0000-0000-000000000000"
-public_hostname         = "agentscan.example.pl"
-image_tag               = "wstaw-sha-commita-z-ghcr"
-postgres_admin_password = "wygeneruj-losowo"
-agent_alias_salt        = "wygeneruj-losowo"
-rate_limit_key_salt     = "wygeneruj-losowo"
-# Musi być hostem, pod którym instalacje Vexa łączą się z serwerem: klient
-# porównuje go z adresem, który wybrał, i odmawia podpisania przy różnicy.
-handshake_domain        = "agentscan.example.pl"
-# Minimum 32 znaki. Zmiana tej wartości unieważnia wszystkie zapisane
-# powiązania portfeli — adresy są trzymane wyłącznie jako HMAC pod nią.
-wallet_hmac_pepper      = "wygeneruj-losowo-min-32-znaki"
-budget_alert_emails     = ["adres@przyklad.pl"]
+public_hostname         = "agentscan.example.com"
+image_tag               = "put-the-commit-sha-from-ghcr-here"
+postgres_admin_password = "generate-randomly"
+agent_alias_salt        = "generate-randomly"
+rate_limit_key_salt     = "generate-randomly"
+# Must be the host Vex installs actually dial: the client compares it against
+# the address it chose and refuses to sign the handshake on any mismatch.
+handshake_domain        = "agentscan.example.com"
+# At least 32 characters. Changing this invalidates every wallet binding
+# already stored -- addresses are kept only as HMACs under it and cannot be
+# recovered from the database.
+wallet_hmac_pepper      = "generate-randomly-min-32-characters"
+budget_alert_emails     = ["you@example.com"]
 budget_start_date       = "2026-08-01T00:00:00Z"
 
-# Klucze: ethereum, base, arbitrum, optimism, polygon, robinhood, solana.
+# Keys: ethereum, base, arbitrum, optimism, polygon, robinhood, solana.
 # rpc_url_overrides = {
-#   base = "https://base-mainnet.przyklad.pl/v2/KLUCZ,https://mainnet.base.org"
+#   base = "https://base-mainnet.example.com/v2/KEY,https://mainnet.base.org"
 # }
 rpc_url_overrides = {}
