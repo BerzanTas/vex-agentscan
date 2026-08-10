@@ -4,6 +4,12 @@ image_tag               = "wstaw-sha-commita-z-ghcr"
 postgres_admin_password = "wygeneruj-losowo"
 agent_alias_salt        = "wygeneruj-losowo"
 rate_limit_key_salt     = "wygeneruj-losowo"
+# Musi być hostem, pod którym instalacje Vexa łączą się z serwerem: klient
+# porównuje go z adresem, który wybrał, i odmawia podpisania przy różnicy.
+handshake_domain        = "agentscan.example.pl"
+# Minimum 32 znaki. Zmiana tej wartości unieważnia wszystkie zapisane
+# powiązania portfeli — adresy są trzymane wyłącznie jako HMAC pod nią.
+wallet_hmac_pepper      = "wygeneruj-losowo-min-32-znaki"
 budget_alert_emails     = ["adres@przyklad.pl"]
 budget_start_date       = "2026-08-01T00:00:00Z"
 
