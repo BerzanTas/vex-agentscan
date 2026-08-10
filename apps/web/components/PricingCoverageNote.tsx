@@ -3,6 +3,11 @@ import { legCount } from "../lib/pricing-legs";
 
 const NOTE_CLASS = "max-w-3xl text-xs text-text-muted";
 
+const EXPLORER_WIDE_LEAD =
+  "Across the whole explorer in this window — not only the figures on this page — ";
+
+export type PricingCoverageScope = "these-figures" | "the-whole-explorer";
+
 function coveragePercent(pricedCoverage: number): string {
   return `${(pricedCoverage * 100).toFixed(1)}%`;
 }
@@ -42,28 +47,48 @@ function exclusionSentence(coverage: PricingCoverageDto): string {
   return `${legPhrase(excludedActivityCount(coverage))} not fully reflected in the USD figures (${reasons.join(", ")}), and still counted in transaction counts.`;
 }
 
-function nothingPricedSentence(coverage: PricingCoverageDto): string {
-  return `Nothing in this window is priced yet: ${legCount(coverage.pendingActivityCount)} still being priced, and still counted in transaction counts.`;
+function nothingPricedSentence(
+  coverage: PricingCoverageDto,
+  scope: PricingCoverageScope,
+): string {
+  const stillBeingPriced = `${legCount(coverage.pendingActivityCount)} still being priced, and still counted in transaction counts.`;
+  if (scope === "the-whole-explorer") {
+    return `${EXPLORER_WIDE_LEAD}nothing is priced yet: ${stillBeingPriced}`;
+  }
+  return `Nothing in this window is priced yet: ${stillBeingPriced}`;
 }
 
-export function PricingCoverageNote({ coverage }: { coverage: PricingCoverageDto }) {
+function coverageSentence(coverage: PricingCoverageDto, scope: PricingCoverageScope): string {
+  const share = coveragePercent(coverage.pricedCoverage);
+  if (scope === "the-whole-explorer") {
+    return `${EXPLORER_WIDE_LEAD}USD figures are priced by AgentScan and cover ${share} of the swaps and bridge deposits we have finished pricing.`;
+  }
+  return `USD figures are priced by AgentScan and cover ${share} of the swaps and bridge deposits in this window we have finished pricing.`;
+}
+
+export function PricingCoverageNote({
+  coverage,
+  scope,
+}: {
+  coverage: PricingCoverageDto;
+  scope: PricingCoverageScope;
+}) {
   if (measuredActivityCount(coverage) === 0) {
     return (
       <p className={NOTE_CLASS}>
-        USD figures are priced by AgentScan from the swaps and bridge deposits it holds. None remain on
+        USD figures are priced by AgentScan from the swaps and bridge deposits it holds. None are on
         record for this window, so the coverage of any figure shown here cannot be measured.
       </p>
     );
   }
 
   if (finishedPricingCount(coverage) === 0) {
-    return <p className={NOTE_CLASS}>{nothingPricedSentence(coverage)}</p>;
+    return <p className={NOTE_CLASS}>{nothingPricedSentence(coverage, scope)}</p>;
   }
 
   return (
     <p className={NOTE_CLASS}>
-      USD figures are priced by AgentScan and cover {coveragePercent(coverage.pricedCoverage)} of the
-      swaps and bridge deposits in this window we have finished pricing. {exclusionSentence(coverage)}
+      {coverageSentence(coverage, scope)} {exclusionSentence(coverage)}
     </p>
   );
 }

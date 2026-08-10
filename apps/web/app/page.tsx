@@ -40,7 +40,7 @@ export default async function DashboardPage() {
       <AutoRefresh />
       <Hero />
       <StatCards stats={stats} series={chart} />
-      <PricingCoverageNote coverage={coverage} />
+      <PricingCoverageNote coverage={coverage} scope="these-figures" />
       <ChartPanel initialPoints={chart} initialRange={DEFAULT_CHART_RANGE} />
       <div className="section-enter grid grid-cols-1 items-start gap-8 lg:grid-cols-2">
         <section className="glass p-4">

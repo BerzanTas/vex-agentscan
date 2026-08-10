@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PricingCoverageNote } from "../PricingCoverageNote";
+import { PricingCoverageNote, type PricingCoverageScope } from "../PricingCoverageNote";
 import type { PricingCoverageDto } from "../../lib/api";
 
-function markupOf(coverage: PricingCoverageDto): string {
-  return renderToStaticMarkup(createElement(PricingCoverageNote, { coverage }));
+function markupOf(
+  coverage: PricingCoverageDto,
+  scope: PricingCoverageScope = "these-figures",
+): string {
+  return renderToStaticMarkup(createElement(PricingCoverageNote, { coverage, scope }));
 }
 
 describe("PricingCoverageNote", () => {
@@ -80,7 +83,7 @@ describe("PricingCoverageNote", () => {
       pricedCoverage: 0,
     });
 
-    expect(markup).toContain("None remain on record for this window");
+    expect(markup).toContain("None are on record for this window");
     expect(markup).toContain("the coverage of any figure shown here cannot be measured");
     expect(markup).not.toContain("no verified activity");
     expect(markup).not.toContain("0.0%");
@@ -121,5 +124,52 @@ describe("PricingCoverageNote", () => {
 
     expect(markup).toContain("Nothing in this window is priced yet: 1 swap or bridge deposit still being priced");
     expect(markup).not.toContain("1 swaps");
+  });
+});
+
+describe("PricingCoverageNote on a page whose figures are a slice of what it measures", () => {
+  const MIXED: PricingCoverageDto = {
+    pricedActivityCount: 99,
+    unpricedActivityCount: 1,
+    pendingActivityCount: 0,
+    pricedCoverage: 0.99,
+  };
+
+  it("says the share is explorer-wide before it says the number", () => {
+    const markup = markupOf(MIXED, "the-whole-explorer");
+
+    expect(markup).toContain(
+      "Across the whole explorer in this window — not only the figures on this page —",
+    );
+    expect(markup.indexOf("Across the whole explorer")).toBeLessThan(markup.indexOf("99.0%"));
+  });
+
+  it("never claims the share describes only what the page shows", () => {
+    const markup = markupOf(MIXED, "the-whole-explorer");
+
+    expect(markup).not.toContain("of the swaps and bridge deposits in this window we have finished");
+  });
+
+  it("scopes the not-yet-priced sentence the same way", () => {
+    const markup = markupOf(
+      {
+        pricedActivityCount: 0,
+        unpricedActivityCount: 0,
+        pendingActivityCount: 4,
+        pricedCoverage: 0,
+      },
+      "the-whole-explorer",
+    );
+
+    expect(markup).toContain("Across the whole explorer in this window");
+    expect(markup).toContain("nothing is priced yet: 4 swaps and bridge deposits still being priced");
+    expect(markup).not.toContain("Nothing in this window is priced yet");
+  });
+
+  it("leaves a listing page saying nothing about the explorer, because its figures are the explorer", () => {
+    const markup = markupOf(MIXED);
+
+    expect(markup).toContain("cover 99.0% of the swaps and bridge deposits in this window");
+    expect(markup).not.toContain("Across the whole explorer");
   });
 });

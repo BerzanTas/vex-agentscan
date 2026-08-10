@@ -149,7 +149,7 @@ export default async function NetworkDetailPage({ params, searchParams }: Networ
           emptyMessage="No bridge legs touching this network in this window"
         />
       </section>
-      <PricingCoverageNote coverage={coverage} />
+      <PricingCoverageNote coverage={coverage} scope="the-whole-explorer" />
     </div>
   );
 }

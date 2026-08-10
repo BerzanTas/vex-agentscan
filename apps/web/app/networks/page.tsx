@@ -44,7 +44,7 @@ export default async function NetworksPage({ searchParams }: NetworksPageProps) 
         <PanelHeading title="Bridge routes" meta={range} />
         <RoutesList routes={routes} emptyMessage="No bridge legs observed in this window" />
       </section>
-      <PricingCoverageNote coverage={coverage} />
+      <PricingCoverageNote coverage={coverage} scope="these-figures" />
     </div>
   );
 }
