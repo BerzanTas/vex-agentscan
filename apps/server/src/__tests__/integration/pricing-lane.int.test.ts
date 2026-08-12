@@ -639,8 +639,8 @@ describe("runPricingPass", () => {
     expect(coverage[0]).toMatchObject({ processed: 1, serverPriced: 0, unpriceable: 0, nothingToPrice: 1 });
   });
 
-  it("is terminally unpriced on the first pass when the chain has no price feed key", async () => {
-    const activityId = await seedPricingActivity({ publicId: "no-feed-key", chainId: 4663 });
+  it("is terminally unpriced on the first pass when the chain resolves to no price feed", async () => {
+    const activityId = await seedPricingActivity({ publicId: "no-price-feed", chainId: 999999 });
     const feed = recordingFeed({});
 
     await runPricingPass(depsWith(feed.feed));
@@ -1060,7 +1060,7 @@ describe("runPricingPass", () => {
       tokenOutDecimals: null,
       executedOutRaw: null,
     });
-    await seedPricingActivity({ publicId: "ratio-unmappable", chainId: 4663 });
+    await seedPricingActivity({ publicId: "ratio-unmappable", chainId: 999999 });
     const feed = recordingFeed({ [`base:${WETH.toLowerCase()}`]: wethPoint, [`base:${USDC.toLowerCase()}`]: usdcPoint });
     const capturingLogger = {
       ...logger,
