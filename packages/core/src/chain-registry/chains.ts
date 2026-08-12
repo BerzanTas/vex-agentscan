@@ -1,5 +1,8 @@
+export type ChainFamily = "eip155" | "solana";
+
 export type ChainEntry = {
   canonicalSlug: string;
+  chainFamily: ChainFamily;
   displayName: string;
   explorerTxUrl: (txHash: string) => string | null;
   rpcUrls: string[];
@@ -20,6 +23,7 @@ export const evmChains: readonly EvmChain[] = [
     chainId: 1n,
     entry: {
       canonicalSlug: "ethereum",
+      chainFamily: "eip155",
       priceFeedKey: "ethereum",
       displayName: "Ethereum",
       explorerTxUrl: explorerTx("https://etherscan.io"),
@@ -31,6 +35,7 @@ export const evmChains: readonly EvmChain[] = [
     chainId: 8453n,
     entry: {
       canonicalSlug: "base",
+      chainFamily: "eip155",
       priceFeedKey: "base",
       displayName: "Base",
       explorerTxUrl: explorerTx("https://basescan.org"),
@@ -42,6 +47,7 @@ export const evmChains: readonly EvmChain[] = [
     chainId: 42161n,
     entry: {
       canonicalSlug: "arbitrum",
+      chainFamily: "eip155",
       priceFeedKey: "arbitrum",
       displayName: "Arbitrum One",
       explorerTxUrl: explorerTx("https://arbiscan.io"),
@@ -53,6 +59,7 @@ export const evmChains: readonly EvmChain[] = [
     chainId: 10n,
     entry: {
       canonicalSlug: "optimism",
+      chainFamily: "eip155",
       priceFeedKey: "optimism",
       displayName: "OP Mainnet",
       explorerTxUrl: explorerTx("https://optimistic.etherscan.io"),
@@ -64,6 +71,7 @@ export const evmChains: readonly EvmChain[] = [
     chainId: 137n,
     entry: {
       canonicalSlug: "polygon",
+      chainFamily: "eip155",
       priceFeedKey: "polygon",
       displayName: "Polygon",
       explorerTxUrl: explorerTx("https://polygonscan.com"),
@@ -75,6 +83,7 @@ export const evmChains: readonly EvmChain[] = [
     chainId: 4663n,
     entry: {
       canonicalSlug: "robinhood",
+      chainFamily: "eip155",
       displayName: "Robinhood Chain",
       explorerTxUrl: explorerTx("https://robinhoodchain.blockscout.com"),
       rpcUrls: ["https://rpc.mainnet.chain.robinhood.com"],
@@ -85,6 +94,7 @@ export const evmChains: readonly EvmChain[] = [
 
 const solanaEntry: ChainEntry = {
   canonicalSlug: "solana",
+  chainFamily: "solana",
   priceFeedKey: "solana",
   displayName: "Solana",
   explorerTxUrl: explorerTx("https://solscan.io"),

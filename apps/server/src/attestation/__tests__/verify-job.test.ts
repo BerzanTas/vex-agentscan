@@ -46,6 +46,7 @@ function jobFixture(overrides: Partial<ClaimedAttestation> = {}): ClaimedAttesta
 
 const chainEntry = {
   canonicalSlug: "robinhood",
+  chainFamily: "eip155" as const,
   displayName: "Robinhood Chain",
   explorerTxUrl: () => null,
   rpcUrls: [],

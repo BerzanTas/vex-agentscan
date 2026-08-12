@@ -1,6 +1,6 @@
-import { evmChains, solanaChains, type ChainEntry } from "./chains.js";
+import { evmChains, solanaChains, type ChainEntry, type ChainFamily } from "./chains.js";
 
-export type ChainFamily = "eip155" | "solana";
+export type { ChainFamily };
 
 export type ChainKeyForSlug = { chainFamily: ChainFamily; chainId: bigint; protocol: string | null };
 

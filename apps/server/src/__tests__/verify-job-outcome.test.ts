@@ -32,6 +32,7 @@ describe("resolveJobOutcome", () => {
       now,
       resolveChain: () => ({
         canonicalSlug: "base",
+        chainFamily: "eip155",
         displayName: "Base",
         explorerTxUrl: () => null,
         rpcUrls: [],
@@ -72,6 +73,7 @@ describe("resolveJobOutcome", () => {
       now,
       resolveChain: () => ({
         canonicalSlug: "base",
+        chainFamily: "eip155",
         displayName: "Base",
         explorerTxUrl: () => null,
         rpcUrls: [],
@@ -99,6 +101,7 @@ describe("resolveJobOutcome", () => {
         now,
         resolveChain: () => ({
           canonicalSlug: "base",
+          chainFamily: "eip155",
           displayName: "Base",
           explorerTxUrl: () => null,
           rpcUrls: [],

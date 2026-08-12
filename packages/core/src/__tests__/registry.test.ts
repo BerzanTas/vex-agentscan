@@ -36,4 +36,11 @@ describe("resolveChain", () => {
     expect(base?.canonicalSlug).toBe("base");
     expect(base?.explorerTxUrl("0xabc")).toBe("https://basescan.org/tx/0xabc");
   });
+
+  it("carries the chain family on every resolved entry", () => {
+    const base = resolveChain({ protocol: "kyberswap", chainFamily: "eip155", chainId: 8453n });
+    const solana = resolveChain({ protocol: "jupiter", chainFamily: "solana", chainId: 20011000000n });
+    expect(base?.chainFamily).toBe("eip155");
+    expect(solana?.chainFamily).toBe("solana");
+  });
 });

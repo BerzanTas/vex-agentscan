@@ -72,6 +72,7 @@ const getAttestation = (chainId: bigint, address: string) =>
 
 const chainEntry = {
   canonicalSlug: "robinhood",
+  chainFamily: "eip155" as const,
   displayName: "Robinhood Chain",
   explorerTxUrl: () => null,
   rpcUrls: [],
