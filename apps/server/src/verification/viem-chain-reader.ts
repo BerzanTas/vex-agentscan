@@ -13,42 +13,12 @@ import {
 } from "viem";
 import type { ChainEntry, ChainReader, ReceiptView } from "@agentscan/core";
 import type { Config } from "../config.js";
-import type { ChainReaderContext } from "../worker/verify-job.js";
 import { rpcUrlsFor } from "./rpc-urls.js";
 
 const transferEvent = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
 const transferTopic = toEventSelector(transferEvent);
 
-const FAKE_TRANSFER_ADDRESS = "0x0000000000000000000000000000000000000000";
-
-function declaredTransfersFrom(context: ChainReaderContext): ReceiptView["erc20Transfers"] {
-  const legs = [
-    { token: context.tokenInAddress, amountRaw: context.executedInRaw },
-    { token: context.tokenOutAddress, amountRaw: context.executedOutRaw },
-  ];
-  return legs
-    .filter((leg): leg is { token: string; amountRaw: string } => leg.token !== null && leg.amountRaw !== null)
-    .map((leg) => ({
-      token: leg.token,
-      from: FAKE_TRANSFER_ADDRESS,
-      to: FAKE_TRANSFER_ADDRESS,
-      amountRaw: leg.amountRaw,
-    }));
-}
-
-function confirmAllReaderFor(context: ChainReaderContext): ChainReader {
-  return {
-    getReceipt: () =>
-      Promise.resolve({
-        status: "success",
-        blockTimestamp: context.clientConfirmedAt ?? new Date(),
-        erc20Transfers: declaredTransfersFrom(context),
-      } satisfies ReceiptView),
-  };
-}
-
-export function makeChainReader(entry: ChainEntry, config: Config, context: ChainReaderContext): ChainReader {
-  if (config.VERIFY_FAKE_MODE === "confirm_all") return confirmAllReaderFor(context);
+export function makeChainReader(entry: ChainEntry, config: Config): ChainReader {
   const client = createPublicClient({
     transport: fallback(rpcUrlsFor(entry, config).map((url) => http(url))),
   });

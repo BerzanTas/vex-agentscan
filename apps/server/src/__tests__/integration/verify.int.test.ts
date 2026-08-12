@@ -5,7 +5,7 @@ import { resolveChain, type ChainReader, type ReceiptView } from "@agentscan/cor
 import { loadConfig } from "../../config.js";
 import { claimDueJobs, finalizeVerification } from "../../repos/activities-verify-repo.js";
 import { startTestDb } from "../../testing/pg-harness.js";
-import { makeChainReader } from "../../verification/viem-chain-reader.js";
+import { selectChainReader } from "../../verification/chain-reader-selection.js";
 import { runVerificationPass, type VerificationLoopDeps } from "../../worker/loop.js";
 
 const config = loadConfig({
@@ -493,7 +493,7 @@ describe("verification worker", () => {
       config: fakeModeConfig,
       now: () => new Date(),
       resolveChain,
-      chainReaderFor: (entry, context) => makeChainReader(entry, fakeModeConfig, context),
+      chainReaderFor: (entry, context) => selectChainReader(entry, fakeModeConfig, context),
       logger,
     });
 
