@@ -5,6 +5,7 @@ export type ReceiptView = {
   blockTimestamp: Date;
   blockNumber?: bigint;
   erc20Transfers: { token: string; from: string; to: string; amountRaw: string }[];
+  transactionValueRaw: string | null;
   logs?: ReceiptLog[];
 };
 
