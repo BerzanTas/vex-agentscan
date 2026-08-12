@@ -201,9 +201,13 @@ function retryBudgetOf(deps: PricingLoopDeps, row: ClaimedPricingRow) {
   };
 }
 
-function pricedVolumeOf(row: ClaimedPricingRow, usdIn: string | null): string {
+export function pricedVolumeOf(
+  row: ClaimedPricingRow,
+  usdIn: string | null,
+  usdOut: string | null,
+): string {
   if (!deploysCapitalRole(row.eventRole)) return "0";
-  return usdIn ?? "0";
+  return usdIn ?? usdOut ?? "0";
 }
 
 async function inTransaction<T>(pool: pg.Pool, run: (client: pg.PoolClient) => Promise<T>): Promise<T> {
@@ -233,7 +237,7 @@ async function publishPricedActivity(
       day: row.aggregateDay,
       protocol: row.protocol,
       kind: row.kind,
-      volumeUsd: pricedVolumeOf(row, outcome.usdIn),
+      volumeUsd: pricedVolumeOf(row, outcome.usdIn, outcome.usdOut),
     });
   });
 }

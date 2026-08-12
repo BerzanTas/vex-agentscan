@@ -105,6 +105,46 @@ describe("decidePricingOutcome", () => {
     expect(outcomeFor(priced("10.5"), blocked)).toEqual({ kind: "reschedule", delayMs: 60_000 });
   });
 
+  it("finalizes with a null IN leg when the feed answered without a price and the OUT leg priced", () => {
+    const missedUntil = new Date(now.getTime() + 24 * 3_600_000);
+    expect(outcomeFor(blockedUntil(missedUntil), priced("10.4"))).toEqual({
+      kind: "priced",
+      usdIn: null,
+      usdOut: "10.4",
+    });
+  });
+
+  it("finalizes with a null OUT leg when the feed answered without a price and the IN leg priced", () => {
+    const missedUntil = new Date(now.getTime() + 24 * 3_600_000);
+    expect(outcomeFor(priced("10.5"), blockedUntil(missedUntil))).toEqual({
+      kind: "priced",
+      usdIn: "10.5",
+      usdOut: null,
+    });
+  });
+
+  it("finalizes a definitive miss beside a priced leg even at the attempt ceiling", () => {
+    const missedUntil = new Date(now.getTime() + 24 * 3_600_000);
+    expect(outcomeFor(priced("10.5"), blockedUntil(missedUntil), 5)).toEqual({
+      kind: "priced",
+      usdIn: "10.5",
+      usdOut: null,
+    });
+  });
+
+  it("never finalizes a feed outage, priced sibling or not", () => {
+    expect(outcomeFor(priced("10.5"), blocked, 0)).toEqual({ kind: "reschedule", delayMs: 60_000 });
+    expect(outcomeFor(blocked, priced("10.4"), 1)).toEqual({ kind: "reschedule", delayMs: 300_000 });
+  });
+
+  it("exhausts a row whose every present leg missed rather than finalizing it without a figure", () => {
+    const soon = new Date(now.getTime() + 3_600_000);
+    const later = new Date(now.getTime() + 7_200_000);
+    expect(outcomeFor(blockedUntil(soon), blockedUntil(later), 5)).toEqual({
+      kind: "attempts_exhausted",
+    });
+  });
+
   it("walks the backoff schedule as attempts accumulate", () => {
     const delays = [0, 1, 2, 3, 4].map((attempts) => outcomeFor(blocked, absent, attempts));
     expect(delays).toEqual([
