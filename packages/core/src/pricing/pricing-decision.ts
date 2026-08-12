@@ -36,6 +36,15 @@ function usdOf(leg: LegPricing): string | null {
   return leg.state === "priced" ? leg.usd : null;
 }
 
+function isDefinitiveMiss(leg: LegPricing): boolean {
+  return leg.state === "unpriceable" && leg.notBefore !== null;
+}
+
+function pricedSiblingSettlesEveryMiss(legs: readonly LegPricing[]): boolean {
+  if (!legs.some((leg) => leg.state === "priced")) return false;
+  return legs.every((leg) => leg.state !== "unpriceable" || isDefinitiveMiss(leg));
+}
+
 function latestNotBefore(legs: readonly LegPricing[]): Date | null {
   let latest: Date | null = null;
   for (const leg of legs) {
@@ -62,7 +71,9 @@ export function decidePricingOutcome(
   if (legs.every((leg) => leg.state === "absent")) return { kind: "nothing_to_price" };
   if (args.settledAt === null) return { kind: "no_settlement_time" };
   if (legs.some((leg) => leg.state === "unmappable")) return { kind: "unmappable" };
-  if (legs.some((leg) => leg.state === "unpriceable")) return pricingRetryOutcome(args, latestNotBefore(legs));
+  if (legs.some((leg) => leg.state === "unpriceable") && !pricedSiblingSettlesEveryMiss(legs)) {
+    return pricingRetryOutcome(args, latestNotBefore(legs));
+  }
   return { kind: "priced", usdIn: usdOf(args.legIn), usdOut: usdOf(args.legOut) };
 }
 
