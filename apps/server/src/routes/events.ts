@@ -8,7 +8,7 @@ import {
 import type { FastifyBaseLogger, FastifyPluginAsync, FastifyReply } from "fastify";
 import type pg from "pg";
 import type { Deps } from "../app.js";
-import { authenticateAgent, bearerTokenFrom } from "../plugins/auth.js";
+import { authenticateAgent, bearerTokenFrom, type AuthenticatedAgent } from "../plugins/auth.js";
 import { rateLimitKeyHash } from "../plugins/rate-limit-key.js";
 import { applyEvent, type ApplyEventOutcome } from "../repos/activities-ingest-repo.js";
 import { PostgresSlidingWindowLimiter } from "../repos/rate-limit-repo.js";
@@ -42,12 +42,17 @@ async function applyEventInTransaction(
 async function ingestBatch(
   pool: pg.Pool,
   log: FastifyBaseLogger,
-  agentHash: string,
+  agent: AuthenticatedAgent,
   rawEvents: unknown[],
   schemaVersion: number,
   backfill: boolean,
 ): Promise<EventsResult> {
-  const result: EventsResult = { accepted: 0, duplicates: 0, rejected: [] };
+  const result: EventsResult = {
+    accepted: 0,
+    duplicates: 0,
+    rejected: [],
+    agent: { strikeCount: agent.strikeCount, status: agent.status },
+  };
   const client = await pool.connect();
   try {
     for (const [index, rawEvent] of rawEvents.entries()) {
@@ -62,7 +67,7 @@ async function ingestBatch(
       }
       const outcome = await applyEventInTransaction(
         client,
-        agentHash,
+        agent.agentHash,
         parsedEvent.data,
         schemaVersion,
         backfill,
@@ -130,7 +135,7 @@ export const eventsRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
     return ingestBatch(
       deps.pool,
       request.log,
-      agent.agentHash,
+      agent,
       parsedBatch.data.events,
       parsedBatch.data.schemaVersion,
       parsedBatch.data.backfill,
