@@ -95,4 +95,5 @@ const solanaEntry: ChainEntry = {
 export const solanaChains: readonly SolanaChain[] = [
   { protocol: "khalani", chainId: 20011000000n, entry: solanaEntry },
   { protocol: "relay", chainId: 792703809n, entry: solanaEntry },
+  { protocol: "jupiter", chainId: 20011000000n, entry: solanaEntry },
 ];

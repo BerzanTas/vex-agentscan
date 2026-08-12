@@ -11,6 +11,17 @@ describe("resolveChain", () => {
     expect(relay?.verificationTier).toBe("basic");
   });
 
+  it("maps the Jupiter provider-native Solana id to the canonical solana chain at tier basic", () => {
+    const jupiter = resolveChain({ protocol: "jupiter", chainFamily: "solana", chainId: 20011000000n });
+    expect(jupiter?.canonicalSlug).toBe("solana");
+    expect(jupiter?.verificationTier).toBe("basic");
+    expect(jupiter?.rpcUrls).toEqual(["https://api.mainnet-beta.solana.com"]);
+  });
+
+  it("returns null for an unknown protocol on solana", () => {
+    expect(resolveChain({ protocol: "unknownswap", chainFamily: "solana", chainId: 20011000000n })).toBeNull();
+  });
+
   it("returns null for an unknown chain id", () => {
     expect(resolveChain({ protocol: "kyberswap", chainFamily: "eip155", chainId: 999999999n })).toBeNull();
   });
