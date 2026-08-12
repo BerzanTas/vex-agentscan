@@ -3,7 +3,7 @@ import type pg from "pg";
 import { revokeTokenAttestations } from "./cli/attestation-revoke.js";
 import { listAgentsAwaitingPurge } from "./cli/purge-status.js";
 import { liftQuarantine, listQuarantinedAgents } from "./cli/quarantine.js";
-import { retryVerification } from "./cli/verify-retry.js";
+import { retryVerification, type RetryRefusal } from "./cli/verify-retry.js";
 import { loadConfig } from "./config.js";
 import { createPool } from "./db.js";
 import { runPurgeSweep } from "./worker/purge.js";
@@ -63,15 +63,20 @@ purge
     printJson(await withPool((pool) => runPurgeSweep(pool, config)));
   });
 
+function retryRefusalMessage(refusal: RetryRefusal): string {
+  if (refusal.refusal === "not_found") return "no activity with that public id";
+  return `activity is not retryable in state ${refusal.state}`;
+}
+
 program
   .command("verify")
   .command("retry")
-  .description("requeue verification of an activity by public id")
+  .description("requeue verification of an activity closed as unverifiable, by public id")
   .argument("<publicId>")
   .action(async (publicId: string) => {
     const outcome = await withPool((pool) => retryVerification(pool, publicId));
     if (!outcome.requeued) {
-      process.stderr.write("no activity with that public id\n");
+      process.stderr.write(`${retryRefusalMessage(outcome)}\n`);
       process.exitCode = 1;
       return;
     }
