@@ -14,6 +14,7 @@ import {
 import type { ChainEntry, ChainReader, ReceiptView } from "@agentscan/core";
 import type { Config } from "../config.js";
 import type { ChainReaderContext } from "../worker/verify-job.js";
+import { rpcUrlsFor } from "./rpc-urls.js";
 
 const transferEvent = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
 const transferTopic = toEventSelector(transferEvent);
@@ -66,10 +67,6 @@ export function makeChainReader(entry: ChainEntry, config: Config, context: Chai
     },
     getHeadBlockNumber: () => client.getBlockNumber(),
   };
-}
-
-function rpcUrlsFor(entry: ChainEntry, config: Config): string[] {
-  return [...(config.rpcUrlOverrides.get(entry.canonicalSlug) ?? []), ...entry.rpcUrls];
 }
 
 async function receiptOrNull(client: PublicClient, txHash: string): Promise<TransactionReceipt | null> {
