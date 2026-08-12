@@ -174,6 +174,10 @@ describe("eventSchema status vocabulary (§4.2)", () => {
     const failed = { ...goldenEvent, status: "definitively_failed", failureCode: "solana_signature_expired" };
     expect(eventSchema.parse(failed)).toMatchObject({ failureCode: "solana_signature_expired" });
   });
+  it("accepts venue_unavailable as a failure code", () => {
+    const failed = { ...goldenEvent, status: "definitively_failed", failureCode: "venue_unavailable" };
+    expect(eventSchema.parse(failed)).toMatchObject({ failureCode: "venue_unavailable" });
+  });
 });
 
 describe("eventSchema second leg (§4.2)", () => {
