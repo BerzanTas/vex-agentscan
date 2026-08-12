@@ -46,8 +46,11 @@ describe("resolveCoinKey", () => {
     });
   });
 
-  it("yields no key for a registry chain without a price feed key", () => {
-    expect(resolveCoinKey({ ...base, chainId: 4663n, tokenAddress: `0x${"1".repeat(40)}` })).toBeNull();
+  it("maps a robinhood ERC-20 address with the robinhood feed key", () => {
+    expect(resolveCoinKey({ ...base, chainId: 4663n, tokenAddress: `0x${"1".repeat(40)}` })).toEqual({
+      coinKey: `robinhood:0x${"1".repeat(40)}`,
+      tokenAddress: `0x${"1".repeat(40)}`,
+    });
   });
 
   it("yields no key for a chain that is not in the registry", () => {
@@ -62,7 +65,10 @@ describe("resolveCoinKey", () => {
     expect(resolveCoinKey({ ...solana, tokenAddress: `0x${"1".repeat(40)}` })).toBeNull();
   });
 
-  it("never falls back to the canonical slug when the chain has no feed key", () => {
-    expect(resolveCoinKey({ ...base, chainId: 4663n, tokenAddress: `0x${"e".repeat(40)}` })).toBeNull();
+  it("maps the EVM native sentinel on robinhood to the robinhood native coin key", () => {
+    expect(resolveCoinKey({ ...base, chainId: 4663n, tokenAddress: `0x${"e".repeat(40)}` })).toEqual({
+      coinKey: `robinhood:0x${"0".repeat(40)}`,
+      tokenAddress: `0x${"0".repeat(40)}`,
+    });
   });
 });

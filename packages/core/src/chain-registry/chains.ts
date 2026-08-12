@@ -84,6 +84,7 @@ export const evmChains: readonly EvmChain[] = [
     entry: {
       canonicalSlug: "robinhood",
       chainFamily: "eip155",
+      priceFeedKey: "robinhood",
       displayName: "Robinhood Chain",
       explorerTxUrl: explorerTx("https://robinhoodchain.blockscout.com"),
       rpcUrls: ["https://rpc.mainnet.chain.robinhood.com"],
