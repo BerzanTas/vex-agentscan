@@ -25,6 +25,7 @@ export function confirmAllReaderFor(context: ChainReaderContext): ChainReader {
         status: "success",
         blockTimestamp: context.clientConfirmedAt ?? new Date(),
         erc20Transfers: declaredTransfersFrom(context),
+        transactionValueRaw: context.executedInRaw,
       } satisfies ReceiptView),
   };
 }

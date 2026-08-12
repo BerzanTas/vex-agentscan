@@ -72,6 +72,7 @@ function receiptViewOf(transaction: FinalizedTransaction): ReceiptView {
     status: transaction.meta.err === null ? "success" : "reverted",
     blockTimestamp: new Date(transaction.blockTime * 1000),
     erc20Transfers: [],
+    transactionValueRaw: null,
   };
 }
 

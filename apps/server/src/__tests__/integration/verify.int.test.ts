@@ -185,6 +185,7 @@ describe("verification worker", () => {
         { token: "0xAAA", from: "0x1", to: "0x2", amountRaw: "1000000" },
         { token: "0xBBB", from: "0x2", to: "0x1", amountRaw: "2000000" },
       ],
+      transactionValueRaw: null,
     };
 
     await runVerificationPass(depsWithReader(readerReturning(receipt)));
@@ -214,7 +215,7 @@ describe("verification worker", () => {
     });
 
     await runVerificationPass(
-      depsWithReader(readerReturning({ status: "success", blockTimestamp, erc20Transfers: [] })),
+      depsWithReader(readerReturning({ status: "success", blockTimestamp, erc20Transfers: [], transactionValueRaw: null })),
     );
 
     expect((await activityStateOf(activityId)).block_time).toEqual(blockTimestamp);
@@ -232,7 +233,7 @@ describe("verification worker", () => {
     const activityId = await seedQueuedActivity({ agentHash: agent, protocol: "p-reverted" });
 
     await runVerificationPass(
-      depsWithReader(readerReturning({ status: "reverted", blockTimestamp: new Date(), erc20Transfers: [] })),
+      depsWithReader(readerReturning({ status: "reverted", blockTimestamp: new Date(), erc20Transfers: [], transactionValueRaw: null })),
     );
 
     const activity = await activityStateOf(activityId);
@@ -260,7 +261,7 @@ describe("verification worker", () => {
       usdInEst: "70",
       clientConfirmedAt: confirmedAt,
     });
-    const receipt: ReceiptView = { status: "success", blockTimestamp: confirmedAt, erc20Transfers: [] };
+    const receipt: ReceiptView = { status: "success", blockTimestamp: confirmedAt, erc20Transfers: [], transactionValueRaw: null };
 
     await runVerificationPass(depsWithReader(readerReturning(receipt)));
 
@@ -359,7 +360,7 @@ describe("verification worker", () => {
     await seedQueuedActivity({ agentHash: agent, protocol: "p-quarantine" });
     await seedQueuedActivity({ agentHash: agent, protocol: "p-quarantine" });
     await seedQueuedActivity({ agentHash: agent, protocol: "p-quarantine" });
-    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [] };
+    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [], transactionValueRaw: null };
 
     await runVerificationPass(depsWithReader(readerReturning(reverted)));
 
@@ -519,7 +520,7 @@ describe("verification worker", () => {
       tokenInAddress: "0xaaa",
       executedInRaw: "1000000",
     });
-    const receipt: ReceiptView = { status: "success", blockTimestamp: new Date(), erc20Transfers: [] };
+    const receipt: ReceiptView = { status: "success", blockTimestamp: new Date(), erc20Transfers: [], transactionValueRaw: null };
 
     await runVerificationPass(depsWithReader(readerReturning(receipt)));
 
@@ -536,7 +537,7 @@ describe("verification worker", () => {
       kind: "launch",
       eventRole: "token_launch",
     });
-    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [] };
+    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [], transactionValueRaw: null };
 
     await runVerificationPass(depsWithReader(readerReturning(reverted)));
 
@@ -549,7 +550,7 @@ describe("verification worker", () => {
     const agent = "c3".repeat(32);
     await seedAgent(agent);
     const activityId = await seedQueuedActivity({ agentHash: agent, protocol: "p-swap-mismatch" });
-    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [] };
+    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [], transactionValueRaw: null };
 
     await runVerificationPass(depsWithReader(readerReturning(reverted)));
 
@@ -567,7 +568,7 @@ describe("verification worker", () => {
       kind: "bridge",
       eventRole: "bridge_deposit",
     });
-    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [] };
+    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [], transactionValueRaw: null };
 
     await runVerificationPass(depsWithReader(readerReturning(reverted)));
 
@@ -585,7 +586,7 @@ describe("verification worker", () => {
       kind: "launch",
       eventRole: "swap",
     });
-    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [] };
+    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [], transactionValueRaw: null };
 
     await runVerificationPass(depsWithReader(readerReturning(reverted)));
 
@@ -600,7 +601,7 @@ describe("verification worker", () => {
     await seedQueuedActivity({ agentHash: agent, protocol: "p-launch-spoofed-quarantine", kind: "launch", eventRole: "swap" });
     await seedQueuedActivity({ agentHash: agent, protocol: "p-launch-spoofed-quarantine", kind: "launch", eventRole: "swap" });
     await seedQueuedActivity({ agentHash: agent, protocol: "p-launch-spoofed-quarantine", kind: "launch", eventRole: "swap" });
-    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [] };
+    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [], transactionValueRaw: null };
 
     await runVerificationPass(depsWithReader(readerReturning(reverted)));
 
@@ -622,7 +623,7 @@ describe("verification worker", () => {
       usdInEst: "500",
       clientConfirmedAt: confirmedAt,
     });
-    const receipt: ReceiptView = { status: "success", blockTimestamp: confirmedAt, erc20Transfers: [] };
+    const receipt: ReceiptView = { status: "success", blockTimestamp: confirmedAt, erc20Transfers: [], transactionValueRaw: null };
 
     await runVerificationPass(depsWithReader(readerReturning(receipt)));
 
@@ -647,6 +648,7 @@ describe("verification worker", () => {
       status: "success",
       blockTimestamp: new Date("2026-07-25T23:30:00.000Z"),
       erc20Transfers: [],
+      transactionValueRaw: null,
     };
 
     await runVerificationPass(depsWithReader(readerReturning(receipt)));

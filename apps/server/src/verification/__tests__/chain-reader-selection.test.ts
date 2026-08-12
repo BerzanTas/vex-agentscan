@@ -85,6 +85,7 @@ describe("selectChainReader", () => {
       status: "success",
       blockTimestamp: context.clientConfirmedAt,
       erc20Transfers: [],
+      transactionValueRaw: null,
     });
     expect(evmReceipt).toEqual(solanaReceipt);
   });

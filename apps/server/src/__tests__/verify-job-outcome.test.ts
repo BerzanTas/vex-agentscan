@@ -112,6 +112,7 @@ describe("resolveJobOutcome", () => {
             status: "success",
             blockTimestamp,
             erc20Transfers: [],
+            transactionValueRaw: null,
           }),
         }),
       },

@@ -118,6 +118,7 @@ describe("makeSolanaChainReader", () => {
       status: "success",
       blockTimestamp: new Date(blockTimeSecond * 1000),
       erc20Transfers: [],
+      transactionValueRaw: null,
     });
   });
 
@@ -132,6 +133,7 @@ describe("makeSolanaChainReader", () => {
       status: "reverted",
       blockTimestamp: new Date(blockTimeSecond * 1000),
       erc20Transfers: [],
+      transactionValueRaw: null,
     });
   });
 
@@ -152,6 +154,7 @@ describe("makeSolanaChainReader", () => {
       status: "success",
       blockTimestamp: new Date(blockTimeSecond * 1000),
       erc20Transfers: [],
+      transactionValueRaw: null,
     });
   });
 
