@@ -61,6 +61,7 @@ const revertedReceipt: ReceiptView = {
   status: "reverted",
   blockTimestamp: new Date(),
   erc20Transfers: [],
+  transactionValueRaw: null,
 };
 
 const revertedReader: ChainReader = {
