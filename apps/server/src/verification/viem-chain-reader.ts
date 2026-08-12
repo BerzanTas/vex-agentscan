@@ -42,6 +42,7 @@ function confirmAllReaderFor(context: ChainReaderContext): ChainReader {
         status: "success",
         blockTimestamp: context.clientConfirmedAt ?? new Date(),
         erc20Transfers: declaredTransfersFrom(context),
+        transactionValueRaw: context.executedInRaw,
       } satisfies ReceiptView),
   };
 }
@@ -61,6 +62,7 @@ export function makeChainReader(entry: ChainEntry, config: Config, context: Chai
         blockTimestamp: new Date(Number(block.timestamp) * 1000),
         blockNumber: receipt.blockNumber,
         erc20Transfers: erc20TransfersFrom(receipt.logs),
+        transactionValueRaw: await transactionValueOrNull(client, txHash),
         logs: rawLogsFrom(receipt.logs),
       };
     },
@@ -78,6 +80,15 @@ async function receiptOrNull(client: PublicClient, txHash: string): Promise<Tran
   } catch (error) {
     if (error instanceof TransactionReceiptNotFoundError) return null;
     throw error;
+  }
+}
+
+async function transactionValueOrNull(client: PublicClient, txHash: string): Promise<string | null> {
+  try {
+    const transaction = await client.getTransaction({ hash: txHash as Hash });
+    return transaction.value.toString();
+  } catch {
+    return null;
   }
 }
 
