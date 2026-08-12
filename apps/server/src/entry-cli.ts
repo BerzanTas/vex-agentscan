@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import type pg from "pg";
 import { revokeTokenAttestations } from "./cli/attestation-revoke.js";
+import { requeueUnpricedActivities } from "./cli/pricing-requeue.js";
 import { listAgentsAwaitingPurge } from "./cli/purge-status.js";
 import { liftQuarantine, listQuarantinedAgents } from "./cli/quarantine.js";
 import { retryVerification, type RetryRefusal } from "./cli/verify-retry.js";
@@ -80,6 +81,18 @@ program
       process.exitCode = 1;
       return;
     }
+    printJson(outcome);
+  });
+
+program
+  .command("pricing")
+  .command("requeue")
+  .description("re-open terminally unpriced activities for another pricing pass")
+  .option("--chain-id <id>", "only requeue activities on this chain")
+  .action(async (options: { chainId?: string }) => {
+    const outcome = await withPool((pool) =>
+      requeueUnpricedActivities(pool, options.chainId === undefined ? undefined : BigInt(options.chainId)),
+    );
     printJson(outcome);
   });
 
