@@ -32,11 +32,32 @@ function blockTimeOutsideTolerance(receipt: ReceiptView, input: VerificationInpu
   return driftMs > input.timeToleranceMin * 60_000;
 }
 
+const EVM_NATIVE_SENTINEL = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+
 function declaredAmountsMismatch(receipt: ReceiptView, input: VerificationInput): boolean {
-  return (
-    declaredLegMismatch(receipt, input.tokenInAddress, input.executedInRaw, input.amountTolerancePct) ||
-    declaredLegMismatch(receipt, input.tokenOutAddress, input.executedOutRaw, input.amountTolerancePct)
-  );
+  return declaredInputMismatch(receipt, input) || declaredOutputMismatch(receipt, input);
+}
+
+function declaredInputMismatch(receipt: ReceiptView, input: VerificationInput): boolean {
+  if (isNativeToken(input.tokenInAddress)) {
+    return nativeInputMismatch(receipt, input.executedInRaw, input.amountTolerancePct);
+  }
+  return declaredLegMismatch(receipt, input.tokenInAddress, input.executedInRaw, input.amountTolerancePct);
+}
+
+function declaredOutputMismatch(receipt: ReceiptView, input: VerificationInput): boolean {
+  if (isNativeToken(input.tokenOutAddress)) return false;
+  return declaredLegMismatch(receipt, input.tokenOutAddress, input.executedOutRaw, input.amountTolerancePct);
+}
+
+function nativeInputMismatch(receipt: ReceiptView, declaredRaw: string | null, tolerancePct: number): boolean {
+  if (declaredRaw === null) return false;
+  if (receipt.transactionValueRaw === null) return false;
+  return !withinTolerance(BigInt(receipt.transactionValueRaw), BigInt(declaredRaw), tolerancePct);
+}
+
+function isNativeToken(tokenAddress: string | null): boolean {
+  return tokenAddress !== null && sameAddress(tokenAddress, EVM_NATIVE_SENTINEL);
 }
 
 function declaredLegMismatch(

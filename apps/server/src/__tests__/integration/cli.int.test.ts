@@ -49,7 +49,11 @@ async function seedAgent(
   );
 }
 
-async function seedActivity(agentHash: string, verificationState: string): Promise<{ activityId: bigint; publicId: string }> {
+async function seedActivity(
+  agentHash: string,
+  verificationState: string,
+  protocol = "p-cli",
+): Promise<{ activityId: bigint; publicId: string }> {
   seedCounter += 1;
   const rowKey = `cli-seed-${seedCounter}`;
   const inserted = await db.pool.query<{ id: string }>(
@@ -57,12 +61,20 @@ async function seedActivity(agentHash: string, verificationState: string): Promi
        (agent_hash, source_row_id, public_id, source_execution_id, event_index, kind, event_role, status,
         protocol, chain_family, chain_id, usd_in_est, tx_hash,
         client_created_at, client_confirmed_at, statuses_seen, verification_state, received_schema_version)
-     VALUES ($1, $2, $2, $2, 0, 'swap', 'swap', 'confirmed', 'p-cli', 'eip155', 8453, '7.5', $3,
+     VALUES ($1, $2, $2, $2, 0, 'swap', 'swap', 'confirmed', $5, 'eip155', 8453, '7.5', $3,
              now() - interval '1 hour', '2026-07-29T10:00:00Z', ARRAY['pending','confirmed'], $4, 1)
      RETURNING id`,
-    [agentHash, rowKey, `0xtx-${rowKey}`, verificationState],
+    [agentHash, rowKey, `0xtx-${rowKey}`, verificationState, protocol],
   );
   return { activityId: BigInt(onlyRow(inserted.rows).id), publicId: rowKey };
+}
+
+async function txCountOf(protocol: string): Promise<number> {
+  const result = await db.pool.query<{ tx_count: number }>(
+    "SELECT COALESCE(sum(tx_count), 0)::int AS tx_count FROM daily_aggregates WHERE protocol = $1",
+    [protocol],
+  );
+  return onlyRow(result.rows).tx_count;
 }
 
 async function agentRowOf(agentHash: string): Promise<{ status: string; strike_count: number }> {
@@ -112,8 +124,8 @@ describe("operator cli actions", () => {
     expect(await agentRowOf(activeAgent)).toEqual({ status: "active", strike_count: 0 });
   });
 
-  it("verify retry requeues the activity and inserts a due job with zero attempts in one transaction outcome", async () => {
-    const { activityId, publicId } = await seedActivity(activeAgent, "mismatch");
+  it("verify retry requeues an unverifiable activity and inserts a due job with zero attempts in one transaction outcome", async () => {
+    const { activityId, publicId } = await seedActivity(activeAgent, "none");
 
     const outcome = await retryVerification(db.pool, publicId);
 
@@ -147,7 +159,42 @@ describe("operator cli actions", () => {
   it("verify retry reports an unknown public id without touching anything", async () => {
     const outcome = await retryVerification(db.pool, "no-such-public-id");
 
-    expect(outcome).toEqual({ requeued: false });
+    expect(outcome).toEqual({ requeued: false, refusal: "not_found" });
+  });
+
+  it("verify retry refuses a finalized activity so a worker pass cannot double-count it", async () => {
+    const { activityId, publicId } = await seedActivity(activeAgent, "verified_full", "p-retry-guard");
+
+    const outcome = await retryVerification(db.pool, publicId);
+
+    expect(outcome).toEqual({ requeued: false, refusal: "not_retryable", state: "verified_full" });
+    expect(await verificationStateOf(activityId)).toBe("verified_full");
+    const job = await db.pool.query("SELECT 1 FROM verification_jobs WHERE activity_id = $1", [
+      activityId.toString(),
+    ]);
+    expect(job.rows).toEqual([]);
+    await finalizeVerification(
+      db.pool,
+      activityId,
+      { result: "verified_full", blockTimestamp: new Date("2026-07-29T10:00:00Z") },
+      config,
+    );
+    expect(await txCountOf("p-retry-guard")).toBe(0);
+  });
+
+  it("verify retry resurrects an unverifiable activity whose verify cycle then counts it exactly once", async () => {
+    const { activityId, publicId } = await seedActivity(activeAgent, "none", "p-retry-once");
+    const verdict = { result: "verified_full", blockTimestamp: new Date("2026-07-29T10:00:00Z") } as const;
+
+    const first = await retryVerification(db.pool, publicId);
+    await finalizeVerification(db.pool, activityId, verdict, config);
+    const second = await retryVerification(db.pool, publicId);
+    await finalizeVerification(db.pool, activityId, verdict, config);
+
+    expect(first).toEqual({ requeued: true });
+    expect(second).toEqual({ requeued: false, refusal: "not_retryable", state: "verified_full" });
+    expect(await verificationStateOf(activityId)).toBe("verified_full");
+    expect(await txCountOf("p-retry-once")).toBe(1);
   });
 
   it("purge status lists revoked agents without purged_at including their age", async () => {

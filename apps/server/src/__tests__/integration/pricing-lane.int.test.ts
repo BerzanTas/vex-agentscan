@@ -25,6 +25,7 @@ const VERIFIED_AT = "2026-08-06T09:15:00Z";
 const LATE_UTC_EVENING = "2026-08-04T23:50:00Z";
 const WETH = "0x4200000000000000000000000000000000000006";
 const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+const MEMECOIN = `0x${"5".repeat(40)}`;
 const NATIVE_SENTINEL = `0x${"E".repeat(40)}`;
 
 const wethPoint: PricePoint = { priceUsd: "2500", confidence: 0.99, atSecond: PRICE_HOUR_SECOND };
@@ -571,6 +572,60 @@ describe("runPricingPass", () => {
     expect(state.usd_out_priced).toBeNull();
   });
 
+  it("finalizes a memecoin sell with a null IN leg and books the priced OUT leg as volume", async () => {
+    const activityId = await seedPricingActivity({
+      publicId: "memecoin-sell",
+      tokenInAddress: MEMECOIN,
+    });
+    const feed = recordingFeed({ [`base:${USDC.toLowerCase()}`]: usdcPoint });
+
+    await runPricingPass(depsWith(feed.feed));
+
+    const state = await pricingStateOf(activityId);
+    expect(state.pricing_state).toBe("server_priced");
+    expect(state.usd_in_priced).toBeNull();
+    expect(state.usd_out_priced).toBe("2495");
+    expect(await pricedVolumeRows()).toEqual([
+      { day: AGGREGATE_DAY, volume_usd_priced: "2495", tx_count: 0 },
+    ]);
+  });
+
+  it("finalizes a memecoin buy with a null OUT leg and books the priced IN leg as volume", async () => {
+    const activityId = await seedPricingActivity({
+      publicId: "memecoin-buy",
+      tokenOutAddress: MEMECOIN,
+    });
+    const feed = recordingFeed({ [`base:${WETH.toLowerCase()}`]: wethPoint });
+
+    await runPricingPass(depsWith(feed.feed));
+
+    const state = await pricingStateOf(activityId);
+    expect(state.pricing_state).toBe("server_priced");
+    expect(state.usd_in_priced).toBe("2500");
+    expect(state.usd_out_priced).toBeNull();
+    expect(await pricedVolumeRows()).toEqual([
+      { day: AGGREGATE_DAY, volume_usd_priced: "2500", tx_count: 0 },
+    ]);
+  });
+
+  it("keeps a row pending with no volume booked when the unpriced leg failed at the feed", async () => {
+    const activityId = await seedPricingActivity({ publicId: "outage-beside-cached-hit" });
+    await pool.query(
+      `INSERT INTO token_prices (chain_family, chain_id, token_address, price_hour, price_usd, confidence, source)
+       VALUES ('eip155', 8453, $1, $2::timestamptz, 2500, 0.99, 'seed')`,
+      [WETH.toLowerCase(), PRICE_HOUR],
+    );
+
+    await runPricingPass(depsWith(rejectingFeed().feed));
+
+    const state = await pricingStateOf(activityId);
+    expect(state.pricing_state).toBe("pending");
+    expect(state.pricing_attempts).toBe(1);
+    expect(state.usd_in_priced).toBeNull();
+    expect(state.usd_out_priced).toBeNull();
+    expect(await pricedVolumeRows()).toEqual([]);
+  });
+
   it("is terminally unpriced without consuming an attempt when no leg is present", async () => {
     const activityId = await seedPricingActivity({
       publicId: "no-legs",
@@ -639,8 +694,8 @@ describe("runPricingPass", () => {
     expect(coverage[0]).toMatchObject({ processed: 1, serverPriced: 0, unpriceable: 0, nothingToPrice: 1 });
   });
 
-  it("is terminally unpriced on the first pass when the chain has no price feed key", async () => {
-    const activityId = await seedPricingActivity({ publicId: "no-feed-key", chainId: 4663 });
+  it("is terminally unpriced on the first pass when the chain resolves to no price feed", async () => {
+    const activityId = await seedPricingActivity({ publicId: "no-price-feed", chainId: 999999 });
     const feed = recordingFeed({});
 
     await runPricingPass(depsWith(feed.feed));
@@ -1060,7 +1115,7 @@ describe("runPricingPass", () => {
       tokenOutDecimals: null,
       executedOutRaw: null,
     });
-    await seedPricingActivity({ publicId: "ratio-unmappable", chainId: 4663 });
+    await seedPricingActivity({ publicId: "ratio-unmappable", chainId: 999999 });
     const feed = recordingFeed({ [`base:${WETH.toLowerCase()}`]: wethPoint, [`base:${USDC.toLowerCase()}`]: usdcPoint });
     const capturingLogger = {
       ...logger,

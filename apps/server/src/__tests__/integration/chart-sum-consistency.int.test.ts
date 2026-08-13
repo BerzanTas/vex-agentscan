@@ -6,7 +6,7 @@ import { loadConfig } from "../../config.js";
 import { activityAggregateDaySql } from "../../repos/activity-time-anchor.js";
 import { chartBuckets, type ChartBucketRead } from "../../repos/read-repo.js";
 import { startTestDb } from "../../testing/pg-harness.js";
-import { makeChainReader } from "../../verification/viem-chain-reader.js";
+import { selectChainReader } from "../../verification/chain-reader-selection.js";
 import { runVerificationPass } from "../../worker/loop.js";
 
 const agentHash = "c".repeat(64);
@@ -127,7 +127,7 @@ beforeAll(async () => {
     config: confirmAllConfig,
     now: () => new Date(),
     resolveChain,
-    chainReaderFor: (entry, context) => makeChainReader(entry, confirmAllConfig, context),
+    chainReaderFor: (entry, context) => selectChainReader(entry, confirmAllConfig, context),
     logger,
   });
   await addPricedVolumeAsTheLaneWould(db.pool);

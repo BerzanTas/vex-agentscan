@@ -24,6 +24,7 @@ function tokenCreatedLog() {
 
 const chainEntry = {
   canonicalSlug: "robinhood",
+  chainFamily: "eip155" as const,
   displayName: "Robinhood Chain",
   explorerTxUrl: () => null,
   rpcUrls: [],
@@ -36,6 +37,7 @@ const workingReader: ChainReader = {
     blockTimestamp: new Date(),
     blockNumber: 100n,
     erc20Transfers: [],
+    transactionValueRaw: null,
     logs: [tokenCreatedLog()],
   }),
   getHeadBlockNumber: async () => 105n,

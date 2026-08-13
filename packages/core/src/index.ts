@@ -2,6 +2,7 @@ export {
   evmChains,
   solanaChains,
   type ChainEntry,
+  type ChainFamily,
   type EvmChain,
   type SolanaChain,
 } from "./chain-registry/chains.js";
@@ -62,7 +63,6 @@ export {
   chainCatalog,
   chainKeysForSlug,
   type CatalogChain,
-  type ChainFamily,
   type ChainKeyForSlug,
 } from "./chain-registry/catalog.js";
 export {

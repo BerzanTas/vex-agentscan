@@ -456,6 +456,31 @@ describe("GET /api/agents/:name when a priced row has a leg the lane could not v
   });
 });
 
+describe("GET /api/agents/:name when a priced row values only its received leg", () => {
+  beforeAll(async () => {
+    await resetData(db.pool);
+    await seedAgent(db.pool, { agentHash: BOUND_AGENT, name: BOUND_NAME });
+    await seedActivity(db.pool, {
+      agentHash: BOUND_AGENT,
+      daysAgo: 1,
+      usdInPriced: null,
+      usdOutPriced: "2495",
+    });
+  });
+
+  it("counts the row as unpriced and keeps its dollars out of every deployed figure", async () => {
+    const page = (await agentPage(BOUND_NAME)).json<AgentPageDto>();
+
+    expect(page.unpricedSharePct).toBe(100);
+    expect(page.unpriced30dSharePct).toBe(100);
+    expect(page.capitalDeployedPeak30dUsd).toBe("0");
+    expect(page.realizedResultUsd).toBe("0");
+    expect(page.closedRoundTrips).toBe(0);
+    expect(page.protocolBreakdown).toEqual([{ protocol: "kyberswap", volumeUsd: "0", txCount: 1 }]);
+    expect(page.chainBreakdown).toEqual([{ chainSlug: "base", volumeUsd: "0", txCount: 1 }]);
+  });
+});
+
 describe("GET /api/agents/:name mixing a fully priced row with a partly priced one", () => {
   beforeAll(async () => {
     await resetData(db.pool);

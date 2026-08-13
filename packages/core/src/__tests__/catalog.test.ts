@@ -28,10 +28,11 @@ describe("chainKeysForSlug", () => {
     ]);
   });
 
-  it("maps solana to both provider-native keys with their protocols", () => {
+  it("maps solana to every provider-native key with its protocol", () => {
     expect(chainKeysForSlug("solana")).toEqual([
       { chainFamily: "solana", chainId: 20011000000n, protocol: "khalani" },
       { chainFamily: "solana", chainId: 792703809n, protocol: "relay" },
+      { chainFamily: "solana", chainId: 20011000000n, protocol: "jupiter" },
     ]);
   });
 
