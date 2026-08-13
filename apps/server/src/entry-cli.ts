@@ -66,7 +66,7 @@ purge
 
 function retryRefusalMessage(refusal: RetryRefusal): string {
   if (refusal.refusal === "not_found") return "no activity with that public id";
-  return `activity is not retryable in state ${refusal.state}`;
+  return `activity is not retryable in state ${refusal.state} with status ${refusal.status}`;
 }
 
 program
