@@ -2,18 +2,23 @@ import type pg from "pg";
 
 export type RetryRefusal =
   | { requeued: false; refusal: "not_found" }
-  | { requeued: false; refusal: "not_retryable"; state: string };
+  | { requeued: false; refusal: "not_retryable"; state: string; status: string };
 
 export type RetryVerificationOutcome = { requeued: true } | RetryRefusal;
 
 async function explainRefusal(client: pg.PoolClient, publicId: string): Promise<RetryRefusal> {
-  const found = await client.query<{ verification_state: string }>(
-    "SELECT verification_state FROM activities WHERE public_id = $1",
+  const found = await client.query<{ verification_state: string; status: string }>(
+    "SELECT verification_state, status FROM activities WHERE public_id = $1",
     [publicId],
   );
   const activity = found.rows[0];
   if (activity === undefined) return { requeued: false, refusal: "not_found" };
-  return { requeued: false, refusal: "not_retryable", state: activity.verification_state };
+  return {
+    requeued: false,
+    refusal: "not_retryable",
+    state: activity.verification_state,
+    status: activity.status,
+  };
 }
 
 export async function retryVerification(pool: pg.Pool, publicId: string): Promise<RetryVerificationOutcome> {
@@ -22,7 +27,7 @@ export async function retryVerification(pool: pg.Pool, publicId: string): Promis
     await client.query("BEGIN");
     const requeued = await client.query<{ id: string }>(
       `UPDATE activities SET verification_state = 'queued'
-       WHERE public_id = $1 AND verification_state = 'none'
+       WHERE public_id = $1 AND verification_state = 'none' AND status = 'confirmed' AND tx_hash IS NOT NULL
        RETURNING id`,
       [publicId],
     );
