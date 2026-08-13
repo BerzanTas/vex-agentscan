@@ -16,18 +16,27 @@ type ActivitySeed = {
   confirmedHoursAgo: number;
   kind?: "swap" | "bridge" | "launch";
   eventRole?: "swap" | "bridge_deposit" | "bridge_fill_observed" | "token_launch";
+  usdInPriced?: string | null;
+  usdOutPriced?: string | null;
+  tokenOutAddress?: string | null;
 };
+
+function defaultUsdInPriced(seed: ActivitySeed): string | null {
+  if (seed.usdInPriced !== undefined) return seed.usdInPriced;
+  return seed.pricingState === "server_priced" ? "1.00" : null;
+}
 
 async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
   await pool.query(
     `INSERT INTO activities
        (agent_hash, source_row_id, public_id, source_execution_id, event_index, kind, event_role, status,
-        protocol, chain_family, chain_id, usd_in_priced, pricing_state, tx_hash,
+        protocol, chain_family, chain_id, usd_in_priced, usd_out_priced, token_out_address,
+        pricing_state, tx_hash,
         client_created_at, client_confirmed_at, statuses_seen, verification_state, verified_at,
         received_at, received_schema_version)
      VALUES ($1, $2, $2, $2, 0, $6, $7, 'confirmed',
-             'kyberswap', 'eip155', 8453,
-             CASE WHEN $3 = 'server_priced' THEN 1.00 END, $3, '0x' || $2,
+             'kyberswap', 'eip155', 8453, $8::numeric, $9::numeric, $10,
+             $3, '0x' || $2,
              now() - make_interval(hours => $4::int), now() - make_interval(hours => $4::int),
              ARRAY['confirmed'], $5, now(), now(), 1)`,
     [
@@ -38,6 +47,9 @@ async function seedActivity(pool: pg.Pool, seed: ActivitySeed): Promise<void> {
       seed.verificationState,
       seed.kind ?? "swap",
       seed.eventRole ?? "swap",
+      defaultUsdInPriced(seed),
+      seed.usdOutPriced ?? null,
+      seed.tokenOutAddress ?? null,
     ],
   );
 }
@@ -104,6 +116,35 @@ describe("GET /api/pricing-coverage", () => {
       unpricedActivityCount: 1,
       pendingActivityCount: 1,
       pricedCoverage: 0.75,
+    });
+  });
+
+  it("counts a partially priced row as unpriced on whichever leg the figure is missing", async () => {
+    await resetActivities();
+    await seedActivity(db.pool, {
+      sourceRowId: "cov-partial-sell",
+      pricingState: "server_priced",
+      verificationState: "verified_full",
+      confirmedHoursAgo: INSIDE_THE_DAY,
+      usdInPriced: null,
+      usdOutPriced: "2495",
+      tokenOutAddress: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+    });
+    await seedActivity(db.pool, {
+      sourceRowId: "cov-partial-buy",
+      pricingState: "server_priced",
+      verificationState: "verified_full",
+      confirmedHoursAgo: INSIDE_THE_DAY,
+      usdInPriced: "2500",
+      usdOutPriced: null,
+      tokenOutAddress: `0x${"5".repeat(40)}`,
+    });
+
+    expect(await coverageFor("24h")).toEqual({
+      pricedActivityCount: 0,
+      unpricedActivityCount: 2,
+      pendingActivityCount: 0,
+      pricedCoverage: 0,
     });
   });
 

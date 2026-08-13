@@ -5,6 +5,8 @@ import { evaluateVerification, type VerificationInput } from "../verification/ev
 const confirmedAt = new Date("2026-07-30T12:00:00Z");
 const blockTimestamp = new Date("2026-07-30T12:02:00Z");
 
+const nativeSentinel = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+
 const receiptFixture = (overrides: Partial<ReceiptView> = {}): ReceiptView => ({
   status: "success",
   blockTimestamp,
@@ -12,6 +14,7 @@ const receiptFixture = (overrides: Partial<ReceiptView> = {}): ReceiptView => ({
     { token: "0xaa11", from: "0x1111", to: "0x2222", amountRaw: "1000000" },
     { token: "0xbb22", from: "0x2222", to: "0x1111", amountRaw: "2000000" },
   ],
+  transactionValueRaw: null,
   ...overrides,
 });
 
@@ -91,5 +94,49 @@ describe("evaluateVerification", () => {
 
   it("returns verified_full when everything matches", () => {
     expect(evaluateVerification(receiptFixture(), inputFixture())).toEqual({ result: "verified_full", blockTimestamp });
+  });
+
+  it("verifies a native input leg when the transaction value is within the tolerance", () => {
+    const receipt = receiptFixture({
+      erc20Transfers: [{ token: "0xbb22", from: "0x2222", to: "0x1111", amountRaw: "2000000" }],
+      transactionValueRaw: "1004000000000000000",
+    });
+    const input = inputFixture({ tokenInAddress: nativeSentinel, executedInRaw: "1000000000000000000" });
+    expect(evaluateVerification(receipt, input)).toEqual({ result: "verified_full", blockTimestamp });
+  });
+
+  it("strikes amount_mismatch when the transaction value is outside the tolerance for a native input leg", () => {
+    const receipt = receiptFixture({
+      erc20Transfers: [{ token: "0xbb22", from: "0x2222", to: "0x1111", amountRaw: "2000000" }],
+      transactionValueRaw: "1006000000000000000",
+    });
+    const input = inputFixture({ tokenInAddress: nativeSentinel, executedInRaw: "1000000000000000000" });
+    expect(evaluateVerification(receipt, input)).toEqual({ result: "strike", reason: "amount_mismatch" });
+  });
+
+  it("skips the native input check when the transaction value is unavailable", () => {
+    const receipt = receiptFixture({
+      erc20Transfers: [{ token: "0xbb22", from: "0x2222", to: "0x1111", amountRaw: "2000000" }],
+      transactionValueRaw: null,
+    });
+    const input = inputFixture({ tokenInAddress: nativeSentinel, executedInRaw: "1000000000000000000" });
+    expect(evaluateVerification(receipt, input)).toEqual({ result: "verified_full", blockTimestamp });
+  });
+
+  it("skips the cross-check for a native output leg with no matching transfer logs", () => {
+    const receipt = receiptFixture({
+      erc20Transfers: [{ token: "0xaa11", from: "0x1111", to: "0x2222", amountRaw: "1000000" }],
+    });
+    const input = inputFixture({ tokenOutAddress: nativeSentinel, executedOutRaw: "3000000000000000000" });
+    expect(evaluateVerification(receipt, input)).toEqual({ result: "verified_full", blockTimestamp });
+  });
+
+  it("still strikes a mismatching erc20 output leg alongside a matching native input leg", () => {
+    const receipt = receiptFixture({
+      erc20Transfers: [],
+      transactionValueRaw: "1000000000000000000",
+    });
+    const input = inputFixture({ tokenInAddress: nativeSentinel, executedInRaw: "1000000000000000000" });
+    expect(evaluateVerification(receipt, input)).toEqual({ result: "strike", reason: "amount_mismatch" });
   });
 });

@@ -72,6 +72,7 @@ const getAttestation = (chainId: bigint, address: string) =>
 
 const chainEntry = {
   canonicalSlug: "robinhood",
+  chainFamily: "eip155" as const,
   displayName: "Robinhood Chain",
   explorerTxUrl: () => null,
   rpcUrls: [],
@@ -116,6 +117,7 @@ describe("attestation verification worker pass", () => {
         blockTimestamp: new Date(),
         blockNumber: 100n,
         erc20Transfers: [],
+        transactionValueRaw: null,
         logs: [tokenCreatedLog(tokenAddress, account.address)],
       }),
       getHeadBlockNumber: async () => 105n,
@@ -147,6 +149,7 @@ describe("attestation verification worker pass", () => {
         blockTimestamp: new Date(),
         blockNumber: 100n,
         erc20Transfers: [],
+        transactionValueRaw: null,
         logs: [tokenCreatedLog(tokenAddress, someoneElse)],
       }),
       getHeadBlockNumber: async () => 105n,
@@ -186,6 +189,7 @@ describe("attestation verification worker pass", () => {
         blockTimestamp: new Date(),
         blockNumber: 100n,
         erc20Transfers: [],
+        transactionValueRaw: null,
         logs: [tokenCreatedLog(tokenAddress, account.address)],
       }),
       getHeadBlockNumber: async () => 105n,

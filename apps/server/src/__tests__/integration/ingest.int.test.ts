@@ -70,6 +70,8 @@ const batchOf = (events: unknown[], overrides: Record<string, unknown> = {}) => 
   ...overrides,
 });
 
+const healthyAgent = { strikeCount: 0, status: "active" };
+
 const logLines: string[] = [];
 
 type PinoDestination = { write: (line: string) => unknown };
@@ -165,7 +167,9 @@ describe("POST /v1/events", () => {
       batchOf([], { agentHash: quarantinedAgentHash }),
     );
     expect(response.statusCode).toBe(403);
-    expect(response.json().error.code).toBe("quarantined");
+    expect(response.json()).toEqual({
+      error: { code: "quarantined", message: "agent is quarantined" },
+    });
   });
 
   it("rejects a batch above MAX_BATCH_EVENTS with 413 payload_too_large before per-event validation", async () => {
@@ -209,6 +213,7 @@ describe("POST /v1/events", () => {
       accepted: 2,
       duplicates: 0,
       rejected: [{ index: 1, code: "validation_failed" }],
+      agent: healthyAgent,
     });
   });
 
@@ -220,22 +225,22 @@ describe("POST /v1/events", () => {
     ]);
     const first = await postEvents(activeToken, retriedBatch);
     expect(first.statusCode).toBe(200);
-    expect(first.json()).toEqual({ accepted: 3, duplicates: 0, rejected: [] });
+    expect(first.json()).toEqual({ accepted: 3, duplicates: 0, rejected: [], agent: healthyAgent });
     const retry = await postEvents(activeToken, retriedBatch);
     expect(retry.statusCode).toBe(200);
-    expect(retry.json()).toEqual({ accepted: 0, duplicates: 3, rejected: [] });
+    expect(retry.json()).toEqual({ accepted: 0, duplicates: 3, rejected: [], agent: healthyAgent });
   });
 
   it("promotes pending to confirmed with txHash and enqueues verification", async () => {
     const pendingPost = await postEvents(activeToken, batchOf([pendingEvent("r20")]));
     expect(pendingPost.statusCode).toBe(200);
-    expect(pendingPost.json()).toEqual({ accepted: 1, duplicates: 0, rejected: [] });
+    expect(pendingPost.json()).toEqual({ accepted: 1, duplicates: 0, rejected: [], agent: healthyAgent });
     const pendingRow = await activityRow("r20");
     expect(pendingRow.status).toBe("pending");
     expect(pendingRow.verification_state).toBe("none");
     const confirmedPost = await postEvents(activeToken, batchOf([goldenEvent({ sourceRowId: "r20" })]));
     expect(confirmedPost.statusCode).toBe(200);
-    expect(confirmedPost.json()).toEqual({ accepted: 1, duplicates: 0, rejected: [] });
+    expect(confirmedPost.json()).toEqual({ accepted: 1, duplicates: 0, rejected: [], agent: healthyAgent });
     const promotedRow = await activityRow("r20");
     expect(promotedRow.status).toBe("confirmed");
     expect(promotedRow.statuses_seen).toEqual(["pending", "confirmed"]);
@@ -251,7 +256,7 @@ describe("POST /v1/events", () => {
       batchOf([goldenEvent({ sourceRowId: "r21" })], { backfill: true }),
     );
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ accepted: 1, duplicates: 0, rejected: [] });
+    expect(response.json()).toEqual({ accepted: 1, duplicates: 0, rejected: [], agent: healthyAgent });
     const row = await activityRow("r21");
     expect(row.status).toBe("confirmed");
     expect(row.statuses_seen).toEqual(["confirmed"]);
@@ -286,7 +291,7 @@ describe("POST /v1/events", () => {
       ),
     );
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ accepted: 1, duplicates: 0, rejected: [] });
+    expect(response.json()).toEqual({ accepted: 1, duplicates: 0, rejected: [], agent: healthyAgent });
     const row = await activityRow("r30");
     expect(row.kind).toBe("launch");
     expect(row.event_role).toBe("token_launch");
@@ -319,7 +324,7 @@ describe("POST /v1/events", () => {
       ),
     );
     expect(retry.statusCode).toBe(200);
-    expect(retry.json()).toEqual({ accepted: 0, duplicates: 1, rejected: [] });
+    expect(retry.json()).toEqual({ accepted: 0, duplicates: 1, rejected: [], agent: healthyAgent });
   });
 
   it("stores both legs and the cost breakdown of a two-leg yield event", async () => {
@@ -344,7 +349,7 @@ describe("POST /v1/events", () => {
       ]),
     );
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ accepted: 1, duplicates: 0, rejected: [] });
+    expect(response.json()).toEqual({ accepted: 1, duplicates: 0, rejected: [], agent: healthyAgent });
 
     const row = await activityRow("r40");
     expect(row.kind).toBe("yield");
@@ -398,7 +403,7 @@ describe("POST /v1/events", () => {
       ]),
     );
     expect(confirmedPost.statusCode).toBe(200);
-    expect(confirmedPost.json()).toEqual({ accepted: 1, duplicates: 0, rejected: [] });
+    expect(confirmedPost.json()).toEqual({ accepted: 1, duplicates: 0, rejected: [], agent: healthyAgent });
 
     const promoted = await activityRow("r41");
     expect(promoted.status).toBe("confirmed");
@@ -413,7 +418,7 @@ describe("POST /v1/events", () => {
       batchOf([goldenEvent({ sourceRowId: "r22", wallet_address: walletValue })]),
     );
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ accepted: 1, duplicates: 0, rejected: [] });
+    expect(response.json()).toEqual({ accepted: 1, duplicates: 0, rejected: [], agent: healthyAgent });
     const row = await activityRow("r22");
     expect(row.status).toBe("confirmed");
     const rowJson = JSON.stringify(row);
@@ -435,6 +440,7 @@ describe("POST /v1/events", () => {
       accepted: 1,
       duplicates: 0,
       rejected: [{ index: 1, code: "validation_failed" }],
+      agent: healthyAgent,
     });
     const outcomeEntries = logLines
       .slice(linesBefore)

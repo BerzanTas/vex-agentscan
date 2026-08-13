@@ -32,6 +32,7 @@ const envSchema = z.object({
   VERIFY_BACKOFF_SCHEDULE: z.string().default("1m,5m,30m,2h,12h").transform(commaSeparated),
   VERIFY_MAX_AGE_DAYS: z.coerce.number().int().default(7),
   VERIFY_FAKE_MODE: z.enum(["off", "confirm_all"]).default("off"),
+  SOLANA_RPC_TIMEOUT_MS: z.coerce.number().int().min(1).default(10000),
   UNKNOWN_CHAIN_BACKOFF_MIN: z.coerce.number().int().default(360),
   WORKER_POLL_INTERVAL_SEC: z.coerce.number().int().default(15),
   WORKER_BATCH: z.coerce.number().int().default(20),

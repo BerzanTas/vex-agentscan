@@ -151,6 +151,7 @@ const successReceipt: ReceiptView = {
   status: "success",
   blockTimestamp: CONFIRMED_AT,
   erc20Transfers: [],
+  transactionValueRaw: null,
 };
 
 const readerReturning = (receipt: ReceiptView): ChainReader => ({

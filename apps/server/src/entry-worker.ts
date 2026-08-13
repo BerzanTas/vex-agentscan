@@ -3,7 +3,7 @@ import { buildAttestationChainRegistry, resolveChain } from "@agentscan/core";
 import { loadConfig } from "./config.js";
 import { createPool } from "./db.js";
 import { DEFILLAMA_PRICE_SOURCE, makeDefiLlamaPriceFeed } from "./pricing/defillama-price-feed.js";
-import { makeChainReader } from "./verification/viem-chain-reader.js";
+import { selectChainReader } from "./verification/chain-reader-selection.js";
 import { startAttestationVerificationLoop } from "./worker/attestation-loop.js";
 import { startHeartbeat } from "./worker/heartbeat.js";
 import { startVerificationLoop } from "./worker/loop.js";
@@ -24,7 +24,7 @@ startVerificationLoop({
   config,
   now: () => new Date(),
   resolveChain,
-  chainReaderFor: (entry, context) => makeChainReader(entry, config, context),
+  chainReaderFor: (entry, context) => selectChainReader(entry, config, context),
   logger,
 });
 startAttestationVerificationLoop({
@@ -32,7 +32,7 @@ startAttestationVerificationLoop({
   config,
   now: () => new Date(),
   resolveChain,
-  chainReaderFor: (entry, context) => makeChainReader(entry, config, context),
+  chainReaderFor: (entry, context) => selectChainReader(entry, config, context),
   chainRegistry: buildAttestationChainRegistry(config.attestFactoryAddressesByChainId),
   logger,
 });
