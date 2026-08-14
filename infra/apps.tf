@@ -51,6 +51,16 @@ resource "azurerm_container_app" "api" {
       concurrent_requests = 50
     }
 
+    custom_scale_rule {
+      name             = "cpu"
+      custom_rule_type = "cpu"
+
+      metadata = {
+        type  = "Utilization"
+        value = "80"
+      }
+    }
+
     container {
       name   = "api"
       image  = local.server_image
@@ -135,6 +145,16 @@ resource "azurerm_container_app" "web" {
     http_scale_rule {
       name                = "http"
       concurrent_requests = 20
+    }
+
+    custom_scale_rule {
+      name             = "cpu"
+      custom_rule_type = "cpu"
+
+      metadata = {
+        type  = "Utilization"
+        value = "80"
+      }
     }
 
     container {
