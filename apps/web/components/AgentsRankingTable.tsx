@@ -1,24 +1,10 @@
-import Link from "next/link";
 import type { AgentStatDto } from "../lib/api";
 import { formatAge, formatUsdCompact, formatUsdAmount } from "../lib/format";
+import { AgentName } from "./AgentName";
 import { EmptyPanel } from "./EmptyPanel";
 
 function countLabel(count: number): string {
   return count.toLocaleString("en-US");
-}
-
-function agentPageHref(name: string): string {
-  return `/agent/${encodeURIComponent(name)}`;
-}
-
-function AgentName({ agent }: { agent: AgentStatDto }) {
-  const name = agent.name ?? null;
-  if (name === null) return <>{agent.alias}</>;
-  return (
-    <Link href={agentPageHref(name)} className="text-text-primary">
-      {name}
-    </Link>
-  );
 }
 
 export function AgentsRankingTable({
