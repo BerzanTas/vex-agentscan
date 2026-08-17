@@ -91,6 +91,45 @@ export const evmChains: readonly EvmChain[] = [
       verificationTier: "full",
     },
   },
+  {
+    chainId: 130n,
+    entry: {
+      canonicalSlug: "unichain",
+      chainFamily: "eip155",
+      priceFeedKey: "unichain",
+      displayName: "Unichain",
+      explorerTxUrl: explorerTx("https://uniscan.xyz"),
+      rpcUrls: ["https://mainnet.unichain.org", "https://unichain-rpc.publicnode.com"],
+      verificationTier: "full",
+    },
+  },
+  {
+    chainId: 143n,
+    entry: {
+      canonicalSlug: "monad",
+      chainFamily: "eip155",
+      priceFeedKey: "monad",
+      displayName: "Monad",
+      explorerTxUrl: explorerTx("https://monadvision.com"),
+      rpcUrls: ["https://rpc.monad.xyz", "https://rpc1.monad.xyz"],
+      verificationTier: "full",
+    },
+  },
+  {
+    chainId: 999n,
+    entry: {
+      canonicalSlug: "hyperevm",
+      chainFamily: "eip155",
+      // DefiLlama's coins API serves HyperEVM under "hyperliquid"; "hyperevm" also
+      // answers today but is absent from https://coins.llama.fi/chains, so the
+      // published slug is the one registered here.
+      priceFeedKey: "hyperliquid",
+      displayName: "HyperEVM",
+      explorerTxUrl: explorerTx("https://hyperevmscan.io"),
+      rpcUrls: ["https://rpc.hyperliquid.xyz/evm"],
+      verificationTier: "full",
+    },
+  },
 ];
 
 const solanaEntry: ChainEntry = {

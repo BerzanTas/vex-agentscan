@@ -21,7 +21,7 @@ const todayAddress = "0xFED8";
 
 const base = 8453;
 const arbitrum = 42161;
-const unregisteredChain = 999;
+const unregisteredChain = 999999;
 
 const hourAgo = 60;
 const tenMinutesAgo = 10;

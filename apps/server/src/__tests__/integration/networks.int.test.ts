@@ -267,6 +267,9 @@ describe("GET /api/networks", () => {
       "optimism",
       "polygon",
       "robinhood",
+      "unichain",
+      "monad",
+      "hyperevm",
       "solana",
     ]);
   });

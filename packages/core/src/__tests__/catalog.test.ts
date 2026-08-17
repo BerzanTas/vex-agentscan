@@ -36,6 +36,18 @@ describe("chainKeysForSlug", () => {
     ]);
   });
 
+  it("maps each newly registered morpho chain to its single evm key", () => {
+    expect(chainKeysForSlug("unichain")).toEqual([
+      { chainFamily: "eip155", chainId: 130n, protocol: null },
+    ]);
+    expect(chainKeysForSlug("monad")).toEqual([
+      { chainFamily: "eip155", chainId: 143n, protocol: null },
+    ]);
+    expect(chainKeysForSlug("hyperevm")).toEqual([
+      { chainFamily: "eip155", chainId: 999n, protocol: null },
+    ]);
+  });
+
   it("returns nothing for a slug outside the registry", () => {
     expect(chainKeysForSlug("bitcoin")).toEqual([]);
   });
