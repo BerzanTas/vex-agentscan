@@ -3,6 +3,7 @@ const PROTOCOL_ICON_SRC = new Map<string, string>([
   ["jupiter", "/protocols/jupiter.png"],
   ["khalani", "/protocols/khalani.svg"],
   ["kyberswap", "/protocols/kyberswap.svg"],
+  ["morpho", "/protocols/morpho.jpg"],
   ["pendle", "/protocols/pendle.jpg"],
   ["relay", "/protocols/relay.jpg"],
   ["trench", "/protocols/trench.jpg"],
