@@ -59,7 +59,7 @@ type SilentQualifier = {
 
 type Qualifier = { names: readonly string[] } | SilentQualifier;
 
-const MEASURED_POPULATION = "bridge deposit";
+const MEASURED_POPULATION = "capital-deploying leg";
 
 const AGENT_PAGE_SILENCE: SilentQualifier = {
   silentBecause: "F4",

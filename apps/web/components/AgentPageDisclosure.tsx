@@ -7,7 +7,7 @@ const TRUNCATION_SENTENCE = "Figures cover the most recent activities only.";
 const PRICED_ONLY_FIGURES_SENTENCE =
   "Those transactions are not fully reflected in the realized result, the win rate or the breakdown volumes, and are still counted in the transaction counts.";
 
-const MEASURED_POPULATION = "this agent's swaps and bridge deposits we have finished pricing";
+const MEASURED_POPULATION = "this agent's capital-deploying legs we have finished pricing";
 
 function readSetSentence(unpricedSharePct: number): string {
   return `Of ${MEASURED_POPULATION}, ${SHARE_FORMAT.format(unpricedSharePct)}% could not be fully priced. ${PRICED_ONLY_FIGURES_SENTENCE}`;
