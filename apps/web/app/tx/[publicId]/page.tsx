@@ -11,6 +11,7 @@ import { TxHashChip } from "../../../components/TxHashChip";
 import { VerificationBadge } from "../../../components/VerificationBadge";
 import { fetchTxDetail, type TxDetailDto } from "../../../lib/api";
 import { formatAge, formatRawAmount, formatUsdAmount } from "../../../lib/format";
+import { legLabel } from "../../../lib/leg-label";
 
 export const revalidate = 30;
 
@@ -21,13 +22,10 @@ function statusLabel(status: string): string {
 }
 
 function pairLabel(detail: TxDetailDto): string {
-  if (detail.tokenInSymbol !== null && detail.tokenOutSymbol !== null) {
-    return `${detail.tokenInSymbol}→${detail.tokenOutSymbol}`;
-  }
-  return detail.eventRole.replace(/_/g, " ");
+  return legLabel(detail, "→");
 }
 
-function amountSummary(detail: TxDetailDto): string | null {
+function spentSummary(detail: TxDetailDto): string | null {
   if (detail.tokenInDecimals === null) return null;
   const symbol = detail.tokenInSymbol === null ? "" : ` ${detail.tokenInSymbol}`;
   if (detail.executedInRaw !== null) {
@@ -37,6 +35,18 @@ function amountSummary(detail: TxDetailDto): string | null {
     return `${formatRawAmount(detail.amountInRaw, detail.tokenInDecimals)}${symbol} est.`;
   }
   return null;
+}
+
+// A borrow, a collateral withdrawal and a reward claim spend nothing, so the spent leg is empty and
+// the received one is the only amount the row carries.
+function receivedSummary(detail: TxDetailDto): string | null {
+  if (detail.tokenOutDecimals === null || detail.executedOutRaw === null) return null;
+  const symbol = detail.tokenOutSymbol === null ? "" : ` ${detail.tokenOutSymbol}`;
+  return `${formatRawAmount(detail.executedOutRaw, detail.tokenOutDecimals)}${symbol}`;
+}
+
+function amountSummary(detail: TxDetailDto): string | null {
+  return spentSummary(detail) ?? receivedSummary(detail);
 }
 
 function networkLabel(detail: TxDetailDto): string {
