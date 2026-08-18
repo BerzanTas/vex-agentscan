@@ -53,6 +53,45 @@ describe("resolveCoinKey", () => {
     });
   });
 
+  it("maps the unichain USDC morpho lends against with the unichain feed key", () => {
+    expect(
+      resolveCoinKey({
+        ...base,
+        chainId: 130n,
+        tokenAddress: "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
+      }),
+    ).toEqual({
+      coinKey: "unichain:0x078d782b760474a361dda0af3839290b0ef57ad6",
+      tokenAddress: "0x078d782b760474a361dda0af3839290b0ef57ad6",
+    });
+  });
+
+  it("maps the monad USDC morpho lends against with the monad feed key", () => {
+    expect(
+      resolveCoinKey({
+        ...base,
+        chainId: 143n,
+        tokenAddress: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+      }),
+    ).toEqual({
+      coinKey: "monad:0x754704bc059f8c67012fed69bc8a327a5aafb603",
+      tokenAddress: "0x754704bc059f8c67012fed69bc8a327a5aafb603",
+    });
+  });
+
+  it("maps a hyperevm token with the hyperliquid feed key the coins API publishes", () => {
+    expect(
+      resolveCoinKey({
+        ...base,
+        chainId: 999n,
+        tokenAddress: "0xb88339CB7199b77E23DB6E890353E22632Ba630f",
+      }),
+    ).toEqual({
+      coinKey: "hyperliquid:0xb88339cb7199b77e23db6e890353e22632ba630f",
+      tokenAddress: "0xb88339cb7199b77e23db6e890353e22632ba630f",
+    });
+  });
+
   it("yields no key for a chain that is not in the registry", () => {
     expect(resolveCoinKey({ ...base, chainId: 999999n, tokenAddress: `0x${"1".repeat(40)}` })).toBeNull();
   });

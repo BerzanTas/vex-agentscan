@@ -232,7 +232,7 @@ describe("AgentPageView", () => {
     expect(rowLabels(markup)).toEqual(["kyberswap", "base"]);
     expect(markup).toContain(">2</td>");
     expect(disclosureText(markup)).toContain("0% could not be fully priced");
-    expect(disclosureText(markup)).toContain("1 swap or bridge deposit still being priced");
+    expect(disclosureText(markup)).toContain("1 capital-deploying leg still being priced");
   });
 
   it("names the row still being priced when nothing has settled at all", () => {
@@ -246,7 +246,7 @@ describe("AgentPageView", () => {
     });
 
     expect(markup).toContain('title="$0.00"');
-    expect(disclosureText(markup)).toContain("1 swap or bridge deposit still being priced");
+    expect(disclosureText(markup)).toContain("1 capital-deploying leg still being priced");
   });
 
   it("keeps the exact figures in their titles and carries no estimate badge", () => {
@@ -380,7 +380,7 @@ describe("AgentPageDisclosure", () => {
     const markup = disclosureMarkup(12.5, 4.2, false);
 
     expect(markup).toContain(
-      "Of this agent&#x27;s swaps and bridge deposits we have finished pricing, 12.5% could not be fully priced.",
+      "Of this agent&#x27;s capital-deploying legs we have finished pricing, 12.5% could not be fully priced.",
     );
     expect(markup).toContain(
       "Those transactions are not fully reflected in the realized result, the win rate or the breakdown volumes, and are still counted in the transaction counts.",
@@ -390,7 +390,7 @@ describe("AgentPageDisclosure", () => {
   it("names the population the share measures and never the wider one", () => {
     const markup = disclosureMarkup(12.5, 4.2, true);
 
-    expect(markup).toContain("swaps and bridge deposits");
+    expect(markup).toContain("capital-deploying legs");
     expect(markup).not.toContain("verified activity");
     expect(markup).not.toContain("verified activities");
   });
@@ -399,7 +399,7 @@ describe("AgentPageDisclosure", () => {
     const markup = disclosureMarkup(0, 0, false, 1);
 
     expect(markup).toContain(
-      "1 swap or bridge deposit still being priced, and not yet in any USD figure on this page.",
+      "1 capital-deploying leg still being priced, and not yet in any USD figure on this page.",
     );
   });
 
@@ -407,7 +407,7 @@ describe("AgentPageDisclosure", () => {
     const markup = disclosureMarkup(0, 0, false, 3);
 
     expect(markup).toContain(
-      "3 swaps and bridge deposits still being priced, and not yet in any USD figure on this page.",
+      "3 capital-deploying legs still being priced, and not yet in any USD figure on this page.",
     );
   });
 
