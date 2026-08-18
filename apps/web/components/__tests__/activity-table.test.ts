@@ -131,6 +131,56 @@ describe("ActivityTable chain column", () => {
   });
 });
 
+const morphoBorrowRow: ActivityRowDto = {
+  ...row,
+  publicId: "pub-3",
+  kind: "lend",
+  eventRole: "lend_borrow_operate",
+  protocol: "morpho",
+  tokenInSymbol: null,
+  tokenOutSymbol: "USDC",
+  amountInRaw: null,
+  tokenInDecimals: null,
+  usdInEst: null,
+};
+
+const morphoSupplyRow: ActivityRowDto = {
+  ...morphoBorrowRow,
+  publicId: "pub-4",
+  tokenInSymbol: "cbBTC",
+  tokenOutSymbol: null,
+  amountInRaw: "234",
+  tokenInDecimals: 8,
+};
+
+describe("ActivityTable pair column on single-leg rows", () => {
+  it("names the token a borrow received rather than repeating the role", () => {
+    const markup = markupFor([morphoBorrowRow]);
+
+    expect(markup).toContain("USDC out");
+    expect(markup).not.toContain("lend borrow operate");
+  });
+
+  it("names the collateral a supply spent", () => {
+    const markup = markupFor([morphoSupplyRow]);
+
+    expect(markup).toContain("cbBTC in");
+  });
+
+  it("keeps the two operations of the shared role distinguishable", () => {
+    const markup = markupFor([morphoBorrowRow, morphoSupplyRow]);
+
+    expect(markup).toContain("USDC out");
+    expect(markup).toContain("cbBTC in");
+  });
+
+  it("keeps a borrow row at exactly five cells", () => {
+    const markup = markupFor([morphoBorrowRow]);
+
+    expect(markup.match(/<td[\s>]/g)).toHaveLength(5);
+  });
+});
+
 describe("ActivityTable protocol column", () => {
   it("shows the protocol name next to its icon instead of a bare icon", () => {
     const markup = markupFor([row]);

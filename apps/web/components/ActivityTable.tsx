@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ActivityRowDto } from "../lib/api";
 import { formatAge, formatRawAmount, formatRawAmountDisplay, formatUsdAmount } from "../lib/format";
+import { legLabel } from "../lib/leg-label";
 import { ChainBadge } from "./ChainBadge";
 import { EmptyPanel } from "./EmptyPanel";
 import { ProtocolBadge } from "./ProtocolBadge";
@@ -13,8 +14,7 @@ function kindGlyph(kind: string): string {
 }
 
 function pairLabel(row: ActivityRowDto): string {
-  if (row.tokenInSymbol === null || row.tokenOutSymbol === null) return row.eventRole.replace(/_/g, " ");
-  return `${row.tokenInSymbol} → ${row.tokenOutSymbol}`;
+  return legLabel(row, " → ");
 }
 
 function ChainCell({ row }: { row: ActivityRowDto }) {

@@ -46,3 +46,32 @@ describe("pricedVolumeOf", () => {
     expect(pricedVolumeOf(claimedRowWithRole("swap"), null, null)).toBe("0");
   });
 });
+
+// A Morpho Blue market row is one role over four operations, and only the populated leg says which
+// way capital moved. The OUT-leg fallback above is what makes that dangerous: were the role ever
+// counted, a borrow would book the debt it drew as new volume on the pricing surface while the
+// verification surface books usd_in_est and sees zero. The role check runs first, so both surfaces
+// agree on zero for all four operations; these pin that it stays that way.
+describe("pricedVolumeOf against the four Morpho borrow operations", () => {
+  const borrowOperate = (): ReturnType<typeof claimedRowWithRole> => ({
+    ...claimedRowWithRole("lend_borrow_operate"),
+    protocol: "morpho",
+    kind: "lend",
+  });
+
+  it("books nothing for a collateral supply, whose spent leg is priced", () => {
+    expect(pricedVolumeOf(borrowOperate(), "150.02", null)).toBe("0");
+  });
+
+  it("books nothing for a repayment, whose spent leg is priced", () => {
+    expect(pricedVolumeOf(borrowOperate(), "50.00", null)).toBe("0");
+  });
+
+  it("books nothing for a borrow, whose only priced leg is the one it received", () => {
+    expect(pricedVolumeOf(borrowOperate(), null, "50.00")).toBe("0");
+  });
+
+  it("books nothing for a collateral withdrawal, whose only priced leg is the one it received", () => {
+    expect(pricedVolumeOf(borrowOperate(), null, "150.02")).toBe("0");
+  });
+});

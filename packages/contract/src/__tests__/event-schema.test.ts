@@ -245,6 +245,93 @@ describe("eventSchema yield_claim input leg (§4.2)", () => {
   });
 });
 
+// One role, lend_borrow_operate, covers all four Morpho Blue market operations, the way it already
+// covers the Solana borrow-operate rows. The operation is named in the client's own intent params,
+// which this contract does not carry, so what crosses the wire is a single leg whose SIDE is the
+// only thing that distinguishes a supply from a borrow.
+describe("eventSchema Morpho Blue market operations (§4.2)", () => {
+  const cbBtc = { address: "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf", symbol: "cbBTC", decimals: 8 };
+  const usdc = { address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", symbol: "USDC", decimals: 6 };
+  const marketRow = { ...legFreeEvent, protocol: "morpho", kind: "lend", eventRole: "lend_borrow_operate" };
+
+  const spent = (token: typeof usdc, raw: string) => ({
+    ...marketRow,
+    tokenIn: token,
+    amountInRaw: raw,
+    executedInRaw: raw,
+  });
+  const received = (token: typeof usdc, raw: string) => ({
+    ...marketRow,
+    tokenOut: token,
+    amountOutRaw: raw,
+    executedOutRaw: raw,
+  });
+
+  it("accepts a collateral supply, which carries only the spent collateral", () => {
+    expect(eventSchema.parse(spent(cbBtc, "234"))).toMatchObject({
+      executedInRaw: "234",
+      executedOutRaw: null,
+      tokenOut: null,
+    });
+  });
+
+  it("accepts a borrow, which carries only the loan asset it received", () => {
+    expect(eventSchema.parse(received(usdc, "50000"))).toMatchObject({
+      executedOutRaw: "50000",
+      executedInRaw: null,
+      tokenIn: null,
+    });
+  });
+
+  it("accepts a repayment, which carries only the loan asset it spent", () => {
+    expect(eventSchema.parse(spent(usdc, "50001"))).toMatchObject({ executedInRaw: "50001" });
+  });
+
+  it("accepts a collateral withdrawal, which carries only the collateral it received", () => {
+    expect(eventSchema.parse(received(cbBtc, "234"))).toMatchObject({ executedOutRaw: "234" });
+  });
+
+  it("keeps each leg's own decimals, which the two tokens of a market do not share", () => {
+    expect(eventSchema.parse(spent(cbBtc, "234"))).toMatchObject({ tokenIn: { decimals: 8 } });
+    expect(eventSchema.parse(received(usdc, "50000"))).toMatchObject({ tokenOut: { decimals: 6 } });
+  });
+
+  it("rejects a market operation on any kind other than lend", () => {
+    expect(() => eventSchema.parse({ ...spent(cbBtc, "234"), kind: "yield" })).toThrow();
+  });
+});
+
+describe("eventSchema Merkl reward claims (§4.2)", () => {
+  const morphoClaim = {
+    ...legFreeEvent,
+    protocol: "morpho",
+    kind: "yield",
+    eventRole: "yield_claim",
+    tokenOut: { address: "0xbaa5cc21fd487b8fcc2f632f3f4e8d37262a0842", symbol: "MORPHO", decimals: 18 },
+    amountOutRaw: "4182300000000000000",
+    executedOutRaw: "4182300000000000000",
+  };
+
+  it("accepts a morpho claim on the same terms as a pendle one", () => {
+    expect(eventSchema.parse(morphoClaim)).toMatchObject({
+      protocol: "morpho",
+      eventRole: "yield_claim",
+      executedInRaw: null,
+    });
+  });
+
+  it("rejects a claim carrying an input leg, whatever protocol pays it", () => {
+    const withInput = { ...morphoClaim, tokenIn: { address: "0xdead", symbol: "X", decimals: 18 } };
+    expect(() => eventSchema.parse(withInput)).toThrow();
+  });
+
+  // A claim can pay several tokens in one transaction. The contract anchors one of them as the leg;
+  // the second-leg fields belong to the yield PY/LP pair roles and stay closed here.
+  it("rejects a second reward token on the claim row", () => {
+    expect(() => eventSchema.parse({ ...morphoClaim, ...secondLegOut })).toThrow();
+  });
+});
+
 describe("eventSchema cost breakdown (§4.2)", () => {
   it("accepts the four client-supplied cost estimates alongside the deprecated usdFeeEst", () => {
     const withCosts = {
