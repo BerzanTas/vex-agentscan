@@ -154,6 +154,26 @@ describe("ChainBadge", () => {
     }
   });
 
+  it.each([
+    "bsc",
+    "unichain",
+    "monad",
+    "avalanche",
+    "linea",
+    "mantle",
+    "berachain",
+    "hyperevm",
+    "sonic",
+    "plasma",
+    "ronin",
+    "megaeth",
+  ])("renders the %s icon beside its slug", (slug) => {
+    const markup = render(ChainBadge, { slug });
+
+    expect(markup).toContain(`src="/chains/${slug}.png"`);
+    expect(markup).toContain(slug);
+  });
+
   it("renders slug-only for a chain without an icon", () => {
     const markup = render(ChainBadge, { slug: "unlisted" });
 
