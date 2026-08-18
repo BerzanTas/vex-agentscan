@@ -6,6 +6,18 @@ const CHAIN_ICON_SRC: Record<string, string> = {
   polygon: "/chains/polygon.svg",
   robinhood: "/chains/robinhood.svg",
   solana: "/chains/solana.svg",
+  bsc: "/chains/bsc.png",
+  unichain: "/chains/unichain.png",
+  monad: "/chains/monad.png",
+  avalanche: "/chains/avalanche.png",
+  linea: "/chains/linea.png",
+  mantle: "/chains/mantle.png",
+  berachain: "/chains/berachain.png",
+  hyperevm: "/chains/hyperevm.png",
+  sonic: "/chains/sonic.png",
+  plasma: "/chains/plasma.png",
+  ronin: "/chains/ronin.png",
+  megaeth: "/chains/megaeth.png",
 };
 
 export function ChainBadge({ slug }: { slug: string }) {

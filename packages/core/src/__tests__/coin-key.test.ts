@@ -111,3 +111,24 @@ describe("resolveCoinKey", () => {
     });
   });
 });
+
+describe("the price feed key of every swap and bridge chain", () => {
+  const feeds = [
+  { chainId: 56n, feedKey: "bsc" },
+  { chainId: 43114n, feedKey: "avalanche" },
+  { chainId: 59144n, feedKey: "linea" },
+  { chainId: 5000n, feedKey: "mantle" },
+  { chainId: 80094n, feedKey: "berachain" },
+  { chainId: 146n, feedKey: "sonic" },
+  { chainId: 9745n, feedKey: "plasma" },
+  { chainId: 2020n, feedKey: "ronin" },
+  { chainId: 4326n, feedKey: "megaeth" },
+  ];
+
+  it.each(feeds)("prefixes an ERC-20 on chain $chainId with the $feedKey feed key", ({ chainId, feedKey }) => {
+    expect(resolveCoinKey({ ...base, chainId, tokenAddress: `0x${"1".repeat(40)}` })).toEqual({
+      coinKey: `${feedKey}:0x${"1".repeat(40)}`,
+      tokenAddress: `0x${"1".repeat(40)}`,
+    });
+  });
+});
