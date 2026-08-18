@@ -270,6 +270,15 @@ describe("GET /api/networks", () => {
       "unichain",
       "monad",
       "hyperevm",
+      "bsc",
+      "avalanche",
+      "linea",
+      "mantle",
+      "berachain",
+      "sonic",
+      "plasma",
+      "ronin",
+      "megaeth",
       "solana",
     ]);
   });

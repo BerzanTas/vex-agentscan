@@ -68,3 +68,41 @@ describe("resolveChain", () => {
     expect(solana?.chainFamily).toBe("solana");
   });
 });
+
+describe("the swap and bridge chains beyond the lending set", () => {
+  const registered = [
+    { chainId: 56n, canonicalSlug: "bsc", explorerTxUrl: "https://bscscan.com/tx/0xabc" },
+    { chainId: 43114n, canonicalSlug: "avalanche", explorerTxUrl: "https://snowtrace.io/tx/0xabc" },
+    { chainId: 59144n, canonicalSlug: "linea", explorerTxUrl: "https://lineascan.build/tx/0xabc" },
+    { chainId: 5000n, canonicalSlug: "mantle", explorerTxUrl: "https://mantlescan.xyz/tx/0xabc" },
+    { chainId: 80094n, canonicalSlug: "berachain", explorerTxUrl: "https://berascan.com/tx/0xabc" },
+    { chainId: 146n, canonicalSlug: "sonic", explorerTxUrl: "https://sonicscan.org/tx/0xabc" },
+    { chainId: 9745n, canonicalSlug: "plasma", explorerTxUrl: "https://plasmascan.to/tx/0xabc" },
+    { chainId: 2020n, canonicalSlug: "ronin", explorerTxUrl: "https://explorer.roninchain.com/tx/0xabc" },
+    { chainId: 4326n, canonicalSlug: "megaeth", explorerTxUrl: "https://megaeth.blockscout.com/tx/0xabc" },
+  ];
+
+  it.each(registered)(
+    "resolves chain $chainId to $canonicalSlug at full tier with its explorer",
+    ({ chainId, canonicalSlug, explorerTxUrl }) => {
+      const entry = resolveChain({ protocol: "kyberswap", chainFamily: "eip155", chainId });
+
+      expect(entry?.canonicalSlug).toBe(canonicalSlug);
+      expect(entry?.verificationTier).toBe("full");
+      expect(entry?.explorerTxUrl("0xabc")).toBe(explorerTxUrl);
+    },
+  );
+
+  it.each(registered)("resolves chain $chainId for a bridge as well as a swap", ({ chainId, canonicalSlug }) => {
+    const bridged = resolveChain({ protocol: "relay", chainFamily: "eip155", chainId });
+
+    expect(bridged?.canonicalSlug).toBe(canonicalSlug);
+  });
+
+  it.each(registered)("dials only https rpc endpoints for chain $chainId", ({ chainId }) => {
+    const entry = resolveChain({ protocol: "kyberswap", chainFamily: "eip155", chainId });
+
+    expect(entry?.rpcUrls.length).toBeGreaterThan(0);
+    for (const url of entry?.rpcUrls ?? []) expect(url.startsWith("https://")).toBe(true);
+  });
+});

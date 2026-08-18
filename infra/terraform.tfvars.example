@@ -14,7 +14,9 @@ wallet_hmac_pepper      = "generate-randomly-min-32-characters"
 budget_alert_emails     = ["you@example.com"]
 budget_start_date       = "2026-08-01T00:00:00Z"
 
-# Keys: ethereum, base, arbitrum, optimism, polygon, robinhood, solana.
+# Keys: ethereum, base, arbitrum, optimism, polygon, robinhood, unichain, monad,
+# hyperevm, bsc, avalanche, linea, mantle, berachain, sonic, plasma, ronin,
+# megaeth, solana.
 # rpc_url_overrides = {
 #   base = "https://base-mainnet.example.com/v2/KEY,https://mainnet.base.org"
 # }
