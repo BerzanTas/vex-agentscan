@@ -40,6 +40,13 @@ describe("ProtocolBadge", () => {
     expect(markup).toContain('title="jupiter"');
   });
 
+  it("renders the morpho jpg icon", () => {
+    const markup = render(ProtocolBadge, { protocol: "morpho" });
+
+    expect(markup).toContain('src="/protocols/morpho.jpg"');
+    expect(markup).toContain('title="morpho"');
+  });
+
   it("renders the pendle jpg icon", () => {
     const markup = render(ProtocolBadge, { protocol: "pendle" });
 
@@ -109,12 +116,13 @@ describe("the protocol icon registry against the shipped assets", () => {
     }
   });
 
-  it("ships the eight protocol icons the registry maps", () => {
+  it("ships the nine protocol icons the registry maps", () => {
     expect(shippedIconFiles()).toEqual([
       "dexscreener.jpg",
       "jupiter.png",
       "khalani.svg",
       "kyberswap.svg",
+      "morpho.jpg",
       "pendle.jpg",
       "relay.jpg",
       "trench.jpg",
@@ -144,6 +152,26 @@ describe("ChainBadge", () => {
       expect(markup).toContain(`src="/chains/${slug}.svg"`);
       expect(markup).toContain(slug);
     }
+  });
+
+  it.each([
+    "bsc",
+    "unichain",
+    "monad",
+    "avalanche",
+    "linea",
+    "mantle",
+    "berachain",
+    "hyperevm",
+    "sonic",
+    "plasma",
+    "ronin",
+    "megaeth",
+  ])("renders the %s icon beside its slug", (slug) => {
+    const markup = render(ChainBadge, { slug });
+
+    expect(markup).toContain(`src="/chains/${slug}.png"`);
+    expect(markup).toContain(slug);
   });
 
   it("renders slug-only for a chain without an icon", () => {

@@ -19,6 +19,7 @@ type TaxonomyCase = {
   contribution: UsdContribution;
   kind?: string;
   verificationState?: string;
+  tokenInAddress?: string | null;
 };
 
 const taxonomyCases: TaxonomyCase[] = [
@@ -122,6 +123,54 @@ const taxonomyCases: TaxonomyCase[] = [
     usdOutPriced: "90",
     contribution: "outside_usd_figures",
   },
+  // A Morpho Blue market operation is one leg: supplying and repaying carry only the spent token,
+  // borrowing and withdrawing collateral only the received one. lend_borrow_operate deploys no
+  // capital, so the role decides before any leg does and all four sit outside the USD figures.
+  {
+    label: "a priced borrow-lane row that spent a token, as a collateral supply or repayment does",
+    eventRole: "lend_borrow_operate",
+    kind: "lend",
+    pricingState: "server_priced",
+    usdInPriced: "150.02",
+    tokenOutAddress: null,
+    usdOutPriced: null,
+    contribution: "outside_usd_figures",
+  },
+  {
+    label: "a priced borrow-lane row that received a token, as a borrow or collateral withdrawal does",
+    eventRole: "lend_borrow_operate",
+    kind: "lend",
+    pricingState: "server_priced",
+    tokenInAddress: null,
+    usdInPriced: null,
+    tokenOutAddress: WETH,
+    usdOutPriced: "50.00",
+    contribution: "outside_usd_figures",
+  },
+  // The counterpart that isolates the vault-share question: the SAME capital-deploying role reads
+  // as fully priced when it declares no received token, and as unpriced when it declares one the
+  // feed cannot quote. What differs is whether a second leg was declared, not whether the agent's
+  // capital was priced.
+  {
+    label: "a priced lend deposit that declares no received token",
+    eventRole: "lend_deposit",
+    kind: "lend",
+    pricingState: "server_priced",
+    usdInPriced: "150.02",
+    tokenOutAddress: null,
+    usdOutPriced: null,
+    contribution: "contributes_usd",
+  },
+  {
+    label: "a priced lend deposit whose declared received token has no value, as a vault share has none",
+    eventRole: "lend_deposit",
+    kind: "lend",
+    pricingState: "server_priced",
+    usdInPriced: "150.02",
+    tokenOutAddress: WETH,
+    usdOutPriced: null,
+    contribution: "contributes_no_usd",
+  },
   {
     label: "a priced swap verified on a basic tier chain",
     eventRole: "swap",
@@ -154,7 +203,8 @@ async function seedOnly(pool: pg.Pool, seed: TaxonomyCase): Promise<void> {
         received_schema_version)
      VALUES ($1, 'taxonomy-row', 'taxonomy-row', 'taxonomy-row', 0, $8, $2, 'confirmed',
              'kyberswap', 'eip155', 8453,
-             $3, 6, '1000000000',
+             $3, CASE WHEN $3::text IS NULL THEN NULL ELSE 6 END,
+             CASE WHEN $3::text IS NULL THEN NULL ELSE '1000000000' END,
              $4, CASE WHEN $4::text IS NULL THEN NULL ELSE 18 END,
              CASE WHEN $4::text IS NULL THEN NULL ELSE '1000000000000000000' END,
              $5::numeric, $6::numeric, $7,
@@ -163,7 +213,7 @@ async function seedOnly(pool: pg.Pool, seed: TaxonomyCase): Promise<void> {
     [
       AGENT,
       seed.eventRole,
-      USDC,
+      seed.tokenInAddress === undefined ? USDC : seed.tokenInAddress,
       seed.tokenOutAddress,
       seed.usdInPriced,
       seed.usdOutPriced,

@@ -267,6 +267,18 @@ describe("GET /api/networks", () => {
       "optimism",
       "polygon",
       "robinhood",
+      "unichain",
+      "monad",
+      "hyperevm",
+      "bsc",
+      "avalanche",
+      "linea",
+      "mantle",
+      "berachain",
+      "sonic",
+      "plasma",
+      "ronin",
+      "megaeth",
       "solana",
     ]);
   });

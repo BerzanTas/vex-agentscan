@@ -91,6 +91,153 @@ export const evmChains: readonly EvmChain[] = [
       verificationTier: "full",
     },
   },
+  {
+    chainId: 130n,
+    entry: {
+      canonicalSlug: "unichain",
+      chainFamily: "eip155",
+      priceFeedKey: "unichain",
+      displayName: "Unichain",
+      explorerTxUrl: explorerTx("https://uniscan.xyz"),
+      rpcUrls: ["https://mainnet.unichain.org", "https://unichain-rpc.publicnode.com"],
+      verificationTier: "full",
+    },
+  },
+  {
+    chainId: 143n,
+    entry: {
+      canonicalSlug: "monad",
+      chainFamily: "eip155",
+      priceFeedKey: "monad",
+      displayName: "Monad",
+      explorerTxUrl: explorerTx("https://monadvision.com"),
+      rpcUrls: ["https://rpc.monad.xyz", "https://rpc1.monad.xyz"],
+      verificationTier: "full",
+    },
+  },
+  {
+    chainId: 999n,
+    entry: {
+      canonicalSlug: "hyperevm",
+      chainFamily: "eip155",
+      // DefiLlama's coins API serves HyperEVM under "hyperliquid"; "hyperevm" also
+      // answers today but is absent from https://coins.llama.fi/chains, so the
+      // published slug is the one registered here.
+      priceFeedKey: "hyperliquid",
+      displayName: "HyperEVM",
+      explorerTxUrl: explorerTx("https://hyperevmscan.io"),
+      rpcUrls: ["https://rpc.hyperliquid.xyz/evm"],
+      verificationTier: "full",
+    },
+  },
+  {
+    chainId: 56n,
+    entry: {
+      canonicalSlug: "bsc",
+      chainFamily: "eip155",
+      priceFeedKey: "bsc",
+      displayName: "BNB Smart Chain",
+      explorerTxUrl: explorerTx("https://bscscan.com"),
+      rpcUrls: ["https://bsc-dataseed1.bnbchain.org", "https://bsc-dataseed2.bnbchain.org"],
+      verificationTier: "full",
+    },
+  },
+  {
+    chainId: 43114n,
+    entry: {
+      canonicalSlug: "avalanche",
+      chainFamily: "eip155",
+      priceFeedKey: "avalanche",
+      displayName: "Avalanche C-Chain",
+      explorerTxUrl: explorerTx("https://snowtrace.io"),
+      rpcUrls: ["https://api.avax.network/ext/bc/C/rpc", "https://avalanche-c-chain-rpc.publicnode.com"],
+      verificationTier: "full",
+    },
+  },
+  {
+    chainId: 59144n,
+    entry: {
+      canonicalSlug: "linea",
+      chainFamily: "eip155",
+      priceFeedKey: "linea",
+      displayName: "Linea",
+      explorerTxUrl: explorerTx("https://lineascan.build"),
+      rpcUrls: ["https://rpc.linea.build", "https://linea-rpc.publicnode.com"],
+      verificationTier: "full",
+    },
+  },
+  {
+    chainId: 5000n,
+    entry: {
+      canonicalSlug: "mantle",
+      chainFamily: "eip155",
+      priceFeedKey: "mantle",
+      displayName: "Mantle",
+      explorerTxUrl: explorerTx("https://mantlescan.xyz"),
+      rpcUrls: ["https://rpc.mantle.xyz", "https://mantle-rpc.publicnode.com"],
+      verificationTier: "full",
+    },
+  },
+  {
+    chainId: 80094n,
+    entry: {
+      canonicalSlug: "berachain",
+      chainFamily: "eip155",
+      priceFeedKey: "berachain",
+      displayName: "Berachain",
+      explorerTxUrl: explorerTx("https://berascan.com"),
+      rpcUrls: ["https://rpc.berachain.com", "https://berachain-rpc.publicnode.com"],
+      verificationTier: "full",
+    },
+  },
+  {
+    chainId: 146n,
+    entry: {
+      canonicalSlug: "sonic",
+      chainFamily: "eip155",
+      priceFeedKey: "sonic",
+      displayName: "Sonic",
+      explorerTxUrl: explorerTx("https://sonicscan.org"),
+      rpcUrls: ["https://rpc.soniclabs.com", "https://sonic-rpc.publicnode.com"],
+      verificationTier: "full",
+    },
+  },
+  {
+    chainId: 9745n,
+    entry: {
+      canonicalSlug: "plasma",
+      chainFamily: "eip155",
+      priceFeedKey: "plasma",
+      displayName: "Plasma",
+      explorerTxUrl: explorerTx("https://plasmascan.to"),
+      rpcUrls: ["https://rpc.plasma.to"],
+      verificationTier: "full",
+    },
+  },
+  {
+    chainId: 2020n,
+    entry: {
+      canonicalSlug: "ronin",
+      chainFamily: "eip155",
+      priceFeedKey: "ronin",
+      displayName: "Ronin",
+      explorerTxUrl: explorerTx("https://explorer.roninchain.com"),
+      rpcUrls: ["https://api.roninchain.com/rpc"],
+      verificationTier: "full",
+    },
+  },
+  {
+    chainId: 4326n,
+    entry: {
+      canonicalSlug: "megaeth",
+      chainFamily: "eip155",
+      priceFeedKey: "megaeth",
+      displayName: "MegaETH",
+      explorerTxUrl: explorerTx("https://megaeth.blockscout.com"),
+      rpcUrls: ["https://mainnet.megaeth.com/rpc"],
+      verificationTier: "full",
+    },
+  },
 ];
 
 const solanaEntry: ChainEntry = {
