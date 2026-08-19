@@ -20,12 +20,18 @@ export const ROLES_BY_KIND: Record<EventKind, readonly EventRole[]> = {
     "yield_sy",
     "yield_claim",
   ],
-  launch: ["token_launch", "trench_fee"],
+  launch: ["token_launch", "trench_fee", "pools_fee"],
+  claim: ["pools_claim"],
 };
 
-export const SECOND_LEG_ROLES: readonly EventRole[] = ["yield_py", "yield_lp"];
+// A pools.fun creator-fee claim settles as ONE row paying TWO assets: the launched token and the
+// asset it was paired against. That is the same second-output-leg shape the Pendle split roles use,
+// so the claim joins the allowlist rather than getting a second family of columns.
+export const SECOND_LEG_ROLES: readonly EventRole[] = ["yield_py", "yield_lp", "pools_claim"];
 
-export const INPUT_LEG_FORBIDDEN_ROLES: readonly EventRole[] = ["yield_claim"];
+// A claim spends nothing, so it carries no input leg on either side. Admitting one would be
+// evidence the writer decoded the wrong transaction.
+export const INPUT_LEG_FORBIDDEN_ROLES: readonly EventRole[] = ["yield_claim", "pools_claim"];
 
 export function isRoleBoundToKind(kind: EventKind, eventRole: EventRole): boolean {
   return ROLES_BY_KIND[kind].includes(eventRole);

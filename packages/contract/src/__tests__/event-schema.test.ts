@@ -60,7 +60,8 @@ const boundRolesByKind: Record<(typeof EVENT_KINDS)[number], readonly string[]> 
     "yield_sy",
     "yield_claim",
   ],
-  launch: ["token_launch", "trench_fee"],
+  launch: ["token_launch", "trench_fee", "pools_fee"],
+  claim: ["pools_claim"],
 };
 
 const boundPairs = Object.entries(boundRolesByKind).flatMap(([kind, roles]) =>
@@ -72,6 +73,8 @@ const APPROVAL_ROLES = ["allowance", "allowance_reset"];
 const approvalPairs = EVENT_KINDS.flatMap((kind) =>
   APPROVAL_ROLES.map((eventRole) => ({ kind, eventRole })),
 );
+
+const SECOND_LEG_ROLES: readonly string[] = ["yield_py", "yield_lp", "pools_claim"];
 
 const secondLegOut = {
   tokenOut2: { address: "0xyt", symbol: "YT", decimals: 18 },
@@ -198,7 +201,7 @@ describe("eventSchema second leg (§4.2)", () => {
     };
     expect(eventSchema.parse(yieldLp)).toMatchObject({ amountIn2Raw: "7000000000000000000" });
   });
-  it.each(boundPairs.filter(({ eventRole }) => eventRole !== "yield_py" && eventRole !== "yield_lp"))(
+  it.each(boundPairs.filter(({ eventRole }) => !SECOND_LEG_ROLES.includes(eventRole)))(
     "rejects a second leg on $kind/$eventRole",
     ({ kind, eventRole }) => {
       expect(() => eventSchema.parse({ ...legFreeEvent, kind, eventRole, ...secondLegOut })).toThrow();
@@ -242,6 +245,77 @@ describe("eventSchema yield_claim input leg (§4.2)", () => {
   });
   it("rejects a claim carrying an executed input amount", () => {
     expect(() => eventSchema.parse({ ...yieldClaim, executedInRaw: "1" })).toThrow();
+  });
+});
+
+// A pools.fun launch mints a token straight into a SushiSwap V3 pool on Robinhood Chain, so the
+// creator's accrued fees are collected later by collectAndClaim, which pays the launched token AND
+// the asset it was paired against in ONE transaction. That is a claim, not a launch: it opens no
+// position and spends nothing, which is why it carries its own kind.
+describe("eventSchema pools.fun launches, fees and claims (§4.2)", () => {
+  const vexToken = { address: "0xnew", symbol: "VEX", decimals: 18 };
+  const weth = { address: "0x4200000000000000000000000000000000000006", symbol: "WETH", decimals: 18 };
+
+  const poolsClaim = {
+    ...legFreeEvent,
+    protocol: "pools",
+    kind: "claim",
+    eventRole: "pools_claim",
+    tokenOut: vexToken,
+    amountOutRaw: "4100000000000000000000",
+    executedOutRaw: "4100000000000000000000",
+    tokenOut2: weth,
+    amountOut2Raw: "31000000000000000",
+    executedOut2Raw: "31000000000000000",
+  };
+
+  it("accepts a claim paying both the launched token and the paired asset", () => {
+    expect(eventSchema.parse(poolsClaim)).toMatchObject({
+      kind: "claim",
+      eventRole: "pools_claim",
+      executedOutRaw: "4100000000000000000000",
+      executedOut2Raw: "31000000000000000",
+    });
+  });
+
+  it("keeps each paid leg's own decimals, so neither amount can be read at the other's scale", () => {
+    expect(eventSchema.parse(poolsClaim)).toMatchObject({
+      tokenOut: { decimals: 18 },
+      tokenOut2: { decimals: 18 },
+    });
+  });
+
+  it("rejects a claim carrying a first input leg, which would prove the wrong transaction was read", () => {
+    expect(() => eventSchema.parse({ ...poolsClaim, tokenIn: weth, amountInRaw: "1" })).toThrow();
+  });
+
+  it("rejects a claim carrying a second input leg for the same reason", () => {
+    expect(() => eventSchema.parse({ ...poolsClaim, tokenIn2: weth, amountIn2Raw: "1" })).toThrow();
+  });
+
+  it("rejects pools_claim on the launch kind, which the claim is deliberately no longer part of", () => {
+    expect(() => eventSchema.parse({ ...poolsClaim, kind: "launch" })).toThrow();
+  });
+
+  it("accepts the vex integrator fee leg on a launch", () => {
+    const poolsFee = {
+      ...legFreeEvent,
+      protocol: "pools",
+      kind: "launch",
+      eventRole: "pools_fee",
+      tokenIn: weth,
+      amountInRaw: "2500000000000000",
+      executedInRaw: "2500000000000000",
+    };
+    expect(eventSchema.parse(poolsFee)).toMatchObject({ kind: "launch", eventRole: "pools_fee" });
+  });
+
+  it("rejects the fee leg on the claim kind, which pays no fee", () => {
+    expect(() => eventSchema.parse({ ...legFreeEvent, kind: "claim", eventRole: "pools_fee" })).toThrow();
+  });
+
+  it("rejects trench_fee on the claim kind", () => {
+    expect(() => eventSchema.parse({ ...legFreeEvent, kind: "claim", eventRole: "trench_fee" })).toThrow();
   });
 });
 

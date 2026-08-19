@@ -19,7 +19,7 @@ describe("resolveVerificationTier", () => {
   it("caps a wrap activity at basic even on a full-tier chain", () => {
     expect(resolveVerificationTier("wrap", "full")).toBe("basic");
   });
-  it.each(["lend", "prediction", "yield"] as const)(
+  it.each(["lend", "prediction", "yield", "claim"] as const)(
     "passes the chain tier through unchanged for a %s",
     (kind) => {
       expect(resolveVerificationTier(kind, "full")).toBe("full");
@@ -41,7 +41,7 @@ describe("isLaunchShaped", () => {
   it("rejects a bridge kind paired with its own role", () => {
     expect(isLaunchShaped("bridge", "bridge_deposit")).toBe(false);
   });
-  it.each(["lend", "prediction", "wrap", "yield"] as const)(
+  it.each(["lend", "prediction", "wrap", "yield", "claim"] as const)(
     "rejects the %s kind, which claims no strike exemption",
     (kind) => {
       expect(isLaunchShaped(kind, "token_launch")).toBe(false);

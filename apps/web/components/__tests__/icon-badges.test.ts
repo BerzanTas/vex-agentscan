@@ -54,6 +54,13 @@ describe("ProtocolBadge", () => {
     expect(markup).toContain('title="pendle"');
   });
 
+  it("renders the pools jpg icon", () => {
+    const markup = render(ProtocolBadge, { protocol: "pools" });
+
+    expect(markup).toContain('src="/protocols/pools.jpg"');
+    expect(markup).toContain('title="pools"');
+  });
+
   it("renders the trench jpg icon", () => {
     const markup = render(ProtocolBadge, { protocol: "trench" });
 
@@ -116,7 +123,7 @@ describe("the protocol icon registry against the shipped assets", () => {
     }
   });
 
-  it("ships the nine protocol icons the registry maps", () => {
+  it("ships the ten protocol icons the registry maps", () => {
     expect(shippedIconFiles()).toEqual([
       "dexscreener.jpg",
       "jupiter.png",
@@ -124,6 +131,7 @@ describe("the protocol icon registry against the shipped assets", () => {
       "kyberswap.svg",
       "morpho.jpg",
       "pendle.jpg",
+      "pools.jpg",
       "relay.jpg",
       "trench.jpg",
       "uniswap.svg",

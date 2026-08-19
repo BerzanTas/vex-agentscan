@@ -57,7 +57,16 @@ const SECOND_LEG_FIELDS = [
   "executedOut2Raw",
 ] as const satisfies readonly (keyof EventShape)[];
 
-const INPUT_LEG_FIELDS = ["tokenIn", "amountInRaw", "executedInRaw"] as const satisfies readonly (keyof EventShape)[];
+// Both input legs, not only the first: a role that spends nothing spends nothing on either side,
+// and pools_claim is admitted to SECOND_LEG_ROLES for the two assets it PAYS.
+const INPUT_LEG_FIELDS = [
+  "tokenIn",
+  "amountInRaw",
+  "executedInRaw",
+  "tokenIn2",
+  "amountIn2Raw",
+  "executedIn2Raw",
+] as const satisfies readonly (keyof EventShape)[];
 
 function populatedFields(
   event: EventShape,
