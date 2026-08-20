@@ -40,6 +40,12 @@ function blockTimeOutsideTolerance(receipt: ReceiptView, input: VerificationInpu
 
 type AmountJudgement = "matches" | "mismatch" | "unprovable";
 
+function readerCouldNotReadTransfers(receipt: ReceiptView): boolean {
+  if (receipt.erc20Transfers.length > 0) return false;
+  if (receipt.logs === undefined) return true;
+  return receipt.logs.length > 0;
+}
+
 function judgeDeclaredAmounts(receipt: ReceiptView, input: VerificationInput): AmountJudgement {
   const legs = [declaredInputJudgement(receipt, input), declaredOutputJudgement(receipt, input)];
   if (legs.includes("mismatch")) return "mismatch";
@@ -77,7 +83,7 @@ function declaredLegJudgement(
   counterparty: TransferCounterparty,
 ): AmountJudgement {
   if (tokenAddress === null || declaredRaw === null) return "matches";
-  if (receipt.erc20Transfers.length === 0) return "unprovable";
+  if (readerCouldNotReadTransfers(receipt)) return "unprovable";
   const declared = BigInt(declaredRaw);
   const tokenTransfers = receipt.erc20Transfers.filter((transfer) => sameAddress(transfer.token, tokenAddress));
   if (tokenTransfers.some((transfer) => withinTolerance(BigInt(transfer.amountRaw), declared, tolerancePct))) {

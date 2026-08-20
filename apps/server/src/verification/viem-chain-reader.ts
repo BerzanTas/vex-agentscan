@@ -23,6 +23,7 @@ import { rpcUrlsFor } from "./rpc-urls.js";
 async function corroborateMissing(
   clients: PublicClient[],
   txHash: string,
+  endpointsNeeded: number,
 ): Promise<MissingReceiptCorroboration> {
   const answers = await Promise.all(
     clients.map(async (client) => {
@@ -35,13 +36,11 @@ async function corroborateMissing(
   );
   if (answers.includes("present")) return "found";
   const absent = answers.filter((answer) => answer === "absent").length;
-  return absent >= CORROBORATING_ENDPOINTS_NEEDED ? "missing" : "unknown";
+  return absent >= endpointsNeeded ? "missing" : "unknown";
 }
 
 const transferEvent = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
 const transferTopic = toEventSelector(transferEvent);
-
-const CORROBORATING_ENDPOINTS_NEEDED = 2;
 
 export function makeChainReader(entry: ChainEntry, config: Config): ChainReader {
   const endpoints = rpcUrlsFor(entry, config);
@@ -62,7 +61,8 @@ export function makeChainReader(entry: ChainEntry, config: Config): ChainReader 
       };
     },
     getHeadBlockNumber: () => client.getBlockNumber(),
-    corroborateMissingReceipt: (txHash) => corroborateMissing(singleEndpointClients, txHash),
+    corroborateMissingReceipt: (txHash) =>
+      corroborateMissing(singleEndpointClients, txHash, config.VERIFY_CORROBORATING_ENDPOINTS),
   };
 }
 

@@ -29,6 +29,7 @@ const envSchema = z.object({
   QUARANTINE_STRIKES: z.coerce.number().int().default(3),
   VERIFY_TIME_TOLERANCE_MIN: z.coerce.number().int().default(10),
   VERIFY_AMOUNT_TOLERANCE_PCT: z.coerce.number().default(0.5),
+  VERIFY_CORROBORATING_ENDPOINTS: z.coerce.number().int().min(1).default(2),
   VERIFY_BACKOFF_SCHEDULE: z.string().default("1m,5m,30m,2h,12h").transform(commaSeparated),
   VERIFY_MAX_AGE_DAYS: z.coerce.number().int().default(7),
   VERIFY_FAKE_MODE: z.enum(["off", "confirm_all"]).default("off"),

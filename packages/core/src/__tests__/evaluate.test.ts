@@ -15,6 +15,7 @@ const receiptFixture = (overrides: Partial<ReceiptView> = {}): ReceiptView => ({
     { token: "0xbb22", from: "0x2222", to: "0x1111", amountRaw: "2000000" },
   ],
   transactionValueRaw: null,
+  logs: [],
   ...overrides,
 });
 
@@ -131,13 +132,13 @@ describe("evaluateVerification", () => {
     expect(evaluateVerification(receipt, input)).toEqual({ result: "verified_full", blockTimestamp });
   });
 
-  it("declines to judge an erc20 output leg the receipt shows nothing about, even beside a proven native input", () => {
+  it("still strikes a mismatching erc20 output leg alongside a matching native input leg", () => {
     const receipt = receiptFixture({
       erc20Transfers: [],
       transactionValueRaw: "1000000000000000000",
     });
     const input = inputFixture({ tokenInAddress: nativeSentinel, executedInRaw: "1000000000000000000" });
-    expect(evaluateVerification(receipt, input)).toEqual({ result: "unverifiable", reason: "no_transfers_decoded" });
+    expect(evaluateVerification(receipt, input)).toEqual({ result: "strike", reason: "amount_mismatch" });
   });
 });
 
@@ -378,15 +379,6 @@ describe("an input leg the venue splits into several transfers", () => {
 });
 
 describe("a receipt the reader could not decode at all", () => {
-  it("declines to judge an erc20 spend when the receipt carried no transfers it could read", () => {
-    const blind = receiptFixture({ erc20Transfers: [] });
-
-    expect(evaluateVerification(blind, inputFixture())).toEqual({
-      result: "unverifiable",
-      reason: "no_transfers_decoded",
-    });
-  });
-
   it("still strikes when the receipt shows other tokens moving but not the declared one", () => {
     const otherTokensOnly = receiptFixture({
       erc20Transfers: [{ token: "0xcc33", from: "0x1111", to: "0x2222", amountRaw: "1000000" }],
@@ -416,6 +408,37 @@ describe("a receipt the reader could not decode at all", () => {
     expect(evaluateVerification(blind, inputFixture({ tier: "basic" }))).toEqual({
       result: "verified_basic",
       blockTimestamp,
+    });
+  });
+});
+
+describe("telling a receipt that proves absence from one the reader could not read", () => {
+  const rawTransferLog = { address: "0xaa11", topics: ["0xddf2", "0x1111"], data: "0x00" };
+
+  it("strikes a spend cited against a transaction that emitted no logs at all", () => {
+    const noLogsAtAll = receiptFixture({ erc20Transfers: [], logs: [] });
+
+    expect(evaluateVerification(noLogsAtAll, inputFixture())).toEqual({
+      result: "strike",
+      reason: "amount_mismatch",
+    });
+  });
+
+  it("declines to judge a receipt whose logs the decoder could not turn into transfers", () => {
+    const undecodable = receiptFixture({ erc20Transfers: [], logs: [rawTransferLog] });
+
+    expect(evaluateVerification(undecodable, inputFixture())).toEqual({
+      result: "unverifiable",
+      reason: "no_transfers_decoded",
+    });
+  });
+
+  it("declines to judge when the reader reports no view of the logs at all", () => {
+    const blindReader = receiptFixture({ erc20Transfers: [], logs: undefined });
+
+    expect(evaluateVerification(blindReader, inputFixture())).toEqual({
+      result: "unverifiable",
+      reason: "no_transfers_decoded",
     });
   });
 });

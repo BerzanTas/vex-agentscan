@@ -42,7 +42,7 @@ describe("resolveJobOutcome", () => {
       }),
       chainReaderFor: () => ({ getReceipt: async () => null }),
     });
-    expect(outcome).toEqual({ kind: "close_unverifiable" });
+    expect(outcome).toEqual({ kind: "close_unverifiable", reason: "no_tx_hash" });
   });
 
   it("ponawia zadanie nieznanego łańcucha z backoffem, dopóki mieści się w oknie wieku", async () => {
@@ -66,7 +66,7 @@ describe("resolveJobOutcome", () => {
       resolveChain: () => null,
       chainReaderFor: () => ({ getReceipt: async () => null }),
     });
-    expect(outcome).toEqual({ kind: "close_unverifiable" });
+    expect(outcome).toEqual({ kind: "close_unverifiable", reason: "chain_not_in_registry" });
   });
 
   it("zamienia rzucony wyjątek RPC w reschedule z backoffem, nigdy w strike", async () => {
@@ -153,14 +153,14 @@ describe("striking a transaction the chain says it never saw", () => {
   });
 
   it("refuses to strike on one endpoint's word alone", async () => {
-    expect(await outcomeWhenCorroborationSays("unknown")).toEqual({ kind: "close_unverifiable" });
+    expect(await outcomeWhenCorroborationSays("unknown")).toEqual({ kind: "close_unverifiable", reason: "missing_receipt_not_corroborated" });
   });
 
   it("refuses to strike when another endpoint can see the transaction", async () => {
-    expect(await outcomeWhenCorroborationSays("found")).toEqual({ kind: "close_unverifiable" });
+    expect(await outcomeWhenCorroborationSays("found")).toEqual({ kind: "close_unverifiable", reason: "missing_receipt_seen_elsewhere" });
   });
 
-  it("keeps striking for a reader that cannot ask a second endpoint at all", async () => {
+  it("refuses to strike for a reader that cannot ask a second endpoint at all", async () => {
     const outcome = await resolveJobOutcome(jobFixture(), {
       config,
       now: pastTheWindow,
@@ -168,7 +168,7 @@ describe("striking a transaction the chain says it never saw", () => {
       chainReaderFor: () => ({ getReceipt: async () => null }),
     });
 
-    expect(outcome).toEqual({ kind: "finalize", verdict: { result: "strike", reason: "tx_not_found" } });
+    expect(outcome).toEqual({ kind: "close_unverifiable", reason: "missing_receipt_not_corroborated" });
   });
 
   it("refuses to strike when asking the other endpoints threw", async () => {
@@ -184,6 +184,6 @@ describe("striking a transaction the chain says it never saw", () => {
       }),
     });
 
-    expect(outcome).toEqual({ kind: "close_unverifiable" });
+    expect(outcome).toEqual({ kind: "close_unverifiable", reason: "missing_receipt_not_corroborated" });
   });
 });
