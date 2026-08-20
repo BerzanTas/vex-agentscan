@@ -8,9 +8,10 @@ const CAPITAL_COMING_BACK_ROLES = [
   "predict_claim",
   "predict_close",
   "yield_claim",
+  "pools_claim",
 ];
 
-const FEE_ROLES = ["swap_fee", "bridge_fee", "trench_fee"];
+const FEE_ROLES = ["swap_fee", "bridge_fee", "trench_fee", "pools_fee"];
 
 const BRIDGE_ARRIVAL_ROLES = ["bridge_fill_expected", "bridge_fill_observed", "bridge_refund"];
 

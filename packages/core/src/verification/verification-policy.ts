@@ -9,7 +9,8 @@ export type VerificationKind =
   | "prediction"
   | "wrap"
   | "yield"
-  | "launch";
+  | "launch"
+  | "claim";
 
 type KindVerificationPolicy = {
   tierCap: VerificationTier | null;
@@ -26,6 +27,9 @@ const kindVerificationPolicies: Record<VerificationKind, KindVerificationPolicy>
   wrap: { tierCap: "basic", strikeExemptRoles: [] },
   yield: followsChainTier,
   launch: { tierCap: "basic", strikeExemptRoles: ["token_launch"] },
+  // A claim is an ordinary receipt-provable transfer: it has a hash, it either landed or it did
+  // not, so it follows the chain's tier and claims no strike exemption.
+  claim: followsChainTier,
 };
 
 export function resolveVerificationTier(

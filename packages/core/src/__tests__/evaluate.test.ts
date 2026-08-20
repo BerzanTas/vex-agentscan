@@ -244,3 +244,58 @@ describe("evaluateVerification against real morpho lend receipts on Base", () =>
     });
   });
 });
+
+describe("a native leg declared with the zero address, as Relay spells it", () => {
+  const zeroAddress = `0x${"0".repeat(40)}`;
+  const nativeReceipt = receiptFixture({ erc20Transfers: [], transactionValueRaw: "15382649162239" });
+
+  it("verifies a native bridge deposit whose declared amount is the transaction value", () => {
+    const input = inputFixture({
+      tokenInAddress: zeroAddress,
+      executedInRaw: "15382649162239",
+      tokenOutAddress: null,
+      executedOutRaw: null,
+    });
+
+    expect(evaluateVerification(nativeReceipt, input)).toEqual({
+      result: "verified_full",
+      blockTimestamp,
+    });
+  });
+
+  it("still strikes a native bridge deposit that overstates what the transaction carried", () => {
+    const input = inputFixture({
+      tokenInAddress: zeroAddress,
+      executedInRaw: "25382649162239",
+      tokenOutAddress: null,
+      executedOutRaw: null,
+    });
+
+    expect(evaluateVerification(nativeReceipt, input)).toEqual({
+      result: "strike",
+      reason: "amount_mismatch",
+    });
+  });
+
+  it("verifies a native output leg the receipt cannot carry an erc20 transfer for", () => {
+    const input = inputFixture({
+      tokenInAddress: null,
+      executedInRaw: null,
+      tokenOutAddress: zeroAddress,
+      executedOutRaw: "15382649162239",
+    });
+
+    expect(evaluateVerification(nativeReceipt, input)).toEqual({
+      result: "verified_full",
+      blockTimestamp,
+    });
+  });
+
+  it("treats the zero address and the sentinel as the same native token", () => {
+    const declared = { executedInRaw: "15382649162239", tokenOutAddress: null, executedOutRaw: null };
+    const asZero = evaluateVerification(nativeReceipt, inputFixture({ ...declared, tokenInAddress: zeroAddress }));
+    const asSentinel = evaluateVerification(nativeReceipt, inputFixture({ ...declared, tokenInAddress: nativeSentinel }));
+
+    expect(asZero).toEqual(asSentinel);
+  });
+});

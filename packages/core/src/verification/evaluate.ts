@@ -1,3 +1,4 @@
+import { isEvmNativeAddress } from "../evm-native-address.js";
 import type { ReceiptView } from "./chain-reader.js";
 
 export type VerificationInput = {
@@ -32,8 +33,6 @@ function blockTimeOutsideTolerance(receipt: ReceiptView, input: VerificationInpu
   return driftMs > input.timeToleranceMin * 60_000;
 }
 
-const EVM_NATIVE_SENTINEL = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
-
 function declaredAmountsMismatch(receipt: ReceiptView, input: VerificationInput): boolean {
   return declaredInputMismatch(receipt, input) || declaredOutputMismatch(receipt, input);
 }
@@ -57,7 +56,7 @@ function nativeInputMismatch(receipt: ReceiptView, declaredRaw: string | null, t
 }
 
 function isNativeToken(tokenAddress: string | null): boolean {
-  return tokenAddress !== null && sameAddress(tokenAddress, EVM_NATIVE_SENTINEL);
+  return tokenAddress !== null && isEvmNativeAddress(tokenAddress);
 }
 
 function declaredLegMismatch(
