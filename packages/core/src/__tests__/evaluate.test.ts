@@ -131,13 +131,13 @@ describe("evaluateVerification", () => {
     expect(evaluateVerification(receipt, input)).toEqual({ result: "verified_full", blockTimestamp });
   });
 
-  it("still strikes a mismatching erc20 output leg alongside a matching native input leg", () => {
+  it("declines to judge an erc20 output leg the receipt shows nothing about, even beside a proven native input", () => {
     const receipt = receiptFixture({
       erc20Transfers: [],
       transactionValueRaw: "1000000000000000000",
     });
     const input = inputFixture({ tokenInAddress: nativeSentinel, executedInRaw: "1000000000000000000" });
-    expect(evaluateVerification(receipt, input)).toEqual({ result: "strike", reason: "amount_mismatch" });
+    expect(evaluateVerification(receipt, input)).toEqual({ result: "unverifiable", reason: "no_transfers_decoded" });
   });
 });
 
@@ -374,5 +374,48 @@ describe("an input leg the venue splits into several transfers", () => {
     const input = inputFixture({ tokenInAddress: null, executedInRaw: null, executedOutRaw: "2000000" });
 
     expect(evaluateVerification(receipt, input)).toEqual({ result: "verified_full", blockTimestamp });
+  });
+});
+
+describe("a receipt the reader could not decode at all", () => {
+  it("declines to judge an erc20 spend when the receipt carried no transfers it could read", () => {
+    const blind = receiptFixture({ erc20Transfers: [] });
+
+    expect(evaluateVerification(blind, inputFixture())).toEqual({
+      result: "unverifiable",
+      reason: "no_transfers_decoded",
+    });
+  });
+
+  it("still strikes when the receipt shows other tokens moving but not the declared one", () => {
+    const otherTokensOnly = receiptFixture({
+      erc20Transfers: [{ token: "0xcc33", from: "0x1111", to: "0x2222", amountRaw: "1000000" }],
+    });
+
+    expect(evaluateVerification(otherTokensOnly, inputFixture())).toEqual({
+      result: "strike",
+      reason: "amount_mismatch",
+    });
+  });
+
+  it("verifies a native spend on a receipt with no transfers, because its proof is the transaction value", () => {
+    const nativeOnly = receiptFixture({ erc20Transfers: [], transactionValueRaw: "1000000" });
+    const input = inputFixture({
+      tokenInAddress: nativeSentinel,
+      executedInRaw: "1000000",
+      tokenOutAddress: null,
+      executedOutRaw: null,
+    });
+
+    expect(evaluateVerification(nativeOnly, input)).toEqual({ result: "verified_full", blockTimestamp });
+  });
+
+  it("keeps a basic-tier verdict untouched, since it never judged amounts", () => {
+    const blind = receiptFixture({ erc20Transfers: [] });
+
+    expect(evaluateVerification(blind, inputFixture({ tier: "basic" }))).toEqual({
+      result: "verified_basic",
+      blockTimestamp,
+    });
   });
 });

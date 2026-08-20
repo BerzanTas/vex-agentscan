@@ -4,6 +4,7 @@ import {
   resolveVerificationTier,
   type ChainEntry,
   type ChainReader,
+  type MissingReceiptCorroboration,
   type ReceiptView,
   type ResolveChain,
   type Verdict,
@@ -78,6 +79,7 @@ export async function resolveJobOutcome(job: ClaimedJob, deps: VerifyJobDeps): P
   });
   const read = await readReceipt(reader, job.txHash);
   const verdict = verdictFrom(read, job, entry, deps.config, job.txHash);
+  if (verdict.result === "unverifiable") return { kind: "close_unverifiable" };
   if (verdict.result !== "retry") {
     return { kind: "finalize", verdict, ...observationOf(read, job, verdict) };
   }
@@ -93,6 +95,8 @@ export async function resolveJobOutcome(job: ClaimedJob, deps: VerifyJobDeps): P
     return { kind: "reschedule", delayMs: backoff.delayMs, lastError: verdict.error };
   }
   if (read.outcome === "not_found") {
+    const corroboration = await corroborateMissing(reader, job.txHash);
+    if (corroboration !== "missing") return { kind: "close_unverifiable" };
     return { kind: "finalize", verdict: { result: "strike", reason: "tx_not_found" } };
   }
   return { kind: "close_unverifiable" };
@@ -116,6 +120,15 @@ function observationOf(
   return {
     observed: { transactionValueRaw: read.receipt.transactionValueRaw, declaredTokenTransfers },
   };
+}
+
+async function corroborateMissing(reader: ChainReader, txHash: string): Promise<MissingReceiptCorroboration> {
+  if (reader.corroborateMissingReceipt === undefined) return "missing";
+  try {
+    return await reader.corroborateMissingReceipt(txHash);
+  } catch {
+    return "unknown";
+  }
 }
 
 export async function readReceipt(reader: ChainReader, txHash: string): Promise<ReceiptRead> {

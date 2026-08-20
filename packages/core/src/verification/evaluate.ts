@@ -18,6 +18,7 @@ export type VerificationInput = {
 export type Verdict =
   | { result: "verified_full" | "verified_basic"; blockTimestamp: Date }
   | { result: "strike"; reason: "tx_reverted" | "amount_mismatch" | "time_mismatch" | "tx_not_found" }
+  | { result: "unverifiable"; reason: "no_transfers_decoded" }
   | { result: "retry"; error: string };
 
 export function evaluateVerification(receipt: ReceiptView | null, input: VerificationInput): Verdict {
@@ -25,7 +26,9 @@ export function evaluateVerification(receipt: ReceiptView | null, input: Verific
   if (receipt.status === "reverted") return { result: "strike", reason: "tx_reverted" };
   if (blockTimeOutsideTolerance(receipt, input)) return { result: "strike", reason: "time_mismatch" };
   if (input.tier === "basic") return { result: "verified_basic", blockTimestamp: receipt.blockTimestamp };
-  if (declaredAmountsMismatch(receipt, input)) return { result: "strike", reason: "amount_mismatch" };
+  const amounts = judgeDeclaredAmounts(receipt, input);
+  if (amounts === "mismatch") return { result: "strike", reason: "amount_mismatch" };
+  if (amounts === "unprovable") return { result: "unverifiable", reason: "no_transfers_decoded" };
   return { result: "verified_full", blockTimestamp: receipt.blockTimestamp };
 }
 
@@ -35,20 +38,25 @@ function blockTimeOutsideTolerance(receipt: ReceiptView, input: VerificationInpu
   return driftMs > input.timeToleranceMin * 60_000;
 }
 
-function declaredAmountsMismatch(receipt: ReceiptView, input: VerificationInput): boolean {
-  return declaredInputMismatch(receipt, input) || declaredOutputMismatch(receipt, input);
+type AmountJudgement = "matches" | "mismatch" | "unprovable";
+
+function judgeDeclaredAmounts(receipt: ReceiptView, input: VerificationInput): AmountJudgement {
+  const legs = [declaredInputJudgement(receipt, input), declaredOutputJudgement(receipt, input)];
+  if (legs.includes("mismatch")) return "mismatch";
+  if (legs.includes("unprovable")) return "unprovable";
+  return "matches";
 }
 
-function declaredInputMismatch(receipt: ReceiptView, input: VerificationInput): boolean {
+function declaredInputJudgement(receipt: ReceiptView, input: VerificationInput): AmountJudgement {
   if (isNativeToken(input.tokenInAddress)) {
-    return nativeInputMismatch(receipt, input.executedInRaw, input.amountTolerancePct);
+    return nativeInputMismatch(receipt, input.executedInRaw, input.amountTolerancePct) ? "mismatch" : "matches";
   }
-  return declaredLegMismatch(receipt, input.tokenInAddress, input.executedInRaw, input.amountTolerancePct, "from");
+  return declaredLegJudgement(receipt, input.tokenInAddress, input.executedInRaw, input.amountTolerancePct, "from");
 }
 
-function declaredOutputMismatch(receipt: ReceiptView, input: VerificationInput): boolean {
-  if (isNativeToken(input.tokenOutAddress)) return false;
-  return declaredLegMismatch(receipt, input.tokenOutAddress, input.executedOutRaw, input.amountTolerancePct, "to");
+function declaredOutputJudgement(receipt: ReceiptView, input: VerificationInput): AmountJudgement {
+  if (isNativeToken(input.tokenOutAddress)) return "matches";
+  return declaredLegJudgement(receipt, input.tokenOutAddress, input.executedOutRaw, input.amountTolerancePct, "to");
 }
 
 function nativeInputMismatch(receipt: ReceiptView, declaredRaw: string | null, tolerancePct: number): boolean {
@@ -61,20 +69,23 @@ function isNativeToken(tokenAddress: string | null): boolean {
   return tokenAddress !== null && isEvmNativeAddress(tokenAddress);
 }
 
-function declaredLegMismatch(
+function declaredLegJudgement(
   receipt: ReceiptView,
   tokenAddress: string | null,
   declaredRaw: string | null,
   tolerancePct: number,
   counterparty: TransferCounterparty,
-): boolean {
-  if (tokenAddress === null || declaredRaw === null) return false;
+): AmountJudgement {
+  if (tokenAddress === null || declaredRaw === null) return "matches";
+  if (receipt.erc20Transfers.length === 0) return "unprovable";
   const declared = BigInt(declaredRaw);
   const tokenTransfers = receipt.erc20Transfers.filter((transfer) => sameAddress(transfer.token, tokenAddress));
   if (tokenTransfers.some((transfer) => withinTolerance(BigInt(transfer.amountRaw), declared, tolerancePct))) {
-    return false;
+    return "matches";
   }
-  return !someCounterpartyMovedTheDeclaredTotal(tokenTransfers, counterparty, declared, tolerancePct);
+  return someCounterpartyMovedTheDeclaredTotal(tokenTransfers, counterparty, declared, tolerancePct)
+    ? "matches"
+    : "mismatch";
 }
 
 function someCounterpartyMovedTheDeclaredTotal(

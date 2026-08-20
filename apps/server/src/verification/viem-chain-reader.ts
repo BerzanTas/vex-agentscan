@@ -11,17 +11,42 @@ import {
   type PublicClient,
   type TransactionReceipt,
 } from "viem";
-import type { ChainEntry, ChainReader, ReceiptView } from "@agentscan/core";
+import type {
+  ChainEntry,
+  ChainReader,
+  MissingReceiptCorroboration,
+  ReceiptView,
+} from "@agentscan/core";
 import type { Config } from "../config.js";
 import { rpcUrlsFor } from "./rpc-urls.js";
+
+async function corroborateMissing(
+  clients: PublicClient[],
+  txHash: string,
+): Promise<MissingReceiptCorroboration> {
+  const answers = await Promise.all(
+    clients.map(async (client) => {
+      try {
+        return (await receiptOrNull(client, txHash)) === null ? "absent" : "present";
+      } catch {
+        return "silent";
+      }
+    }),
+  );
+  if (answers.includes("present")) return "found";
+  const absent = answers.filter((answer) => answer === "absent").length;
+  return absent >= CORROBORATING_ENDPOINTS_NEEDED ? "missing" : "unknown";
+}
 
 const transferEvent = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
 const transferTopic = toEventSelector(transferEvent);
 
+const CORROBORATING_ENDPOINTS_NEEDED = 2;
+
 export function makeChainReader(entry: ChainEntry, config: Config): ChainReader {
-  const client = createPublicClient({
-    transport: fallback(rpcUrlsFor(entry, config).map((url) => http(url))),
-  });
+  const endpoints = rpcUrlsFor(entry, config);
+  const client = createPublicClient({ transport: fallback(endpoints.map((url) => http(url))) });
+  const singleEndpointClients = endpoints.map((url) => createPublicClient({ transport: http(url) }));
   return {
     async getReceipt(txHash) {
       const receipt = await receiptOrNull(client, txHash);
@@ -37,6 +62,7 @@ export function makeChainReader(entry: ChainEntry, config: Config): ChainReader 
       };
     },
     getHeadBlockNumber: () => client.getBlockNumber(),
+    corroborateMissingReceipt: (txHash) => corroborateMissing(singleEndpointClients, txHash),
   };
 }
 
