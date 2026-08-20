@@ -180,6 +180,7 @@ export const ACTIVITY_KIND_FILTERS = [
   "wrap",
   "yield",
   "launch",
+  "claim",
 ] as const;
 
 export const ACTIVITY_STATUS_FILTERS = [
