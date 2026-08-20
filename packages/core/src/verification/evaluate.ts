@@ -1,5 +1,7 @@
 import { isEvmNativeAddress } from "../evm-native-address.js";
-import type { ReceiptView } from "./chain-reader.js";
+import type { Erc20Transfer, ReceiptView } from "./chain-reader.js";
+
+type TransferCounterparty = "from" | "to";
 
 export type VerificationInput = {
   txHash: string;
@@ -41,12 +43,12 @@ function declaredInputMismatch(receipt: ReceiptView, input: VerificationInput): 
   if (isNativeToken(input.tokenInAddress)) {
     return nativeInputMismatch(receipt, input.executedInRaw, input.amountTolerancePct);
   }
-  return declaredLegMismatch(receipt, input.tokenInAddress, input.executedInRaw, input.amountTolerancePct);
+  return declaredLegMismatch(receipt, input.tokenInAddress, input.executedInRaw, input.amountTolerancePct, "from");
 }
 
 function declaredOutputMismatch(receipt: ReceiptView, input: VerificationInput): boolean {
   if (isNativeToken(input.tokenOutAddress)) return false;
-  return declaredLegMismatch(receipt, input.tokenOutAddress, input.executedOutRaw, input.amountTolerancePct);
+  return declaredLegMismatch(receipt, input.tokenOutAddress, input.executedOutRaw, input.amountTolerancePct, "to");
 }
 
 function nativeInputMismatch(receipt: ReceiptView, declaredRaw: string | null, tolerancePct: number): boolean {
@@ -64,11 +66,29 @@ function declaredLegMismatch(
   tokenAddress: string | null,
   declaredRaw: string | null,
   tolerancePct: number,
+  counterparty: TransferCounterparty,
 ): boolean {
   if (tokenAddress === null || declaredRaw === null) return false;
   const declared = BigInt(declaredRaw);
   const tokenTransfers = receipt.erc20Transfers.filter((transfer) => sameAddress(transfer.token, tokenAddress));
-  return !tokenTransfers.some((transfer) => withinTolerance(BigInt(transfer.amountRaw), declared, tolerancePct));
+  if (tokenTransfers.some((transfer) => withinTolerance(BigInt(transfer.amountRaw), declared, tolerancePct))) {
+    return false;
+  }
+  return !someCounterpartyMovedTheDeclaredTotal(tokenTransfers, counterparty, declared, tolerancePct);
+}
+
+function someCounterpartyMovedTheDeclaredTotal(
+  transfers: readonly Erc20Transfer[],
+  counterparty: TransferCounterparty,
+  declared: bigint,
+  tolerancePct: number,
+): boolean {
+  const totalByCounterparty = new Map<string, bigint>();
+  for (const transfer of transfers) {
+    const key = transfer[counterparty].toLowerCase();
+    totalByCounterparty.set(key, (totalByCounterparty.get(key) ?? 0n) + BigInt(transfer.amountRaw));
+  }
+  return [...totalByCounterparty.values()].some((total) => withinTolerance(total, declared, tolerancePct));
 }
 
 function withinTolerance(actual: bigint, declared: bigint, tolerancePct: number): boolean {

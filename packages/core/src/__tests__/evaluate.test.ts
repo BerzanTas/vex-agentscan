@@ -299,3 +299,80 @@ describe("a native leg declared with the zero address, as Relay spells it", () =
     expect(asZero).toEqual(asSentinel);
   });
 });
+
+describe("an input leg the venue splits into several transfers", () => {
+  const wallet = "0x33ef";
+  const treasury = "0xe341";
+  const executor = "0x8f10";
+  const pool = "0x4fa2";
+  const taxedToken = "0xvex0";
+
+  it("verifies a spend the token taxed on its way out, whose parts sum to the declared amount", () => {
+    const receipt = receiptFixture({
+      erc20Transfers: [
+        { token: taxedToken, from: wallet, to: treasury, amountRaw: "4455000000000000000" },
+        { token: taxedToken, from: wallet, to: taxedToken, amountRaw: "17775450000000000000" },
+        { token: taxedToken, from: wallet, to: pool, amountRaw: "1759769550000000000000" },
+      ],
+    });
+    const input = inputFixture({
+      tokenInAddress: taxedToken,
+      executedInRaw: "1782000000000000000000",
+      tokenOutAddress: null,
+      executedOutRaw: null,
+    });
+
+    expect(evaluateVerification(receipt, input)).toEqual({ result: "verified_full", blockTimestamp });
+  });
+
+  it("refuses to count the same tokens twice as they pass through the venue executor", () => {
+    const receipt = receiptFixture({
+      erc20Transfers: [
+        { token: taxedToken, from: wallet, to: treasury, amountRaw: "4587500000000000000" },
+        { token: taxedToken, from: wallet, to: executor, amountRaw: "1830412500000000000000" },
+        { token: taxedToken, from: executor, to: pool, amountRaw: "1830412500000000000000" },
+      ],
+    });
+    const declaringDouble = inputFixture({
+      tokenInAddress: taxedToken,
+      executedInRaw: "3670000000000000000000",
+      tokenOutAddress: null,
+      executedOutRaw: null,
+    });
+
+    expect(evaluateVerification(receipt, declaringDouble)).toEqual({
+      result: "strike",
+      reason: "amount_mismatch",
+    });
+  });
+
+  it("keeps verifying the same routed spend when the declared amount is what left the wallet", () => {
+    const receipt = receiptFixture({
+      erc20Transfers: [
+        { token: taxedToken, from: wallet, to: treasury, amountRaw: "4587500000000000000" },
+        { token: taxedToken, from: wallet, to: executor, amountRaw: "1830412500000000000000" },
+        { token: taxedToken, from: executor, to: pool, amountRaw: "1830412500000000000000" },
+      ],
+    });
+    const input = inputFixture({
+      tokenInAddress: taxedToken,
+      executedInRaw: "1835000000000000000000",
+      tokenOutAddress: null,
+      executedOutRaw: null,
+    });
+
+    expect(evaluateVerification(receipt, input)).toEqual({ result: "verified_full", blockTimestamp });
+  });
+
+  it("verifies an output leg the venue pays out of several sources", () => {
+    const receipt = receiptFixture({
+      erc20Transfers: [
+        { token: "0xbb22", from: pool, to: wallet, amountRaw: "1200000" },
+        { token: "0xbb22", from: executor, to: wallet, amountRaw: "800000" },
+      ],
+    });
+    const input = inputFixture({ tokenInAddress: null, executedInRaw: null, executedOutRaw: "2000000" });
+
+    expect(evaluateVerification(receipt, input)).toEqual({ result: "verified_full", blockTimestamp });
+  });
+});
