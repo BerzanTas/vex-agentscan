@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { revokeTokenAttestations } from "../../cli/attestation-revoke.js";
 import { listAgentsAwaitingPurge } from "../../cli/purge-status.js";
 import { liftQuarantine, listQuarantinedAgents } from "../../cli/quarantine.js";
+import { reopenVerification } from "../../cli/verify-reopen.js";
 import { retryVerification } from "../../cli/verify-retry.js";
 import { loadConfig } from "../../config.js";
 import { finalizeVerification } from "../../repos/activities-verify-repo.js";
@@ -290,3 +291,123 @@ async function attestationRowsFor(
   );
   return result.rows;
 }
+
+describe("verify reopen, withdrawing a verdict that should never have been issued", () => {
+  const struckAgent = "a".repeat(64);
+
+  async function seedStrike(agentHash: string, activityId: bigint): Promise<void> {
+    await db.pool.query("INSERT INTO strikes (agent_hash, activity_id, reason) VALUES ($1, $2, $3)", [
+      agentHash,
+      activityId.toString(),
+      "amount_mismatch",
+    ]);
+  }
+
+  async function strikeRowsOf(agentHash: string): Promise<{ activity_id: string | null; reason: string }[]> {
+    const result = await db.pool.query<{ activity_id: string | null; reason: string }>(
+      "SELECT activity_id, reason FROM strikes WHERE agent_hash = $1 ORDER BY id",
+      [agentHash],
+    );
+    return result.rows;
+  }
+
+  it("requeues the activity and withdraws the strike that verdict produced", async () => {
+    const agentHash = `${struckAgent.slice(0, 63)}1`;
+    await seedAgent(agentHash, { strikeCount: 1 });
+    const { activityId, publicId } = await seedActivity(agentHash, "mismatch");
+    await seedStrike(agentHash, activityId);
+
+    const outcome = await reopenVerification(db.pool, publicId, config.QUARANTINE_STRIKES);
+
+    expect(outcome).toEqual({ reopened: true, strikesWithdrawn: 1, quarantineLifted: false });
+    expect(await verificationStateOf(activityId)).toBe("queued");
+    expect(await agentRowOf(agentHash)).toEqual({ status: "active", strike_count: 0 });
+    expect(await strikeRowsOf(agentHash)).toEqual([{ activity_id: null, reason: "operator_reopen" }]);
+  });
+
+  it("returns a quarantined agent to active once its strikes fall below the threshold", async () => {
+    const agentHash = `${struckAgent.slice(0, 63)}2`;
+    await seedAgent(agentHash, {
+      status: "quarantined",
+      strikeCount: config.QUARANTINE_STRIKES,
+      quarantinedAt: "2026-08-20T06:41:12Z",
+    });
+    const { activityId, publicId } = await seedActivity(agentHash, "mismatch");
+    await seedStrike(agentHash, activityId);
+
+    const outcome = await reopenVerification(db.pool, publicId, config.QUARANTINE_STRIKES);
+
+    expect(outcome).toEqual({ reopened: true, strikesWithdrawn: 1, quarantineLifted: true });
+    expect(await agentRowOf(agentHash)).toEqual({
+      status: "active",
+      strike_count: config.QUARANTINE_STRIKES - 1,
+    });
+  });
+
+  it("keeps an agent quarantined while the strikes it still carries reach the threshold", async () => {
+    const agentHash = `${struckAgent.slice(0, 63)}3`;
+    await seedAgent(agentHash, {
+      status: "quarantined",
+      strikeCount: config.QUARANTINE_STRIKES + 1,
+      quarantinedAt: "2026-08-20T06:41:12Z",
+    });
+    const { activityId, publicId } = await seedActivity(agentHash, "mismatch");
+    await seedStrike(agentHash, activityId);
+
+    const outcome = await reopenVerification(db.pool, publicId, config.QUARANTINE_STRIKES);
+
+    expect(outcome).toEqual({ reopened: true, strikesWithdrawn: 1, quarantineLifted: false });
+    expect((await agentRowOf(agentHash)).status).toBe("quarantined");
+  });
+
+  it("withdraws only the strike of the named activity and leaves the others standing", async () => {
+    const agentHash = `${struckAgent.slice(0, 63)}4`;
+    await seedAgent(agentHash, { strikeCount: 2 });
+    const wrongful = await seedActivity(agentHash, "mismatch");
+    const untouched = await seedActivity(agentHash, "mismatch");
+    await seedStrike(agentHash, wrongful.activityId);
+    await seedStrike(agentHash, untouched.activityId);
+
+    await reopenVerification(db.pool, wrongful.publicId, config.QUARANTINE_STRIKES);
+
+    expect(await agentRowOf(agentHash)).toEqual({ status: "active", strike_count: 1 });
+    expect(await verificationStateOf(untouched.activityId)).toBe("mismatch");
+    const remaining = await strikeRowsOf(agentHash);
+    expect(remaining.map((row) => row.activity_id)).toEqual([untouched.activityId.toString(), null]);
+  });
+
+  it("queues a due verification job with no attempts behind it", async () => {
+    const agentHash = `${struckAgent.slice(0, 63)}5`;
+    await seedAgent(agentHash, { strikeCount: 1 });
+    const { activityId, publicId } = await seedActivity(agentHash, "mismatch");
+    await seedStrike(agentHash, activityId);
+
+    await reopenVerification(db.pool, publicId, config.QUARANTINE_STRIKES);
+
+    const job = await db.pool.query<{ attempts: number; due: boolean }>(
+      "SELECT attempts, next_attempt_at <= now() AS due FROM verification_jobs WHERE activity_id = $1",
+      [activityId.toString()],
+    );
+    expect(onlyRow(job.rows)).toEqual({ attempts: 0, due: true });
+  });
+
+  it("refuses an activity that carries no mismatch verdict", async () => {
+    const agentHash = `${struckAgent.slice(0, 63)}6`;
+    await seedAgent(agentHash);
+    const { publicId } = await seedActivity(agentHash, "verified_full");
+
+    expect(await reopenVerification(db.pool, publicId, config.QUARANTINE_STRIKES)).toEqual({
+      reopened: false,
+      refusal: "not_reopenable",
+      state: "verified_full",
+      status: "confirmed",
+    });
+  });
+
+  it("reports an unknown public id without touching anything", async () => {
+    expect(await reopenVerification(db.pool, "no-such-public-id", config.QUARANTINE_STRIKES)).toEqual({
+      reopened: false,
+      refusal: "not_found",
+    });
+  });
+});
