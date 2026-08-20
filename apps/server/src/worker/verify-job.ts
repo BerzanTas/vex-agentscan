@@ -27,10 +27,17 @@ export type VerifyJobDeps = {
   chainReaderFor: (entry: ChainEntry, context: ChainReaderContext) => ChainReader;
 };
 
+export type ObservedLeg = { token: string; from: string; to: string; amountRaw: string };
+
+export type StrikeObservation = {
+  transactionValueRaw: string | null;
+  declaredTokenTransfers: ObservedLeg[];
+};
+
 export type JobOutcome =
   | { kind: "reschedule"; delayMs: number; lastError: string }
   | { kind: "close_unverifiable" }
-  | { kind: "finalize"; verdict: TerminalVerdict };
+  | { kind: "finalize"; verdict: TerminalVerdict; observed?: StrikeObservation };
 
 export type ReceiptRead =
   | { outcome: "receipt"; receipt: ReceiptView }
@@ -71,7 +78,9 @@ export async function resolveJobOutcome(job: ClaimedJob, deps: VerifyJobDeps): P
   });
   const read = await readReceipt(reader, job.txHash);
   const verdict = verdictFrom(read, job, entry, deps.config, job.txHash);
-  if (verdict.result !== "retry") return { kind: "finalize", verdict };
+  if (verdict.result !== "retry") {
+    return { kind: "finalize", verdict, ...observationOf(read, job, verdict) };
+  }
 
   const backoff = nextBackoff({
     attempts: job.attempts,
@@ -87,6 +96,26 @@ export async function resolveJobOutcome(job: ClaimedJob, deps: VerifyJobDeps): P
     return { kind: "finalize", verdict: { result: "strike", reason: "tx_not_found" } };
   }
   return { kind: "close_unverifiable" };
+}
+
+const DECLARED_TRANSFER_LOG_LIMIT = 8;
+
+function observationOf(
+  read: ReceiptRead,
+  job: ClaimedJob,
+  verdict: Verdict,
+): { observed?: StrikeObservation } {
+  if (verdict.result !== "strike") return {};
+  if (read.outcome !== "receipt") return {};
+  const declaredTokens = [job.tokenInAddress, job.tokenOutAddress]
+    .filter((address): address is string => address !== null)
+    .map((address) => address.toLowerCase());
+  const declaredTokenTransfers = read.receipt.erc20Transfers
+    .filter((transfer) => declaredTokens.includes(transfer.token.toLowerCase()))
+    .slice(0, DECLARED_TRANSFER_LOG_LIMIT);
+  return {
+    observed: { transactionValueRaw: read.receipt.transactionValueRaw, declaredTokenTransfers },
+  };
 }
 
 export async function readReceipt(reader: ChainReader, txHash: string): Promise<ReceiptRead> {

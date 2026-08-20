@@ -1,4 +1,4 @@
-import { pino } from "pino";
+import { pino, type Logger } from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { EventStatus } from "@agentscan/contract";
 import { resolveChain, type ChainReader, type ReceiptView } from "@agentscan/core";
@@ -354,7 +354,7 @@ describe("verification worker", () => {
     expect((await agentRowOf(agent)).strike_count).toBe(0);
   });
 
-  it("quarantines an agent after three strikes across three activities", async () => {
+  it("keeps an agent active when the same failure repeats, because one shape is one piece of evidence", async () => {
     const agent = "7".repeat(64);
     await seedAgent(agent);
     await seedQueuedActivity({ agentHash: agent, protocol: "p-quarantine" });
@@ -367,6 +367,22 @@ describe("verification worker", () => {
     const strikes = await strikesOf(agent);
     expect(strikes).toHaveLength(3);
     expect(strikes.map((strike) => strike.reason)).toEqual(["tx_reverted", "tx_reverted", "tx_reverted"]);
+    const agentRow = await agentRowOf(agent);
+    expect(agentRow.strike_count).toBe(3);
+    expect(agentRow.status).toBe("active");
+    expect(agentRow.quarantined_at).toBeNull();
+  });
+
+  it("quarantines an agent once three unrelated failures line up", async () => {
+    const agent = "7a".repeat(32);
+    await seedAgent(agent);
+    await seedQueuedActivity({ agentHash: agent, protocol: "p-unrelated-one" });
+    await seedQueuedActivity({ agentHash: agent, protocol: "p-unrelated-two" });
+    await seedQueuedActivity({ agentHash: agent, protocol: "p-unrelated-three" });
+    const reverted: ReceiptView = { status: "reverted", blockTimestamp: new Date(), erc20Transfers: [], transactionValueRaw: null };
+
+    await runVerificationPass(depsWithReader(readerReturning(reverted)));
+
     const agentRow = await agentRowOf(agent);
     expect(agentRow.strike_count).toBe(3);
     expect(agentRow.status).toBe("quarantined");
@@ -595,7 +611,7 @@ describe("verification worker", () => {
     expect((await agentRowOf(agent)).strike_count).toBe(1);
   });
 
-  it("quarantines an agent after three mismatches from launch-kind activities declaring a spoofed swap role", async () => {
+  it("strikes every launch-kind activity declaring a spoofed swap role, without cutting the agent off for one repeated shape", async () => {
     const agent = "c7".repeat(32);
     await seedAgent(agent);
     await seedQueuedActivity({ agentHash: agent, protocol: "p-launch-spoofed-quarantine", kind: "launch", eventRole: "swap" });
@@ -607,8 +623,8 @@ describe("verification worker", () => {
 
     const agentRow = await agentRowOf(agent);
     expect(agentRow.strike_count).toBe(3);
-    expect(agentRow.status).toBe("quarantined");
-    expect(agentRow.quarantined_at).not.toBeNull();
+    expect(agentRow.status).toBe("active");
+    expect(agentRow.quarantined_at).toBeNull();
   });
 
   it("books a verified launch under its own kind aggregate with zero volume but a counted transaction", async () => {
@@ -658,6 +674,66 @@ describe("verification worker", () => {
       kind: "swap",
       volume_usd: "5",
       tx_count: 1,
+    });
+  });
+});
+
+describe("what a verdict leaves behind for whoever has to judge it later", () => {
+  function capturingLogger(): { logger: Logger; entries: Record<string, unknown>[] } {
+    const entries: Record<string, unknown>[] = [];
+    const destination = {
+      write(line: string) {
+        entries.push(JSON.parse(line) as Record<string, unknown>);
+      },
+    };
+    return { logger: pino<never>({ level: "info" }, destination), entries };
+  }
+
+  it("names the row, the reason, the declared amounts and what the receipt actually carried", async () => {
+    const agent = "e5".repeat(32);
+    await seedAgent(agent);
+    const token = `0x${"a".repeat(40)}`;
+    await seedQueuedActivity({
+      agentHash: agent,
+      protocol: "p-verdict-log",
+      tokenInAddress: token,
+      executedInRaw: "1000",
+    });
+    const receipt: ReceiptView = {
+      status: "success",
+      blockTimestamp: new Date(),
+      erc20Transfers: [{ token, from: "0x1111", to: "0x2222", amountRaw: "4000" }],
+      transactionValueRaw: "0",
+    };
+    const { logger: capturing, entries } = capturingLogger();
+
+    await runVerificationPass({ ...depsWithReader(readerReturning(receipt)), logger: capturing });
+
+    const verdicts = entries.filter((entry) => entry.msg === "verification verdict");
+    expect(verdicts).toHaveLength(1);
+    expect(verdicts[0]).toMatchObject({
+      protocol: "p-verdict-log",
+      verdict: "strike",
+      reason: "amount_mismatch",
+      declared: { inRaw: "1000", tokenIn: token },
+      observed: { declaredTokenTransfers: [{ token, amountRaw: "4000" }] },
+    });
+    expect(verdicts[0]?.publicId).toEqual(expect.any(String));
+  });
+
+  it("names the chain a job could not resolve instead of leaving it only in the job row", async () => {
+    const agent = "e6".repeat(32);
+    await seedAgent(agent);
+    await seedQueuedActivity({ agentHash: agent, protocol: "p-verdict-log-chain", chainId: 987654321 });
+    const { logger: capturing, entries } = capturingLogger();
+
+    await runVerificationPass({ ...depsWithReader(readerReturning(null)), logger: capturing });
+
+    const verdicts = entries.filter((entry) => entry.msg === "verification verdict");
+    expect(verdicts[0]).toMatchObject({
+      protocol: "p-verdict-log-chain",
+      outcome: "reschedule",
+      lastError: "chain_not_in_registry",
     });
   });
 });
