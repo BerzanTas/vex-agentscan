@@ -9,6 +9,7 @@ const now = () => new Date("2026-08-04T11:00:00Z");
 function jobFixture(overrides: Partial<ClaimedJob> = {}): ClaimedJob {
   return {
     activityId: 1n,
+    publicId: "job-fixture",
     attempts: 0,
     firstAttemptAt: new Date("2026-08-04T10:00:00Z"),
     txHash: "0xabc",
