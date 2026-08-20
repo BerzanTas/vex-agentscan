@@ -4,6 +4,7 @@ import { revokeTokenAttestations } from "./cli/attestation-revoke.js";
 import { requeueUnpricedActivities } from "./cli/pricing-requeue.js";
 import { listAgentsAwaitingPurge } from "./cli/purge-status.js";
 import { liftQuarantine, listQuarantinedAgents } from "./cli/quarantine.js";
+import { reopenVerification, type ReopenRefusal } from "./cli/verify-reopen.js";
 import { retryVerification, type RetryRefusal } from "./cli/verify-retry.js";
 import { loadConfig } from "./config.js";
 import { createPool } from "./db.js";
@@ -69,15 +70,36 @@ function retryRefusalMessage(refusal: RetryRefusal): string {
   return `activity is not retryable in state ${refusal.state} with status ${refusal.status}`;
 }
 
-program
-  .command("verify")
+function reopenRefusalMessage(refusal: ReopenRefusal): string {
+  if (refusal.refusal === "not_found") return "no activity with that public id";
+  return `activity carries no mismatch verdict: state ${refusal.state}, status ${refusal.status}`;
+}
+
+const verify = program.command("verify");
+verify
   .command("retry")
   .description("requeue verification of an activity closed as unverifiable, by public id")
   .argument("<publicId>")
   .action(async (publicId: string) => {
     const outcome = await withPool((pool) => retryVerification(pool, publicId));
     if (!outcome.requeued) {
-      process.stderr.write(`${retryRefusalMessage(outcome)}\n`);
+      process.stderr.write(`${retryRefusalMessage(outcome)}
+`);
+      process.exitCode = 1;
+      return;
+    }
+    printJson(outcome);
+  });
+verify
+  .command("reopen")
+  .description("withdraw a mismatch verdict and the strike it produced, requeueing the activity")
+  .argument("<publicId>")
+  .action(async (publicId: string) => {
+    const { QUARANTINE_STRIKES } = loadConfig(process.env);
+    const outcome = await withPool((pool) => reopenVerification(pool, publicId, QUARANTINE_STRIKES));
+    if (!outcome.reopened) {
+      process.stderr.write(`${reopenRefusalMessage(outcome)}
+`);
       process.exitCode = 1;
       return;
     }
