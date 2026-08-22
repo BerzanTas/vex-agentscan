@@ -7,7 +7,12 @@ export {
   type SolanaChain,
 } from "./chain-registry/chains.js";
 export { resolveChain, type ChainKey, type ResolveChain } from "./chain-registry/registry.js";
-export type { ChainReader, ReceiptLog, ReceiptView } from "./verification/chain-reader.js";
+export type {
+  ChainReader,
+  MissingReceiptCorroboration,
+  ReceiptLog,
+  ReceiptView,
+} from "./verification/chain-reader.js";
 export { evaluateVerification, type Verdict, type VerificationInput } from "./verification/evaluate.js";
 export {
   evaluateAttestationVerification,

@@ -9,6 +9,7 @@ export type TerminalVerdict = Extract<Verdict, { result: "verified_full" | "veri
 
 export type ClaimedJob = {
   activityId: bigint;
+  publicId: string;
   attempts: number;
   firstAttemptAt: Date;
   txHash: string | null;
@@ -25,6 +26,7 @@ export type ClaimedJob = {
 
 type ClaimedJobRow = {
   activity_id: string;
+  public_id: string;
   attempts: number;
   first_attempt_at: Date;
   tx_hash: string | null;
@@ -59,7 +61,7 @@ export async function claimDueJobs(
          LIMIT $1
          FOR UPDATE SKIP LOCKED
        )
-     RETURNING vj.activity_id, vj.attempts, vj.first_attempt_at,
+     RETURNING vj.activity_id, vj.attempts, vj.first_attempt_at, a.public_id,
                a.tx_hash, a.protocol, a.chain_family, a.chain_id, a.kind,
                a.client_confirmed_at, a.executed_in_raw, a.executed_out_raw,
                a.token_in_address, a.token_out_address`,
@@ -67,6 +69,7 @@ export async function claimDueJobs(
   );
   return result.rows.map((row) => ({
     activityId: BigInt(row.activity_id),
+    publicId: row.public_id,
     attempts: row.attempts,
     firstAttemptAt: row.first_attempt_at,
     txHash: row.tx_hash,
@@ -209,14 +212,27 @@ async function recordStrike(
     "UPDATE agents SET strike_count = strike_count + 1, updated_at = now() WHERE agent_hash = $1 RETURNING strike_count",
     [agentHash],
   );
-  const strikeCount = struck.rows[0]?.strike_count ?? 0;
-  if (strikeCount < config.QUARANTINE_STRIKES) return;
+  if (struck.rowCount === 0) return;
+  const independent = await independentStrikeShapes(client, agentHash);
+  if (independent < config.QUARANTINE_STRIKES) return;
   await client.query(
     `UPDATE agents
      SET status = 'quarantined', quarantined_at = COALESCE(quarantined_at, now()), updated_at = now()
      WHERE agent_hash = $1`,
     [agentHash],
   );
+}
+
+async function independentStrikeShapes(client: SqlExecutor, agentHash: string): Promise<number> {
+  const shapes = await client.query<{ shapes: number }>(
+    `SELECT count(*)::int AS shapes FROM (
+       SELECT DISTINCT s.reason, a.protocol, a.kind, a.event_role, a.chain_family, a.chain_id
+         FROM strikes s JOIN activities a ON a.id = s.activity_id
+        WHERE s.agent_hash = $1
+     ) distinct_shapes`,
+    [agentHash],
+  );
+  return shapes.rows[0]?.shapes ?? 0;
 }
 
 async function deleteJob(client: SqlExecutor, activityId: bigint): Promise<void> {

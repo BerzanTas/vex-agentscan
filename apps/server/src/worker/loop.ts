@@ -35,12 +35,48 @@ async function resolveWithConcurrency(
   return resolved;
 }
 
+function verdictLogFields(resolved: ResolvedJob): Record<string, unknown> {
+  const { job, outcome } = resolved;
+  const identity = {
+    publicId: job.publicId,
+    protocol: job.protocol,
+    kind: job.kind,
+    chainFamily: job.chainFamily,
+    chainId: String(job.chainId),
+    txHash: job.txHash,
+    attempts: job.attempts,
+  };
+  if (outcome.kind === "reschedule") {
+    return { ...identity, outcome: outcome.kind, lastError: outcome.lastError };
+  }
+  if (outcome.kind === "close_unverifiable") {
+    return { ...identity, outcome: outcome.kind, reason: outcome.reason };
+  }
+  if (outcome.verdict.result !== "strike") {
+    return { ...identity, outcome: outcome.kind, verdict: outcome.verdict.result };
+  }
+  return {
+    ...identity,
+    outcome: outcome.kind,
+    verdict: outcome.verdict.result,
+    reason: outcome.verdict.reason,
+    declared: {
+      inRaw: job.executedInRaw,
+      outRaw: job.executedOutRaw,
+      tokenIn: job.tokenInAddress,
+      tokenOut: job.tokenOutAddress,
+    },
+    observed: outcome.observed ?? null,
+  };
+}
+
 async function persistOutcome(deps: VerificationLoopDeps, resolved: ResolvedJob): Promise<void> {
   const client = await deps.pool.connect();
   try {
     await client.query("BEGIN");
     await applyJobOutcome(client, resolved.job.activityId, resolved.outcome, deps.config);
     await client.query("COMMIT");
+    deps.logger.info(verdictLogFields(resolved), "verification verdict");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
     deps.logger.error({ err: error, activityId: String(resolved.job.activityId) }, "persist outcome failed");

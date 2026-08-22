@@ -11,7 +11,10 @@ export type ReceiptView = {
   logs?: ReceiptLog[];
 };
 
+export type MissingReceiptCorroboration = "missing" | "found" | "unknown";
+
 export interface ChainReader {
   getReceipt(txHash: string): Promise<ReceiptView | null>;
   getHeadBlockNumber?(): Promise<bigint>;
+  corroborateMissingReceipt?(txHash: string): Promise<MissingReceiptCorroboration>;
 }
