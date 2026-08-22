@@ -479,6 +479,7 @@ const kindSweepRole: Record<EventKind, string> = {
   yield: "yield_lp",
   launch: "token_launch",
   claim: "pools_claim",
+  transfer: "wallet_transfer",
 };
 
 const kindSweepId = (kind: EventKind) => `kind-sweep-${kind}`;

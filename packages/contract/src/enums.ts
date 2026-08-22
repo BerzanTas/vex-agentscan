@@ -1,4 +1,4 @@
-export const EVENT_KINDS = ["swap", "bridge", "lend", "prediction", "wrap", "yield", "launch", "claim"] as const;
+export const EVENT_KINDS = ["swap", "bridge", "lend", "prediction", "wrap", "yield", "launch", "claim", "transfer"] as const;
 export const EVENT_ROLES = [
   "swap",
   "trench_fee",
@@ -26,6 +26,7 @@ export const EVENT_ROLES = [
   "token_launch",
   "pools_fee",
   "pools_claim",
+  "wallet_transfer",
 ] as const;
 export const EVENT_STATUSES = ["pending", "confirmed", "definitively_failed", "superseded_unproven"] as const;
 export const CHAIN_FAMILIES = ["eip155", "solana"] as const;

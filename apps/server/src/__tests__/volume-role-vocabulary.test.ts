@@ -28,6 +28,11 @@ const ROLES_CARRYING_NO_DIRECTION = [
 
 const ROLES_WHOSE_SPEND_IS_CONFLATED_WITH_A_FEE = ["token_launch"];
 
+// A wallet-to-wallet send moves capital without deploying any: the agent still holds what it sent,
+// at another address. Counting it as volume would let one balance be moved back and forth to
+// manufacture an arbitrary figure.
+const ROLES_MOVING_CAPITAL_WITHOUT_DEPLOYING_IT = ["wallet_transfer"];
+
 const ROLES_OUTSIDE_VOLUME = [
   ...CAPITAL_COMING_BACK_ROLES,
   ...FEE_ROLES,
@@ -35,6 +40,7 @@ const ROLES_OUTSIDE_VOLUME = [
   ...DENOMINATION_CHANGING_ROLES,
   ...ROLES_CARRYING_NO_DIRECTION,
   ...ROLES_WHOSE_SPEND_IS_CONFLATED_WITH_A_FEE,
+  ...ROLES_MOVING_CAPITAL_WITHOUT_DEPLOYING_IT,
 ];
 
 function alphabetical(roles: readonly string[]): string[] {
