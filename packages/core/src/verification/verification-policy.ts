@@ -10,7 +10,8 @@ export type VerificationKind =
   | "wrap"
   | "yield"
   | "launch"
-  | "claim";
+  | "claim"
+  | "transfer";
 
 type KindVerificationPolicy = {
   tierCap: VerificationTier | null;
@@ -30,6 +31,14 @@ const kindVerificationPolicies: Record<VerificationKind, KindVerificationPolicy>
   // A claim is an ordinary receipt-provable transfer: it has a hash, it either landed or it did
   // not, so it follows the chain's tier and claims no strike exemption.
   claim: followsChainTier,
+  // A transfer is capped at basic on its first ship, the way a wrap is. The kind covers every
+  // wallet send the client can make, including ERC-721 and ERC-1155 sends, while the full verifier
+  // only models native value and the ERC-20 Transfer log. Reading an NFT send at full tier would
+  // produce amount and time mismatches against a shape the verifier does not know how to decode,
+  // and three such strikes quarantine an honest installation. Basic still proves the transaction
+  // exists on the chain it claims and did not revert. The cap can be lifted once the verifier
+  // models token-standard sends.
+  transfer: { tierCap: "basic", strikeExemptRoles: [] },
 };
 
 export function resolveVerificationTier(

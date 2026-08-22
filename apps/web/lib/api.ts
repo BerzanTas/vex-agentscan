@@ -194,6 +194,7 @@ export const ACTIVITY_KIND_FILTERS = [
   "yield",
   "launch",
   "claim",
+  "transfer",
 ] as const;
 
 export const ACTIVITY_STATUS_FILTERS = [

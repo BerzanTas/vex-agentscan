@@ -19,6 +19,12 @@ describe("resolveVerificationTier", () => {
   it("caps a wrap activity at basic even on a full-tier chain", () => {
     expect(resolveVerificationTier("wrap", "full")).toBe("basic");
   });
+  it("caps a transfer at basic even on a full-tier chain, because the kind covers NFT sends the full verifier cannot decode", () => {
+    expect(resolveVerificationTier("transfer", "full")).toBe("basic");
+  });
+  it("keeps a transfer at basic on a basic-tier chain", () => {
+    expect(resolveVerificationTier("transfer", "basic")).toBe("basic");
+  });
   it.each(["lend", "prediction", "yield", "claim"] as const)(
     "passes the chain tier through unchanged for a %s",
     (kind) => {
@@ -41,7 +47,7 @@ describe("isLaunchShaped", () => {
   it("rejects a bridge kind paired with its own role", () => {
     expect(isLaunchShaped("bridge", "bridge_deposit")).toBe(false);
   });
-  it.each(["lend", "prediction", "wrap", "yield", "claim"] as const)(
+  it.each(["lend", "prediction", "wrap", "yield", "claim", "transfer"] as const)(
     "rejects the %s kind, which claims no strike exemption",
     (kind) => {
       expect(isLaunchShaped(kind, "token_launch")).toBe(false);

@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { CHAIN_FAMILIES, EVENT_KINDS, EVENT_ROLES, EVENT_STATUSES, FAILURE_CODES } from "./enums.js";
-import { INPUT_LEG_FORBIDDEN_ROLES, SECOND_LEG_ROLES, isRoleBoundToKind } from "./role-binding.js";
+import {
+  INPUT_LEG_FORBIDDEN_ROLES,
+  OUTPUT_LEG_FORBIDDEN_ROLES,
+  SECOND_LEG_ROLES,
+  isRoleBoundToKind,
+} from "./role-binding.js";
 
 const rawAmount = z.string().regex(/^\d+$/);
 const usdString = z.string().regex(/^\d+(\.\d+)?$/);
@@ -68,6 +73,17 @@ const INPUT_LEG_FIELDS = [
   "executedIn2Raw",
 ] as const satisfies readonly (keyof EventShape)[];
 
+// Both output legs, for the same reason INPUT_LEG_FIELDS covers both: a role that receives nothing
+// receives nothing on either side.
+const OUTPUT_LEG_FIELDS = [
+  "tokenOut",
+  "amountOutRaw",
+  "executedOutRaw",
+  "tokenOut2",
+  "amountOut2Raw",
+  "executedOut2Raw",
+] as const satisfies readonly (keyof EventShape)[];
+
 function populatedFields(
   event: EventShape,
   fields: readonly (keyof EventShape)[],
@@ -127,6 +143,17 @@ function checkInputLegForbidden(event: EventShape, ctx: z.RefinementCtx): void {
   }
 }
 
+function checkOutputLegForbidden(event: EventShape, ctx: z.RefinementCtx): void {
+  if (!OUTPUT_LEG_FORBIDDEN_ROLES.includes(event.eventRole)) return;
+  for (const field of populatedFields(event, OUTPUT_LEG_FIELDS)) {
+    ctx.addIssue({
+      code: "custom",
+      path: [field],
+      message: `§4.2 output leg: role '${event.eventRole}' receives nothing and must not carry '${field}'`,
+    });
+  }
+}
+
 function checkSupersededCarriesNoFailureCode(event: EventShape, ctx: z.RefinementCtx): void {
   if (event.status !== "superseded_unproven" || event.failureCode == null) return;
   ctx.addIssue({
@@ -141,6 +168,7 @@ export const eventSchema = eventShape.superRefine((event, ctx) => {
   checkSecondLegRoleAllowed(event, ctx);
   checkSecondLegAmountNamesItsToken(event, ctx);
   checkInputLegForbidden(event, ctx);
+  checkOutputLegForbidden(event, ctx);
   checkSupersededCarriesNoFailureCode(event, ctx);
 });
 export type IngestEvent = z.infer<typeof eventSchema>;
