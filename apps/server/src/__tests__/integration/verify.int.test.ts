@@ -39,6 +39,11 @@ const readerReturning = (receipt: ReceiptView | null): ChainReader => ({
   getReceipt: () => Promise.resolve(receipt),
 });
 
+const readerFindingNothingAnywhere: ChainReader = {
+  getReceipt: () => Promise.resolve(null),
+  corroborateMissingReceipt: () => Promise.resolve("missing"),
+};
+
 const throwingReader: ChainReader = {
   getReceipt: () => Promise.reject(new Error("rpc unreachable")),
 };
@@ -301,7 +306,7 @@ describe("verification worker", () => {
     expect(job?.delay_sec).toBeLessThan(310);
   });
 
-  it("strikes tx_not_found when the age cap has passed and the chain answered no such tx", async () => {
+  it("strikes tx_not_found once every endpoint agrees the chain never saw the transaction", async () => {
     const agent = "4".repeat(64);
     await seedAgent(agent);
     const activityId = await seedQueuedActivity({
@@ -310,12 +315,28 @@ describe("verification worker", () => {
       firstAttemptAt: eightDaysAgo(),
     });
 
-    await runVerificationPass(depsWithReader(readerReturning(null)));
+    await runVerificationPass(depsWithReader(readerFindingNothingAnywhere));
 
     expect((await activityStateOf(activityId)).verification_state).toBe("mismatch");
     expect(await strikesOf(agent)).toEqual([{ activity_id: activityId.toString(), reason: "tx_not_found" }]);
     expect((await agentRowOf(agent)).strike_count).toBe(1);
     expect(await jobRowOf(activityId)).toBeNull();
+  });
+
+  it("leaves an agent unstruck when no second endpoint can confirm the transaction is missing", async () => {
+    const agent = "4a".repeat(32);
+    await seedAgent(agent);
+    const activityId = await seedQueuedActivity({
+      agentHash: agent,
+      protocol: "p-cap-uncorroborated",
+      firstAttemptAt: eightDaysAgo(),
+    });
+
+    await runVerificationPass(depsWithReader(readerReturning(null)));
+
+    expect((await activityStateOf(activityId)).verification_state).toBe("none");
+    expect(await strikesOf(agent)).toEqual([]);
+    expect((await agentRowOf(agent)).strike_count).toBe(0);
   });
 
   it("closes silently without a strike when the age cap has passed and the last read threw", async () => {

@@ -50,7 +50,7 @@ function verdictLogFields(resolved: ResolvedJob): Record<string, unknown> {
     return { ...identity, outcome: outcome.kind, lastError: outcome.lastError };
   }
   if (outcome.kind === "close_unverifiable") {
-    return { ...identity, outcome: outcome.kind };
+    return { ...identity, outcome: outcome.kind, reason: outcome.reason };
   }
   if (outcome.verdict.result !== "strike") {
     return { ...identity, outcome: outcome.kind, verdict: outcome.verdict.result };

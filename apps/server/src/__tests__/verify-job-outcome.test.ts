@@ -1,3 +1,4 @@
+import type { MissingReceiptCorroboration } from "@agentscan/core";
 import { describe, expect, it } from "vitest";
 import { resolveJobOutcome } from "../worker/verify-job.js";
 import type { ClaimedJob } from "../repos/activities-verify-repo.js";
@@ -41,7 +42,7 @@ describe("resolveJobOutcome", () => {
       }),
       chainReaderFor: () => ({ getReceipt: async () => null }),
     });
-    expect(outcome).toEqual({ kind: "close_unverifiable" });
+    expect(outcome).toEqual({ kind: "close_unverifiable", reason: "no_tx_hash" });
   });
 
   it("ponawia zadanie nieznanego łańcucha z backoffem, dopóki mieści się w oknie wieku", async () => {
@@ -65,7 +66,7 @@ describe("resolveJobOutcome", () => {
       resolveChain: () => null,
       chainReaderFor: () => ({ getReceipt: async () => null }),
     });
-    expect(outcome).toEqual({ kind: "close_unverifiable" });
+    expect(outcome).toEqual({ kind: "close_unverifiable", reason: "chain_not_in_registry" });
   });
 
   it("zamienia rzucony wyjątek RPC w reschedule z backoffem, nigdy w strike", async () => {
@@ -119,5 +120,70 @@ describe("resolveJobOutcome", () => {
       },
     );
     expect(outcome).toEqual({ kind: "finalize", verdict: { result: "verified_basic", blockTimestamp } });
+  });
+});
+
+describe("striking a transaction the chain says it never saw", () => {
+  const baseChain = {
+    canonicalSlug: "base",
+    chainFamily: "eip155" as const,
+    displayName: "Base",
+    explorerTxUrl: () => null,
+    rpcUrls: [],
+    verificationTier: "full" as const,
+  };
+  const pastTheWindow = () => new Date("2026-08-20T10:00:01Z");
+
+  const outcomeWhenCorroborationSays = async (corroboration: MissingReceiptCorroboration) =>
+    resolveJobOutcome(jobFixture(), {
+      config,
+      now: pastTheWindow,
+      resolveChain: () => baseChain,
+      chainReaderFor: () => ({
+        getReceipt: async () => null,
+        corroborateMissingReceipt: async () => corroboration,
+      }),
+    });
+
+  it("strikes once several endpoints agree the transaction is not there", async () => {
+    expect(await outcomeWhenCorroborationSays("missing")).toEqual({
+      kind: "finalize",
+      verdict: { result: "strike", reason: "tx_not_found" },
+    });
+  });
+
+  it("refuses to strike on one endpoint's word alone", async () => {
+    expect(await outcomeWhenCorroborationSays("unknown")).toEqual({ kind: "close_unverifiable", reason: "missing_receipt_not_corroborated" });
+  });
+
+  it("refuses to strike when another endpoint can see the transaction", async () => {
+    expect(await outcomeWhenCorroborationSays("found")).toEqual({ kind: "close_unverifiable", reason: "missing_receipt_seen_elsewhere" });
+  });
+
+  it("refuses to strike for a reader that cannot ask a second endpoint at all", async () => {
+    const outcome = await resolveJobOutcome(jobFixture(), {
+      config,
+      now: pastTheWindow,
+      resolveChain: () => baseChain,
+      chainReaderFor: () => ({ getReceipt: async () => null }),
+    });
+
+    expect(outcome).toEqual({ kind: "close_unverifiable", reason: "missing_receipt_not_corroborated" });
+  });
+
+  it("refuses to strike when asking the other endpoints threw", async () => {
+    const outcome = await resolveJobOutcome(jobFixture(), {
+      config,
+      now: pastTheWindow,
+      resolveChain: () => baseChain,
+      chainReaderFor: () => ({
+        getReceipt: async () => null,
+        corroborateMissingReceipt: async () => {
+          throw new Error("all endpoints unreachable");
+        },
+      }),
+    });
+
+    expect(outcome).toEqual({ kind: "close_unverifiable", reason: "missing_receipt_not_corroborated" });
   });
 });

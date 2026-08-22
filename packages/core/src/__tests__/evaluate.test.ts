@@ -15,6 +15,7 @@ const receiptFixture = (overrides: Partial<ReceiptView> = {}): ReceiptView => ({
     { token: "0xbb22", from: "0x2222", to: "0x1111", amountRaw: "2000000" },
   ],
   transactionValueRaw: null,
+  logs: [],
   ...overrides,
 });
 
@@ -374,5 +375,70 @@ describe("an input leg the venue splits into several transfers", () => {
     const input = inputFixture({ tokenInAddress: null, executedInRaw: null, executedOutRaw: "2000000" });
 
     expect(evaluateVerification(receipt, input)).toEqual({ result: "verified_full", blockTimestamp });
+  });
+});
+
+describe("a receipt the reader could not decode at all", () => {
+  it("still strikes when the receipt shows other tokens moving but not the declared one", () => {
+    const otherTokensOnly = receiptFixture({
+      erc20Transfers: [{ token: "0xcc33", from: "0x1111", to: "0x2222", amountRaw: "1000000" }],
+    });
+
+    expect(evaluateVerification(otherTokensOnly, inputFixture())).toEqual({
+      result: "strike",
+      reason: "amount_mismatch",
+    });
+  });
+
+  it("verifies a native spend on a receipt with no transfers, because its proof is the transaction value", () => {
+    const nativeOnly = receiptFixture({ erc20Transfers: [], transactionValueRaw: "1000000" });
+    const input = inputFixture({
+      tokenInAddress: nativeSentinel,
+      executedInRaw: "1000000",
+      tokenOutAddress: null,
+      executedOutRaw: null,
+    });
+
+    expect(evaluateVerification(nativeOnly, input)).toEqual({ result: "verified_full", blockTimestamp });
+  });
+
+  it("keeps a basic-tier verdict untouched, since it never judged amounts", () => {
+    const blind = receiptFixture({ erc20Transfers: [] });
+
+    expect(evaluateVerification(blind, inputFixture({ tier: "basic" }))).toEqual({
+      result: "verified_basic",
+      blockTimestamp,
+    });
+  });
+});
+
+describe("telling a receipt that proves absence from one the reader could not read", () => {
+  const rawTransferLog = { address: "0xaa11", topics: ["0xddf2", "0x1111"], data: "0x00" };
+
+  it("strikes a spend cited against a transaction that emitted no logs at all", () => {
+    const noLogsAtAll = receiptFixture({ erc20Transfers: [], logs: [] });
+
+    expect(evaluateVerification(noLogsAtAll, inputFixture())).toEqual({
+      result: "strike",
+      reason: "amount_mismatch",
+    });
+  });
+
+  it("declines to judge a receipt whose logs the decoder could not turn into transfers", () => {
+    const undecodable = receiptFixture({ erc20Transfers: [], logs: [rawTransferLog] });
+
+    expect(evaluateVerification(undecodable, inputFixture())).toEqual({
+      result: "unverifiable",
+      reason: "no_transfers_decoded",
+    });
+  });
+
+  it("declines to judge when the reader reports no view of the logs at all", () => {
+    const blindReader = receiptFixture({ erc20Transfers: [], logs: undefined });
+
+    expect(evaluateVerification(blindReader, inputFixture())).toEqual({
+      result: "unverifiable",
+      reason: "no_transfers_decoded",
+    });
   });
 });
