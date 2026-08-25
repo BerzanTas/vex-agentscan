@@ -24,6 +24,13 @@ export type AgentStatDto = {
   lastSeenSeconds: number;
 };
 
+export type AgentLeaderboardDto = {
+  items: AgentStatDto[];
+  nextCursor: string | null;
+  totalAllTime: number;
+  totalInWindow: number;
+};
+
 export type AgentDailyDeployedDto = { day: string; usd: string };
 
 export type AgentChainStatDto = { chainSlug: string | null; volumeUsd: string; txCount: number };
@@ -303,8 +310,15 @@ export function protocolRankingPath(range: ChartRange): string {
   return pathWithQuery("/api/protocols/ranking", [["range", range]]);
 }
 
-export function agentsPath(range: ChartRange): string {
-  return pathWithQuery("/api/agents", [["range", range]]);
+export function agentsPath(
+  range: ChartRange,
+  options: { limit?: number; cursor?: string } = {},
+): string {
+  return pathWithQuery("/api/agents", [
+    ["range", range],
+    ["limit", options.limit],
+    ["cursor", options.cursor],
+  ]);
 }
 
 export function agentPagePath(name: string): string {
@@ -372,8 +386,9 @@ export async function fetchProtocolRanking(
 
 export async function fetchAgents(
   range: ChartRange = DEFAULT_CHART_RANGE,
-): Promise<AgentStatDto[]> {
-  return readApiJson(agentsPath(range));
+  options: { limit?: number; cursor?: string } = {},
+): Promise<AgentLeaderboardDto> {
+  return readApiJson(agentsPath(range, options));
 }
 
 export async function fetchAgentPage(name: string): Promise<AgentPageDto | null> {
@@ -404,8 +419,11 @@ export async function fetchProtocolRankingFromBrowser(
   return readBrowserJson(protocolRankingPath(range));
 }
 
-export async function fetchAgentsFromBrowser(range: ChartRange): Promise<AgentStatDto[]> {
-  return readBrowserJson(agentsPath(range));
+export async function fetchAgentsFromBrowser(
+  range: ChartRange,
+  options: { limit?: number; cursor?: string } = {},
+): Promise<AgentLeaderboardDto> {
+  return readBrowserJson(agentsPath(range, options));
 }
 
 export async function fetchActivityFromBrowser(

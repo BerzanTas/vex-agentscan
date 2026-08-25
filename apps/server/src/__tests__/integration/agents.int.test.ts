@@ -7,8 +7,20 @@ import { agentAlias, type AgentStatDto } from "../../public-dto.js";
 import { startTestDb } from "../../testing/pg-harness.js";
 import { runPurgeSweep } from "../../worker/purge.js";
 
-const config = loadConfig({ DATABASE_URL: "postgres://unused-in-tests", READ_CACHE_TTL_SEC: "0" });
+const PAGE_SIZE = 2;
+const config = loadConfig({
+  DATABASE_URL: "postgres://unused-in-tests",
+  READ_CACHE_TTL_SEC: "0",
+  PUBLIC_AGENT_PAGE_SIZE: String(PAGE_SIZE),
+});
 const stubResolveChain: ResolveChain = () => null;
+
+type AgentLeaderboardDto = {
+  items: AgentStatDto[];
+  nextCursor: string | null;
+  totalAllTime: number;
+  totalInWindow: number;
+};
 
 const hashOf = (index: number) => index.toString(16).padStart(2, "0").repeat(32);
 const aliasOf = (index: number) => agentAlias(config.AGENT_ALIAS_SALT, hashOf(index));
@@ -69,10 +81,31 @@ async function resetData(pool: pg.Pool): Promise<void> {
   await pool.query("TRUNCATE agents CASCADE");
 }
 
-async function leaderboardResponse(): Promise<AgentStatDto[]> {
-  const response = await app.inject({ method: "GET", url: "/api/agents" });
+function leaderboardRow(
+  index: number,
+  volumeUsd: string,
+  extra: Partial<AgentStatDto> = {},
+): AgentStatDto {
+  return {
+    alias: aliasOf(index),
+    name: null,
+    volumeUsd,
+    txCount: 1,
+    protocolCount: 1,
+    chainCount: 1,
+    lastSeenSeconds: expect.any(Number),
+    ...extra,
+  };
+}
+
+async function leaderboardPage(url = "/api/agents"): Promise<AgentLeaderboardDto> {
+  const response = await app.inject({ method: "GET", url });
   expect(response.statusCode).toBe(200);
-  return response.json<AgentStatDto[]>();
+  return response.json<AgentLeaderboardDto>();
+}
+
+async function leaderboardItems(url = "/api/agents"): Promise<AgentStatDto[]> {
+  return (await leaderboardPage(url)).items;
 }
 
 beforeAll(async () => {
@@ -87,7 +120,18 @@ afterAll(async () => {
 
 describe("GET /api/agents", () => {
   it("serves an empty leaderboard on an empty database", async () => {
-    expect(await leaderboardResponse()).toEqual([]);
+    expect(await leaderboardPage()).toEqual({
+      items: [],
+      nextCursor: null,
+      totalAllTime: 0,
+      totalInWindow: 0,
+    });
+  });
+
+  it("rejects a malformed cursor", async () => {
+    const response = await app.inject({ method: "GET", url: "/api/agents?cursor=not-a-cursor" });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: { code: "invalid_cursor", message: "malformed cursor" } });
   });
 
   describe("with eleven agents of descending volume", () => {
@@ -99,17 +143,45 @@ describe("GET /api/agents", () => {
       }
     });
 
-    it("serves the top 10 sorted by volume descending and drops the eleventh", async () => {
-      const expected = Array.from({ length: 10 }, (_, index) => ({
-        alias: aliasOf(index),
-        name: null,
-        volumeUsd: String(1100 - index * 100),
-        txCount: 1,
-        protocolCount: 1,
-        chainCount: 1,
-        lastSeenSeconds: expect.any(Number),
-      }));
-      expect(await leaderboardResponse()).toEqual(expected);
+    it("serves the first page by volume and leaves a cursor for the rest", async () => {
+      const page = await leaderboardPage();
+      expect(page.items).toEqual([leaderboardRow(0, "1100"), leaderboardRow(1, "1000")]);
+      expect(page.nextCursor).not.toBeNull();
+      expect(page.totalAllTime).toBe(11);
+      expect(page.totalInWindow).toBe(11);
+    });
+
+    it("continues from the cursor without repeating a row", async () => {
+      const first = await leaderboardPage();
+      const second = await leaderboardPage(`/api/agents?cursor=${first.nextCursor}`);
+      expect(second.items).toEqual([leaderboardRow(2, "900"), leaderboardRow(3, "800")]);
+      expect(second.items.map((row) => row.alias)).not.toEqual(
+        expect.arrayContaining(first.items.map((row) => row.alias)),
+      );
+    });
+
+    it("walks every agent exactly once", async () => {
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      for (let step = 0; step < 20; step += 1) {
+        const url = cursor === null ? "/api/agents" : `/api/agents?cursor=${cursor}`;
+        const page = await leaderboardPage(url);
+        seen.push(...page.items.map((row) => row.alias));
+        if (page.nextCursor === null) break;
+        cursor = page.nextCursor;
+      }
+      expect(seen).toEqual(Array.from({ length: 11 }, (_, index) => aliasOf(index)));
+    });
+
+    it("honours a smaller limit than the page size", async () => {
+      const page = await leaderboardPage("/api/agents?limit=1");
+      expect(page.items).toEqual([leaderboardRow(0, "1100")]);
+      expect(page.nextCursor).not.toBeNull();
+    });
+
+    it("caps a limit above the page size", async () => {
+      const page = await leaderboardPage("/api/agents?limit=99");
+      expect(page.items).toHaveLength(PAGE_SIZE);
     });
   });
 
@@ -124,17 +196,21 @@ describe("GET /api/agents", () => {
     });
 
     it("counts only rows confirmed within the last 30 days", async () => {
-      expect(await leaderboardResponse()).toEqual([
-        {
-          alias: aliasOf(1),
-          name: null,
-          volumeUsd: "100.25",
-          txCount: 1,
-          protocolCount: 1,
-          chainCount: 1,
-          lastSeenSeconds: expect.any(Number),
-        },
+      const page = await leaderboardPage();
+      expect(page.items).toEqual([leaderboardRow(1, "100.25")]);
+      expect(page.nextCursor).toBeNull();
+      expect(page.totalInWindow).toBe(1);
+      expect(page.totalAllTime).toBe(2);
+    });
+
+    it("includes every verified volume agent on the all range", async () => {
+      const page = await leaderboardPage("/api/agents?range=all");
+      expect(page.items).toEqual([
+        leaderboardRow(1, "600.25", { txCount: 2 }),
+        leaderboardRow(2, "400"),
       ]);
+      expect(page.totalAllTime).toBe(2);
+      expect(page.totalInWindow).toBe(2);
     });
   });
 
@@ -151,17 +227,7 @@ describe("GET /api/agents", () => {
     });
 
     it("counts neither pending nor mismatch rows", async () => {
-      expect(await leaderboardResponse()).toEqual([
-        {
-          alias: aliasOf(3),
-          name: null,
-          volumeUsd: "50.5",
-          txCount: 1,
-          protocolCount: 1,
-          chainCount: 1,
-          lastSeenSeconds: expect.any(Number),
-        },
-      ]);
+      expect(await leaderboardItems()).toEqual([leaderboardRow(3, "50.5")]);
     });
   });
 
@@ -179,17 +245,7 @@ describe("GET /api/agents", () => {
     });
 
     it("counts only the bridge deposit leg", async () => {
-      expect(await leaderboardResponse()).toEqual([
-        {
-          alias: aliasOf(5),
-          name: null,
-          volumeUsd: "300.75",
-          txCount: 1,
-          protocolCount: 1,
-          chainCount: 1,
-          lastSeenSeconds: expect.any(Number),
-        },
-      ]);
+      expect(await leaderboardItems()).toEqual([leaderboardRow(5, "300.75")]);
     });
   });
 
@@ -203,40 +259,11 @@ describe("GET /api/agents", () => {
     });
 
     it("drops the purged agent's alias from the response", async () => {
-      expect(await leaderboardResponse()).toEqual([
-        {
-          alias: aliasOf(7),
-          name: null,
-          volumeUsd: "80",
-          txCount: 1,
-          protocolCount: 1,
-          chainCount: 1,
-          lastSeenSeconds: expect.any(Number),
-        },
-        {
-          alias: aliasOf(6),
-          name: null,
-          volumeUsd: "60",
-          txCount: 1,
-          protocolCount: 1,
-          chainCount: 1,
-          lastSeenSeconds: expect.any(Number),
-        },
-      ]);
+      expect(await leaderboardItems()).toEqual([leaderboardRow(7, "80"), leaderboardRow(6, "60")]);
 
       await runPurgeSweep(db.pool, config);
 
-      expect(await leaderboardResponse()).toEqual([
-        {
-          alias: aliasOf(6),
-          name: null,
-          volumeUsd: "60",
-          txCount: 1,
-          protocolCount: 1,
-          chainCount: 1,
-          lastSeenSeconds: expect.any(Number),
-        },
-      ]);
+      expect(await leaderboardItems()).toEqual([leaderboardRow(6, "60")]);
     });
   });
 
@@ -253,25 +280,9 @@ describe("GET /api/agents", () => {
     });
 
     it("links the bound agent by name and leaves the unbound one linkless", async () => {
-      expect(await leaderboardResponse()).toEqual([
-        {
-          alias: aliasOf(9),
-          name: "Vex-09090909",
-          volumeUsd: "200",
-          txCount: 1,
-          protocolCount: 1,
-          chainCount: 1,
-          lastSeenSeconds: expect.any(Number),
-        },
-        {
-          alias: aliasOf(10),
-          name: null,
-          volumeUsd: "100",
-          txCount: 1,
-          protocolCount: 1,
-          chainCount: 1,
-          lastSeenSeconds: expect.any(Number),
-        },
+      expect(await leaderboardItems()).toEqual([
+        leaderboardRow(9, "200", { name: "Vex-09090909" }),
+        leaderboardRow(10, "100"),
       ]);
     });
   });
@@ -299,13 +310,23 @@ describe("GET /api/agents with the response cache enabled", () => {
 
   it("serves the first result for the whole window and labels it cacheable", async () => {
     const first = await cachedApp.inject({ method: "GET", url: "/api/agents" });
-    expect(first.json<AgentStatDto[]>()).toEqual([]);
+    expect(first.json<AgentLeaderboardDto>()).toEqual({
+      items: [],
+      nextCursor: null,
+      totalAllTime: 0,
+      totalInWindow: 0,
+    });
     expect(first.headers["cache-control"]).toBe("public, s-maxage=300");
 
     await seedAgent(db.pool, hashOf(8));
     await seedActivity(db.pool, { agentHash: hashOf(8), usdInPriced: "90" });
 
     const second = await cachedApp.inject({ method: "GET", url: "/api/agents" });
-    expect(second.json<AgentStatDto[]>()).toEqual([]);
+    expect(second.json<AgentLeaderboardDto>()).toEqual({
+      items: [],
+      nextCursor: null,
+      totalAllTime: 0,
+      totalInWindow: 0,
+    });
   });
 });

@@ -5,7 +5,7 @@ import { resolveChain } from "@agentscan/core";
 import { buildApp } from "../../app.js";
 import { loadConfig } from "../../config.js";
 import type {
-  AgentStatDto,
+  AgentLeaderboardDto,
   BridgeRouteDto,
   ChartPointDto,
   NetworkDetailDto,
@@ -250,9 +250,9 @@ describe("public aggregates over a window mixing priced, unpriced and pending ro
   });
 
   it("ranks the agent on its priced volume and counts its unpriced activity", async () => {
-    const agents = await getJson<AgentStatDto[]>("/api/agents");
+    const agents = await getJson<AgentLeaderboardDto>("/api/agents");
 
-    expect(agents.map((agent) => ({ volumeUsd: agent.volumeUsd, txCount: agent.txCount }))).toEqual([
+    expect(agents.items.map((agent) => ({ volumeUsd: agent.volumeUsd, txCount: agent.txCount }))).toEqual([
       { volumeUsd: PRICED_VOLUME_USD, txCount: SEEDED_ACTIVITY_COUNT },
     ]);
   });
@@ -355,9 +355,9 @@ describe("public aggregates over a window where nothing has been priced yet", ()
   });
 
   it("keeps the agent on the leaderboard at zero volume", async () => {
-    const agents = await getJson<AgentStatDto[]>("/api/agents");
+    const agents = await getJson<AgentLeaderboardDto>("/api/agents");
 
-    expect(agents.map((agent) => ({ volumeUsd: agent.volumeUsd, txCount: agent.txCount }))).toEqual([
+    expect(agents.items.map((agent) => ({ volumeUsd: agent.volumeUsd, txCount: agent.txCount }))).toEqual([
       { volumeUsd: "0", txCount: NOTHING_PRICED_WINDOW.length },
     ]);
   });
