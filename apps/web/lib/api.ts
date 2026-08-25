@@ -75,6 +75,11 @@ export type TokenStatDto = {
   series: ChartPointDto[];
 };
 
+export type TokenListingDto = {
+  items: TokenStatDto[];
+  nextCursor: string | null;
+};
+
 export type TokenPairStatDto = {
   tokenInSymbol: string | null;
   tokenOutSymbol: string | null;
@@ -274,10 +279,14 @@ export async function fetchChartFromBrowser(range: ChartRange): Promise<ChartPoi
   return jsonOrThrow(response, path);
 }
 
-export function tokensPath(range: ChartRange, limit?: number): string {
+export function tokensPath(
+  range: ChartRange,
+  options: { limit?: number; cursor?: string } = {},
+): string {
   return pathWithQuery("/api/tokens", [
     ["range", range],
-    ["limit", limit],
+    ["limit", options.limit],
+    ["cursor", options.cursor],
   ]);
 }
 
@@ -338,9 +347,9 @@ export function activityPath(filters: ActivityFilters = {}, cursor?: string): st
 
 export async function fetchTokens(
   range: ChartRange = DEFAULT_CHART_RANGE,
-  limit?: number,
-): Promise<TokenStatDto[]> {
-  return readApiJson(tokensPath(range, limit));
+  options: { limit?: number; cursor?: string } = {},
+): Promise<TokenListingDto> {
+  return readApiJson(tokensPath(range, options));
 }
 
 export async function fetchTokenDetail(
@@ -404,9 +413,9 @@ export async function fetchActivity(
 
 export async function fetchTokensFromBrowser(
   range: ChartRange,
-  limit?: number,
-): Promise<TokenStatDto[]> {
-  return readBrowserJson(tokensPath(range, limit));
+  options: { limit?: number; cursor?: string } = {},
+): Promise<TokenListingDto> {
+  return readBrowserJson(tokensPath(range, options));
 }
 
 export async function fetchNetworksFromBrowser(range: ChartRange): Promise<NetworkStatDto[]> {

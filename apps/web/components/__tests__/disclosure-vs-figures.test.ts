@@ -238,7 +238,7 @@ function serveApi(state: UsdContribution): void {
     }
     if (path.startsWith("/api/agents/")) return jsonResponse(agentPageFor(state));
     if (path === "/api/activity") return jsonResponse(activity);
-    if (path === "/api/tokens") return jsonResponse(tokens);
+    if (path === "/api/tokens") return jsonResponse({ items: tokens, nextCursor: null });
     if (path.startsWith("/api/tokens/")) return jsonResponse(tokenDetail);
     if (path === "/api/networks") return jsonResponse(networks);
     if (path.startsWith("/api/networks/")) return jsonResponse(networkDetail);

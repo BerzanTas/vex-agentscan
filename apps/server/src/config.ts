@@ -48,6 +48,7 @@ const envSchema = z.object({
     .transform((value) => value === "true"),
   PUBLIC_FEED_PAGE_SIZE: z.coerce.number().int().default(25),
   PUBLIC_AGENT_PAGE_SIZE: z.coerce.number().int().min(1).default(25),
+  PUBLIC_TOKEN_PAGE_SIZE: z.coerce.number().int().min(1).default(25),
   PUBLIC_TOKEN_ROWS_MAX: z.coerce.number().int().min(1).default(100),
   PUBLIC_AGENT_ROWS_MAX: z.coerce.number().int().min(1).default(5000),
   PUBLIC_PANEL_ROWS: z.coerce.number().int().min(1).default(10),
