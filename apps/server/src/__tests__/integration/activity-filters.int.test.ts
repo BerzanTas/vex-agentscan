@@ -8,6 +8,7 @@ import { loadConfig } from "../../config.js";
 import {
   agentAlias,
   type ActivityFeedDto,
+  type AgentLeaderboardDto,
   type AgentStatDto,
   type ProtocolRankingDto,
 } from "../../public-dto.js";
@@ -264,7 +265,7 @@ async function protocols(query: string): Promise<ProtocolRankingDto[]> {
 async function agents(query: string): Promise<AgentStatDto[]> {
   const response = await app.inject({ method: "GET", url: `/api/agents${query}` });
   expect(response.statusCode).toBe(200);
-  return response.json<AgentStatDto[]>();
+  return response.json<AgentLeaderboardDto>().items;
 }
 
 beforeAll(async () => {

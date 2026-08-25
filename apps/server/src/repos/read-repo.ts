@@ -429,19 +429,29 @@ export type AgentVolumeRead = {
   lastSeenSeconds: number;
 };
 
-export async function agentLeaderboard(
-  pool: pg.Pool,
-  windowSeconds: number | null,
-): Promise<AgentVolumeRead[]> {
-  const result = await pool.query<{
-    agent_hash: string;
-    volume_usd: string;
-    tx_count: number;
-    protocol_count: number;
-    chain_count: number;
-    last_seen_seconds: number;
-  }>(
-    `SELECT a.agent_hash,
+export type AgentLeaderboardCursor = { volumeUsd: string; agentHash: string };
+
+type AgentVolumeQueryRow = {
+  agent_hash: string;
+  volume_usd: string;
+  tx_count: number;
+  protocol_count: number;
+  chain_count: number;
+  last_seen_seconds: number;
+};
+
+function agentVolumeFrom(row: AgentVolumeQueryRow): AgentVolumeRead {
+  return {
+    agentHash: row.agent_hash,
+    volumeUsd: row.volume_usd,
+    txCount: row.tx_count,
+    protocolCount: row.protocol_count,
+    chainCount: row.chain_count,
+    lastSeenSeconds: row.last_seen_seconds,
+  };
+}
+
+const AGENT_VOLUME_INNER = `SELECT a.agent_hash,
             ${USD_IN_SUM}::text AS volume_usd,
             COUNT(*)::int AS tx_count,
             COUNT(DISTINCT a.protocol)::int AS protocol_count,
@@ -452,19 +462,47 @@ export async function agentLeaderboard(
      WHERE ${VERIFIED_STATES_PREDICATE}
        AND ${VOLUME_LEG_PREDICATE}
        AND ${windowPredicate(1)}
-     GROUP BY a.agent_hash
-     ORDER BY ${USD_IN_SUM} DESC, a.agent_hash
-     LIMIT 10`,
+     GROUP BY a.agent_hash`;
+
+export async function countLeaderboardAgents(
+  pool: pg.Pool,
+  windowSeconds: number | null,
+): Promise<number> {
+  const result = await pool.query<{ n: number }>(
+    `SELECT COUNT(DISTINCT a.agent_hash)::int AS n
+     FROM activities a
+     WHERE ${VERIFIED_STATES_PREDICATE}
+       AND ${VOLUME_LEG_PREDICATE}
+       AND ${windowPredicate(1)}`,
     [windowSeconds],
   );
-  return result.rows.map((row) => ({
-    agentHash: row.agent_hash,
-    volumeUsd: row.volume_usd,
-    txCount: row.tx_count,
-    protocolCount: row.protocol_count,
-    chainCount: row.chain_count,
-    lastSeenSeconds: row.last_seen_seconds,
-  }));
+  return singleRow(result).n;
+}
+
+export async function agentLeaderboard(
+  pool: pg.Pool,
+  windowSeconds: number | null,
+  page?: { limit: number; after?: AgentLeaderboardCursor | null },
+): Promise<AgentVolumeRead[]> {
+  const after = page?.after ?? null;
+  const result = await pool.query<AgentVolumeQueryRow>(
+    `SELECT ranked.agent_hash,
+            ranked.volume_usd,
+            ranked.tx_count,
+            ranked.protocol_count,
+            ranked.chain_count,
+            ranked.last_seen_seconds
+     FROM (${AGENT_VOLUME_INNER}) ranked
+     WHERE ($2::text IS NULL
+        OR ranked.volume_usd::numeric < $2::numeric
+        OR (ranked.volume_usd::numeric = $2::numeric AND ranked.agent_hash > $3))
+     ORDER BY ranked.volume_usd::numeric DESC, ranked.agent_hash
+     ${page === undefined ? "" : "LIMIT $4"}`,
+    page === undefined
+      ? [windowSeconds, null, null]
+      : [windowSeconds, after?.volumeUsd ?? null, after?.agentHash ?? null, page.limit],
+  );
+  return result.rows.map(agentVolumeFrom);
 }
 
 export type ProtocolRead = { protocol: string; volumeUsd: string; txCount: number };

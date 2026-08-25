@@ -228,10 +228,17 @@ function serveApi(state: UsdContribution): void {
     if (path === "/api/chart") return jsonResponse(chart);
     if (path === "/api/protocols") return jsonResponse(protocols);
     if (path === "/api/protocols/ranking") return jsonResponse(protocolRanking);
-    if (path === "/api/agents") return jsonResponse(agents);
+    if (path === "/api/agents") {
+      return jsonResponse({
+        items: agents,
+        nextCursor: null,
+        totalAllTime: agents.length,
+        totalInWindow: agents.length,
+      });
+    }
     if (path.startsWith("/api/agents/")) return jsonResponse(agentPageFor(state));
     if (path === "/api/activity") return jsonResponse(activity);
-    if (path === "/api/tokens") return jsonResponse(tokens);
+    if (path === "/api/tokens") return jsonResponse({ items: tokens, nextCursor: null });
     if (path.startsWith("/api/tokens/")) return jsonResponse(tokenDetail);
     if (path === "/api/networks") return jsonResponse(networks);
     if (path.startsWith("/api/networks/")) return jsonResponse(networkDetail);

@@ -93,11 +93,15 @@ describe("tokensPath", () => {
   });
 
   it("appends the limit after the range", () => {
-    expect(tokensPath("7d", 25)).toBe("/api/tokens?range=7d&limit=25");
+    expect(tokensPath("7d", { limit: 25 })).toBe("/api/tokens?range=7d&limit=25");
   });
 
   it("omits the limit when it is not asked for", () => {
     expect(tokensPath("all")).toBe("/api/tokens?range=all");
+  });
+
+  it("encodes the cursor into the next page path", () => {
+    expect(tokensPath("30d", { cursor: "cur-1" })).toBe("/api/tokens?range=30d&cursor=cur-1");
   });
 });
 
@@ -158,6 +162,14 @@ describe("protocolRankingPath", () => {
 describe("agentsPath", () => {
   it("carries the range", () => {
     expect(agentsPath("all")).toBe("/api/agents?range=all");
+  });
+
+  it("carries a homepage limit", () => {
+    expect(agentsPath("30d", { limit: 5 })).toBe("/api/agents?range=30d&limit=5");
+  });
+
+  it("encodes the cursor into the next page path", () => {
+    expect(agentsPath("7d", { cursor: "cur-1" })).toBe("/api/agents?range=7d&cursor=cur-1");
   });
 });
 

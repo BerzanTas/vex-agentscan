@@ -24,6 +24,14 @@ describe("loadConfig", () => {
     expect(loadConfig(baseEnv).QUARANTINE_STRIKES).toBe(3);
   });
 
+  it("defaults PUBLIC_AGENT_PAGE_SIZE to 25", () => {
+    expect(loadConfig(baseEnv).PUBLIC_AGENT_PAGE_SIZE).toBe(25);
+  });
+
+  it("defaults PUBLIC_TOKEN_PAGE_SIZE to 25", () => {
+    expect(loadConfig(baseEnv).PUBLIC_TOKEN_PAGE_SIZE).toBe(25);
+  });
+
   it("overrides QUARANTINE_STRIKES from env", () => {
     expect(loadConfig({ ...baseEnv, QUARANTINE_STRIKES: "5" }).QUARANTINE_STRIKES).toBe(5);
   });

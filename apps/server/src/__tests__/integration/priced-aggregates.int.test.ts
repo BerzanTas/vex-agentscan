@@ -5,7 +5,7 @@ import { resolveChain } from "@agentscan/core";
 import { buildApp } from "../../app.js";
 import { loadConfig } from "../../config.js";
 import type {
-  AgentStatDto,
+  AgentLeaderboardDto,
   BridgeRouteDto,
   ChartPointDto,
   NetworkDetailDto,
@@ -15,6 +15,7 @@ import type {
   ProtocolStatDto,
   StatsDto,
   TokenDetailDto,
+  TokenListingDto,
   TokenStatDto,
 } from "../../public-dto.js";
 import { startTestDb } from "../../testing/pg-harness.js";
@@ -250,9 +251,9 @@ describe("public aggregates over a window mixing priced, unpriced and pending ro
   });
 
   it("ranks the agent on its priced volume and counts its unpriced activity", async () => {
-    const agents = await getJson<AgentStatDto[]>("/api/agents");
+    const agents = await getJson<AgentLeaderboardDto>("/api/agents");
 
-    expect(agents.map((agent) => ({ volumeUsd: agent.volumeUsd, txCount: agent.txCount }))).toEqual([
+    expect(agents.items.map((agent) => ({ volumeUsd: agent.volumeUsd, txCount: agent.txCount }))).toEqual([
       { volumeUsd: PRICED_VOLUME_USD, txCount: SEEDED_ACTIVITY_COUNT },
     ]);
   });
@@ -300,7 +301,7 @@ describe("public aggregates over a window mixing priced, unpriced and pending ro
   });
 
   it("sums each token leg from its own priced column and counts the unpriced legs", async () => {
-    const tokens = await getJson<TokenStatDto[]>("/api/tokens?range=24h");
+    const tokens = (await getJson<TokenListingDto>("/api/tokens?range=24h")).items;
 
     expect(tokenRowOf(tokens, usdcAddress)).toMatchObject({
       volumeUsd: PRICED_VOLUME_USD,
@@ -355,9 +356,9 @@ describe("public aggregates over a window where nothing has been priced yet", ()
   });
 
   it("keeps the agent on the leaderboard at zero volume", async () => {
-    const agents = await getJson<AgentStatDto[]>("/api/agents");
+    const agents = await getJson<AgentLeaderboardDto>("/api/agents");
 
-    expect(agents.map((agent) => ({ volumeUsd: agent.volumeUsd, txCount: agent.txCount }))).toEqual([
+    expect(agents.items.map((agent) => ({ volumeUsd: agent.volumeUsd, txCount: agent.txCount }))).toEqual([
       { volumeUsd: "0", txCount: NOTHING_PRICED_WINDOW.length },
     ]);
   });
@@ -383,7 +384,7 @@ describe("public aggregates over a window where nothing has been priced yet", ()
   it("returns zero volume for protocols, networks, tokens and routes", async () => {
     const protocols = await getJson<ProtocolStatDto[]>("/api/protocols");
     const networks = await getJson<NetworkStatDto[]>("/api/networks?range=24h");
-    const tokens = await getJson<TokenStatDto[]>("/api/tokens?range=24h");
+    const tokens = (await getJson<TokenListingDto>("/api/tokens?range=24h")).items;
     const routes = await getJson<BridgeRouteDto[]>("/api/routes?range=24h");
 
     expect(protocols.map((protocol) => protocol.volumeUsd)).toEqual(["0", "0"]);
@@ -430,7 +431,7 @@ describe("windows where the coverage note must not claim the window was empty", 
       totalVolumeUsd: "0",
       totalTx: 1,
     });
-    expect(await getJson<TokenStatDto[]>("/api/tokens?range=24h")).toEqual([]);
+    expect((await getJson<TokenListingDto>("/api/tokens?range=24h")).items).toEqual([]);
   });
 
   it("keeps a fill leg out of every token panel that publishes its usd", async () => {
@@ -449,7 +450,7 @@ describe("windows where the coverage note must not claim the window was empty", 
     const detail = await app.inject({ method: "GET", url: `/api/tokens/base/${usdcAddress}` });
 
     expect(network.tokens).toEqual([]);
-    expect(await getJson<TokenStatDto[]>("/api/tokens?range=24h")).toEqual([]);
+    expect((await getJson<TokenListingDto>("/api/tokens?range=24h")).items).toEqual([]);
     expect(detail.statusCode).toBe(404);
   });
 
@@ -466,7 +467,7 @@ describe("windows where the coverage note must not claim the window was empty", 
     await bookAggregatesForSeededActivities(db.pool);
 
     const network = await getJson<NetworkDetailDto>("/api/networks/base?range=24h");
-    const listing = await getJson<TokenStatDto[]>("/api/tokens?range=24h");
+    const listing = (await getJson<TokenListingDto>("/api/tokens?range=24h")).items;
     const detail = await getJson<TokenDetailDto>(`/api/tokens/base/${usdcAddress}`);
 
     expect(
@@ -555,7 +556,7 @@ describe("a swap the lane priced on one leg only", () => {
     });
     await bookAggregatesForSeededActivities(db.pool);
 
-    const tokens = await getJson<TokenStatDto[]>("/api/tokens?range=24h");
+    const tokens = (await getJson<TokenListingDto>("/api/tokens?range=24h")).items;
 
     expect(tokens.map(({ symbol, volumeUsd }) => ({ symbol, volumeUsd }))).toEqual([
       { symbol: "WETH", volumeUsd: "5000.00" },
@@ -578,7 +579,7 @@ describe("a swap the lane priced on one leg only", () => {
     });
     await bookAggregatesForSeededActivities(db.pool);
 
-    const tokens = await getJson<TokenStatDto[]>("/api/tokens?range=24h");
+    const tokens = (await getJson<TokenListingDto>("/api/tokens?range=24h")).items;
 
     expect(tokens.map(({ symbol, volumeUsd }) => ({ symbol, volumeUsd }))).toEqual([
       { symbol: "USDC", volumeUsd: "100.00" },

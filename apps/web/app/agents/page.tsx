@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { parseChartRange } from "../../lib/range";
-import { AgentsRankingTable } from "../../components/AgentsRankingTable";
+import { AgentsSummary } from "../../components/AgentsSummary";
+import { LoadMoreAgents } from "../../components/LoadMoreAgents";
 import { PageHeading } from "../../components/PageHeading";
 import { RangeChips } from "../../components/RangeChips";
 import { fetchAgents } from "../../lib/api";
@@ -16,7 +17,7 @@ type AgentsPageProps = { searchParams: Promise<{ range?: string | string[] }> };
 
 export default async function AgentsPage({ searchParams }: AgentsPageProps) {
   const range = parseChartRange((await searchParams).range);
-  const agents = await fetchAgents(range);
+  const board = await fetchAgents(range);
 
   return (
     <section className="section-enter flex flex-col gap-6">
@@ -25,7 +26,17 @@ export default async function AgentsPage({ searchParams }: AgentsPageProps) {
         title="Top agents"
         actions={<RangeChips current={range} label="Agent ranking range" />}
       />
-      <AgentsRankingTable agents={agents} emptyMessage="No verified agent activity yet" />
+      <AgentsSummary
+        totalAllTime={board.totalAllTime}
+        totalInWindow={board.totalInWindow}
+        range={range}
+      />
+      <LoadMoreAgents
+        key={range}
+        initialItems={board.items}
+        initialCursor={board.nextCursor}
+        range={range}
+      />
     </section>
   );
 }
