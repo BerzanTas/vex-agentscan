@@ -1,8 +1,15 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { NavMenu, nextNavMenuIndex } from "../NavMenu";
+
+const navbarCss = readFileSync(
+  fileURLToPath(new URL("../../styles/navbar.css", import.meta.url)),
+  "utf8",
+);
 
 const routing = vi.hoisted(() => ({ pathname: "/" }));
 
@@ -69,6 +76,10 @@ describe("NavMenu", () => {
 
   it("carries no inline style attribute the production CSP would block", () => {
     expect(navMenuMarkupOn("/agents")).not.toContain("style=");
+  });
+
+  it("puts the rankings trigger on the same flex axis as the other nav links", () => {
+    expect(navbarCss).toMatch(/\.nav-menu \{\s*display: flex;\s*align-items: center;/);
   });
 });
 

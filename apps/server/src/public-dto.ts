@@ -36,6 +36,13 @@ export type AgentStatDto = {
   lastSeenSeconds: number;
 };
 
+export type AgentLeaderboardDto = {
+  items: AgentStatDto[];
+  nextCursor: string | null;
+  totalAllTime: number;
+  totalInWindow: number;
+};
+
 export function agentAlias(salt: string, agentHash: string): string {
   const digest = createHash("sha256").update(salt + agentHash).digest("hex");
   return `agent-${digest.slice(0, 8)}`;

@@ -1337,6 +1337,8 @@
 @layer components {
   .nav-menu {
     position: relative;
+    display: flex;
+    align-items: center;
   }
 
   .nav-menu-trigger {
@@ -1344,6 +1346,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
+    line-height: 1;
     font-size: 0.875rem;
     color: var(--color-text-secondary);
     transition: color 160ms ease;
@@ -1360,6 +1363,8 @@
   }
 
   .nav-menu-caret {
+    display: block;
+    flex-shrink: 0;
     transition: transform 160ms ease;
   }
 

@@ -159,6 +159,14 @@ describe("agentsPath", () => {
   it("carries the range", () => {
     expect(agentsPath("all")).toBe("/api/agents?range=all");
   });
+
+  it("carries a homepage limit", () => {
+    expect(agentsPath("30d", { limit: 5 })).toBe("/api/agents?range=30d&limit=5");
+  });
+
+  it("encodes the cursor into the next page path", () => {
+    expect(agentsPath("7d", { cursor: "cur-1" })).toBe("/api/agents?range=7d&cursor=cur-1");
+  });
 });
 
 describe("agentPagePath", () => {
