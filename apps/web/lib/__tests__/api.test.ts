@@ -93,11 +93,15 @@ describe("tokensPath", () => {
   });
 
   it("appends the limit after the range", () => {
-    expect(tokensPath("7d", 25)).toBe("/api/tokens?range=7d&limit=25");
+    expect(tokensPath("7d", { limit: 25 })).toBe("/api/tokens?range=7d&limit=25");
   });
 
   it("omits the limit when it is not asked for", () => {
     expect(tokensPath("all")).toBe("/api/tokens?range=all");
+  });
+
+  it("encodes the cursor into the next page path", () => {
+    expect(tokensPath("30d", { cursor: "cur-1" })).toBe("/api/tokens?range=30d&cursor=cur-1");
   });
 });
 

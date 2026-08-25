@@ -192,29 +192,69 @@ async function sparklineSeries(
   return byToken;
 }
 
+export type TokenListingCursor = {
+  volumeUsd: string;
+  txCount: number;
+  address: string;
+  chainFamily: string;
+  chainId: string;
+};
+
 export async function tokenListing(
   pool: pg.Pool,
   plan: ChartRangePlan,
   limit: number,
+  after?: TokenListingCursor | null,
 ): Promise<TokenStatRead[]> {
   const window = bucketWindowOf(plan);
   const result = await pool.query<TokenStatQueryRow>(
     `WITH ${SPAN_CTE},
-     ${LISTED_LEGS_CTE}
-     SELECT l.chain_family,
-            l.chain_id::text AS chain_id,
-            l.address,
-            mode() WITHIN GROUP (ORDER BY l.symbol) AS symbol,
-            COALESCE(SUM(l.usd), 0)::text AS volume_usd,
-            COUNT(DISTINCT l.activity_id)::int AS tx_count,
-            COUNT(DISTINCT l.agent_hash)::int AS agent_count,
-            array_agg(DISTINCT l.protocol ORDER BY l.protocol) AS protocols,
-            GREATEST(0, floor(extract(epoch FROM now() - MAX(l.observed_at))))::int AS last_seen_seconds
-     FROM legs l
-     GROUP BY l.chain_family, l.chain_id, l.address
-     ORDER BY COALESCE(SUM(l.usd), 0) DESC, COUNT(DISTINCT l.activity_id) DESC, l.address
+     ${LISTED_LEGS_CTE},
+     ranked AS (
+       SELECT l.chain_family,
+              l.chain_id::text AS chain_id,
+              l.address,
+              mode() WITHIN GROUP (ORDER BY l.symbol) AS symbol,
+              COALESCE(SUM(l.usd), 0)::text AS volume_usd,
+              COUNT(DISTINCT l.activity_id)::int AS tx_count,
+              COUNT(DISTINCT l.agent_hash)::int AS agent_count,
+              array_agg(DISTINCT l.protocol ORDER BY l.protocol) AS protocols,
+              GREATEST(0, floor(extract(epoch FROM now() - MAX(l.observed_at))))::int AS last_seen_seconds
+       FROM legs l
+       GROUP BY l.chain_family, l.chain_id, l.address
+     )
+     SELECT ranked.chain_family,
+            ranked.chain_id,
+            ranked.address,
+            ranked.symbol,
+            ranked.volume_usd,
+            ranked.tx_count,
+            ranked.agent_count,
+            ranked.protocols,
+            ranked.last_seen_seconds
+     FROM ranked
+     WHERE ($4::text IS NULL
+        OR ranked.volume_usd::numeric < $5::numeric
+        OR (ranked.volume_usd::numeric = $5::numeric AND ranked.tx_count < $6::int)
+        OR (ranked.volume_usd::numeric = $5::numeric AND ranked.tx_count = $6::int AND ranked.address > $7)
+        OR (ranked.volume_usd::numeric = $5::numeric AND ranked.tx_count = $6::int AND ranked.address = $7
+            AND ranked.chain_family > $8)
+        OR (ranked.volume_usd::numeric = $5::numeric AND ranked.tx_count = $6::int AND ranked.address = $7
+            AND ranked.chain_family = $8 AND ranked.chain_id::numeric > $9::numeric))
+     ORDER BY ranked.volume_usd::numeric DESC, ranked.tx_count DESC, ranked.address,
+              ranked.chain_family, ranked.chain_id::numeric
      LIMIT $3`,
-    [window.bucketSeconds, window.bucketCount, limit],
+    [
+      window.bucketSeconds,
+      window.bucketCount,
+      limit,
+      after?.address ?? null,
+      after?.volumeUsd ?? "0",
+      after?.txCount ?? 0,
+      after?.address ?? "",
+      after?.chainFamily ?? "",
+      after?.chainId ?? "0",
+    ],
   );
   if (result.rows.length === 0) return [];
   const series = await sparklineSeries(pool, result.rows);

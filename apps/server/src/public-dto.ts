@@ -214,6 +214,11 @@ export type TokenStatDto = {
   series: ChartPointDto[];
 };
 
+export type TokenListingDto = {
+  items: TokenStatDto[];
+  nextCursor: string | null;
+};
+
 export type TokenPairDto = {
   tokenInSymbol: string | null;
   tokenOutSymbol: string | null;

@@ -3,7 +3,7 @@ import type pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { resolveBridgeChain, resolveChain } from "@agentscan/core";
 import { loadConfig } from "../../config.js";
-import type { TokenDetailDto, TokenStatDto } from "../../public-dto.js";
+import type { TokenDetailDto, TokenListingDto, TokenStatDto } from "../../public-dto.js";
 import { tokensRoutes } from "../../routes/public/tokens.js";
 import { startTestDb } from "../../testing/pg-harness.js";
 
@@ -122,10 +122,14 @@ const swapOnBase = {
 let db: Awaited<ReturnType<typeof startTestDb>>;
 let app: FastifyInstance;
 
-async function fetchTokens(query: string): Promise<TokenStatDto[]> {
+async function fetchListing(query: string): Promise<TokenListingDto> {
   const response = await app.inject({ method: "GET", url: `/api/tokens${query}` });
   expect(response.statusCode).toBe(200);
-  return response.json<TokenStatDto[]>();
+  return response.json<TokenListingDto>();
+}
+
+async function fetchTokens(query: string): Promise<TokenStatDto[]> {
+  return (await fetchListing(query)).items;
 }
 
 function rowOf(tokens: TokenStatDto[], chainSlug: string, address: string): TokenStatDto {
@@ -368,7 +372,7 @@ describe("GET /api/tokens sparkline", () => {
   });
 });
 
-describe("GET /api/tokens with a limit above the cap", () => {
+describe("GET /api/tokens paging", () => {
   beforeAll(async () => {
     await db.pool.query(
       `INSERT INTO activities
@@ -389,8 +393,49 @@ describe("GET /api/tokens with a limit above the cap", () => {
     await db.pool.query("DELETE FROM activities WHERE source_row_id LIKE 'filler-%'");
   });
 
-  it("caps the returned rows at one hundred", async () => {
-    expect(await fetchTokens("?limit=500")).toHaveLength(100);
+  it("rejects a malformed cursor", async () => {
+    const response = await app.inject({ method: "GET", url: "/api/tokens?cursor=not-a-cursor" });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: { code: "invalid_cursor", message: "malformed cursor" } });
+  });
+
+  it("serves the first page and leaves a cursor for the rest", async () => {
+    const page = await fetchListing("");
+    expect(page.items).toHaveLength(25);
+    expect(page.nextCursor).not.toBeNull();
+  });
+
+  it("continues from the cursor without repeating a row", async () => {
+    const first = await fetchListing("");
+    const second = await fetchListing(`?cursor=${first.nextCursor}`);
+    const firstKeys = first.items.map((row) => `${row.chainSlug}/${row.address}`);
+    const secondKeys = second.items.map((row) => `${row.chainSlug}/${row.address}`);
+    expect(secondKeys.some((key) => firstKeys.includes(key))).toBe(false);
+  });
+
+  it("walks every listed token exactly once", async () => {
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    for (let step = 0; step < 20; step += 1) {
+      const query = cursor === null ? "" : `?cursor=${cursor}`;
+      const page = await fetchListing(query);
+      seen.push(...page.items.map((row) => `${row.chainSlug}/${row.address}`));
+      if (page.nextCursor === null) break;
+      cursor = page.nextCursor;
+    }
+    expect(new Set(seen).size).toBe(seen.length);
+    expect(seen.length).toBeGreaterThan(25);
+  });
+
+  it("honours a smaller limit than the page size", async () => {
+    const page = await fetchListing("?limit=1");
+    expect(page.items).toHaveLength(1);
+    expect(page.nextCursor).not.toBeNull();
+  });
+
+  it("caps a limit above the page size", async () => {
+    const page = await fetchListing("?limit=500");
+    expect(page.items).toHaveLength(25);
   });
 });
 

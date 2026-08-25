@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { parseChartRange } from "../../lib/range";
+import { LoadMoreTokens } from "../../components/LoadMoreTokens";
 import { PageHeading } from "../../components/PageHeading";
 import { RangeChips } from "../../components/RangeChips";
-import { TokensTable } from "../../components/TokensTable";
 import { fetchTokens } from "../../lib/api";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +20,7 @@ export default async function TokensPage({
   searchParams: Promise<SearchParams>;
 }) {
   const range = parseChartRange((await searchParams).range);
-  const tokens = await fetchTokens(range);
+  const listing = await fetchTokens(range);
 
   return (
     <section className="section-enter flex flex-col gap-6">
@@ -30,7 +30,12 @@ export default async function TokensPage({
         description="Tokens swapped and bridged by Vex agents, by the volume we observed on chain."
         actions={<RangeChips current={range} label="Token window" />}
       />
-      <TokensTable rows={tokens} emptyMessage="No token activity in this window" />
+      <LoadMoreTokens
+        key={range}
+        initialItems={listing.items}
+        initialCursor={listing.nextCursor}
+        range={range}
+      />
     </section>
   );
 }
