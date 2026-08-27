@@ -6,6 +6,8 @@ import {
   bodyCellsHiddenBelowMd,
   headersHiddenBelowMd,
   headersShownBelowMd,
+  hrefsIn,
+  tbodyRows,
 } from "./table-column-visibility";
 import type { NetworkStatDto } from "../../lib/api";
 
@@ -58,6 +60,13 @@ describe("NetworksTable", () => {
 
     expect(markup).toContain('href="/networks/base"');
     expect(markup).toContain('class="feed-row-link"');
+  });
+
+  it("puts that row's detail href in every cell so a click does not depend on a stretched overlay", () => {
+    const [firstRow, secondRow] = tbodyRows(markupFor([activeNetwork, idleRegistryNetwork]));
+
+    expect(hrefsIn(firstRow ?? "")).toEqual(Array(6).fill("/networks/base"));
+    expect(hrefsIn(secondRow ?? "")).toEqual(Array(6).fill("/networks/robinhood"));
   });
 
   it("marks a full verification tier with the full tier badge", () => {

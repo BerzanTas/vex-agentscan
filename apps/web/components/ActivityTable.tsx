@@ -1,9 +1,9 @@
-import Link from "next/link";
 import type { ActivityRowDto } from "../lib/api";
 import { formatAge, formatRawAmount, formatRawAmountDisplay, formatUsdAmount } from "../lib/format";
 import { legLabel } from "../lib/leg-label";
 import { ChainBadge } from "./ChainBadge";
 import { EmptyPanel } from "./EmptyPanel";
+import { FeedRowLink } from "./FeedRowLink";
 import { ProtocolBadge } from "./ProtocolBadge";
 
 const SWAP_GLYPH = "⇄";
@@ -50,6 +50,40 @@ function AmountCell({ row }: { row: ActivityRowDto }) {
   );
 }
 
+function ActivityRow({ row }: { row: ActivityRowDto }) {
+  const href = `/tx/${row.publicId}`;
+  return (
+    <tr className="feed-row border-b border-bg-overlay/60 last:border-b-0">
+      <td>
+        <FeedRowLink href={href} ariaLabel={`${row.protocol} ${pairLabel(row)}`}>
+          <ProtocolBadge protocol={row.protocol} withName />
+        </FeedRowLink>
+      </td>
+      <td className="text-text-primary" title={row.kind}>
+        <FeedRowLink href={href}>
+          <span className="feed-glyph" aria-hidden="true">
+            {kindGlyph(row.kind)}
+          </span>
+          {pairLabel(row)}
+        </FeedRowLink>
+      </td>
+      <td>
+        <FeedRowLink href={href}>
+          <AmountCell row={row} />
+        </FeedRowLink>
+      </td>
+      <td className="font-mono text-xs text-text-secondary">
+        <FeedRowLink href={href}>
+          <ChainCell row={row} />
+        </FeedRowLink>
+      </td>
+      <td className="font-mono text-xs text-text-muted">
+        <FeedRowLink href={href}>{formatAge(row.ageSeconds)}</FeedRowLink>
+      </td>
+    </tr>
+  );
+}
+
 export function ActivityTable({ rows, emptyMessage }: { rows: ActivityRowDto[]; emptyMessage: string }) {
   if (rows.length === 0) {
     return <EmptyPanel message={emptyMessage} />;
@@ -68,30 +102,7 @@ export function ActivityTable({ rows, emptyMessage }: { rows: ActivityRowDto[]; 
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.publicId} className="feed-row border-b border-bg-overlay/60 last:border-b-0">
-              <td className="px-4 py-3">
-                <Link
-                  href={`/tx/${row.publicId}`}
-                  className="feed-row-link"
-                  aria-label={`${row.protocol} ${pairLabel(row)}`}
-                >
-                  <ProtocolBadge protocol={row.protocol} withName />
-                </Link>
-              </td>
-              <td className="px-4 py-3 text-text-primary" title={row.kind}>
-                <span className="feed-glyph" aria-hidden="true">
-                  {kindGlyph(row.kind)}
-                </span>
-                {pairLabel(row)}
-              </td>
-              <td className="px-4 py-3">
-                <AmountCell row={row} />
-              </td>
-              <td className="px-4 py-3 font-mono text-xs text-text-secondary">
-                <ChainCell row={row} />
-              </td>
-              <td className="px-4 py-3 font-mono text-xs text-text-muted">{formatAge(row.ageSeconds)}</td>
-            </tr>
+            <ActivityRow key={row.publicId} row={row} />
           ))}
         </tbody>
       </table>
