@@ -15,6 +15,15 @@ function firstBodyRow(markup: string): string {
   return markup.match(/<tbody><tr[^>]*>(.*?)<\/tr>/s)?.[1] ?? "";
 }
 
+export function tbodyRows(markup: string): string[] {
+  const body = markup.match(/<tbody>([\s\S]*)<\/tbody>/)?.[1] ?? "";
+  return body.match(/<tr[\s\S]*?<\/tr>/g) ?? [];
+}
+
+export function hrefsIn(markup: string): string[] {
+  return [...markup.matchAll(/href="([^"]*)"/g)].map((match) => match[1] ?? "");
+}
+
 export function headersHiddenBelowMd(markup: string): string[] {
   return headerCells(markup)
     .filter((cell) => hiddenBelowMd(cell.openingTag))
