@@ -1,7 +1,7 @@
-import Link from "next/link";
 import type { NetworkStatDto, VerificationTier } from "../lib/api";
 import { formatAge, formatUsdCompact, formatUsdAmount } from "../lib/format";
 import { ChainBadge } from "./ChainBadge";
+import { FeedRowLink } from "./FeedRowLink";
 
 const TIER_BADGE_CLASS: Record<VerificationTier, string> = {
   full: "tier-badge tier-badge-full",
@@ -23,6 +23,42 @@ function bridgeLegLabel(network: NetworkStatDto): string {
   return `${incoming} / ${outgoing}`;
 }
 
+function NetworkRow({ network }: { network: NetworkStatDto }) {
+  const href = `/networks/${network.chainSlug}`;
+  return (
+    <tr className="feed-row">
+      <td>
+        <FeedRowLink href={href} ariaLabel={network.displayName}>
+          <span className="token-cell">
+            <ChainBadge slug={network.chainSlug} />
+            <span className="text-xs text-text-muted">{network.displayName}</span>
+          </span>
+        </FeedRowLink>
+      </td>
+      <td>
+        <FeedRowLink href={href}>
+          <TierBadge tier={network.verificationTier} />
+        </FeedRowLink>
+      </td>
+      <td
+        className="text-right font-mono text-text-primary"
+        title={`$${formatUsdAmount(network.volumeUsd)}`}
+      >
+        <FeedRowLink href={href}>${formatUsdCompact(network.volumeUsd)}</FeedRowLink>
+      </td>
+      <td className="text-right font-mono text-xs text-text-secondary">
+        <FeedRowLink href={href}>{network.txCount.toLocaleString("en-US")}</FeedRowLink>
+      </td>
+      <td className="hidden text-right font-mono text-xs text-text-secondary md:table-cell">
+        <FeedRowLink href={href}>{bridgeLegLabel(network)}</FeedRowLink>
+      </td>
+      <td className="hidden text-right font-mono text-xs text-text-muted md:table-cell">
+        <FeedRowLink href={href}>{lastSeenLabel(network.lastSeenSeconds)}</FeedRowLink>
+      </td>
+    </tr>
+  );
+}
+
 export function NetworksTable({ networks }: { networks: NetworkStatDto[] }) {
   return (
     <div className="glass overflow-x-auto overflow-y-clip">
@@ -41,38 +77,7 @@ export function NetworksTable({ networks }: { networks: NetworkStatDto[] }) {
         </thead>
         <tbody>
           {networks.map((network) => (
-            <tr key={network.chainSlug} className="feed-row">
-              <td>
-                <Link
-                  href={`/networks/${network.chainSlug}`}
-                  className="feed-row-link"
-                  aria-label={network.displayName}
-                >
-                  <span className="token-cell">
-                    <ChainBadge slug={network.chainSlug} />
-                    <span className="text-xs text-text-muted">{network.displayName}</span>
-                  </span>
-                </Link>
-              </td>
-              <td>
-                <TierBadge tier={network.verificationTier} />
-              </td>
-              <td
-                className="text-right font-mono text-text-primary"
-                title={`$${formatUsdAmount(network.volumeUsd)}`}
-              >
-                ${formatUsdCompact(network.volumeUsd)}
-              </td>
-              <td className="text-right font-mono text-xs text-text-secondary">
-                {network.txCount.toLocaleString("en-US")}
-              </td>
-              <td className="hidden text-right font-mono text-xs text-text-secondary md:table-cell">
-                {bridgeLegLabel(network)}
-              </td>
-              <td className="hidden text-right font-mono text-xs text-text-muted md:table-cell">
-                {lastSeenLabel(network.lastSeenSeconds)}
-              </td>
-            </tr>
+            <NetworkRow key={network.chainSlug} network={network} />
           ))}
         </tbody>
       </table>

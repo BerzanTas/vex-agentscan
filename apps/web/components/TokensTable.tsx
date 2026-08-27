@@ -1,8 +1,8 @@
-import Link from "next/link";
 import type { TokenStatDto } from "../lib/api";
 import { formatAge, formatUsdCompact, formatUsdAmount } from "../lib/format";
 import { ChainBadge } from "./ChainBadge";
 import { EmptyPanel } from "./EmptyPanel";
+import { FeedRowLink } from "./FeedRowLink";
 import { ObservedVolumeCaveat, TOKEN_COLUMN_VOLUME_CAVEAT } from "./ObservedVolumeCaveat";
 import { ProtocolBadge } from "./ProtocolBadge";
 import { Sparkline } from "./Sparkline";
@@ -50,6 +50,49 @@ function ProtocolIcons({ protocols }: { protocols: string[] }) {
   );
 }
 
+function TokenRow({ token, index }: { token: TokenStatDto; index: number }) {
+  const href = tokenDetailHref(token.chainSlug, token.address);
+  const label = tokenLabel(token);
+  return (
+    <tr className="feed-row">
+      <td className="font-mono text-xs text-text-muted">
+        <FeedRowLink href={href}>{index + 1}</FeedRowLink>
+      </td>
+      <td>
+        <FeedRowLink href={href} className="token-cell" ariaLabel={`${label} on ${token.chainSlug}`}>
+          <TokenName token={token} />
+          <ChainBadge slug={token.chainSlug} />
+        </FeedRowLink>
+      </td>
+      <td
+        className="whitespace-nowrap font-mono text-text-primary"
+        title={`$${formatUsdAmount(token.volumeUsd)}`}
+      >
+        <FeedRowLink href={href}>${formatUsdCompact(token.volumeUsd)}</FeedRowLink>
+      </td>
+      <td className="font-mono text-xs text-text-secondary">
+        <FeedRowLink href={href}>{token.txCount.toLocaleString("en-US")}</FeedRowLink>
+      </td>
+      <td className="hidden font-mono text-xs text-text-secondary md:table-cell">
+        <FeedRowLink href={href}>{token.agentCount.toLocaleString("en-US")}</FeedRowLink>
+      </td>
+      <td className="hidden md:table-cell">
+        <FeedRowLink href={href}>
+          <ProtocolIcons protocols={token.protocols} />
+        </FeedRowLink>
+      </td>
+      <td className="hidden w-24 md:table-cell">
+        <FeedRowLink href={href}>
+          <Sparkline series={token.series} label={`Seven day observed volume for ${label}`} />
+        </FeedRowLink>
+      </td>
+      <td className="hidden font-mono text-xs text-text-muted md:table-cell">
+        <FeedRowLink href={href}>{formatAge(token.lastSeenSeconds)}</FeedRowLink>
+      </td>
+    </tr>
+  );
+}
+
 export function TokensTable({ rows, emptyMessage }: { rows: TokenStatDto[]; emptyMessage: string }) {
   if (rows.length === 0) {
     return <EmptyPanel message={emptyMessage} />;
@@ -74,40 +117,7 @@ export function TokensTable({ rows, emptyMessage }: { rows: TokenStatDto[]; empt
         </thead>
         <tbody>
           {rows.map((token, index) => (
-            <tr key={`${token.chainSlug}/${token.address}`} className="feed-row">
-              <td className="font-mono text-xs text-text-muted">{index + 1}</td>
-              <td>
-                <Link
-                  href={tokenDetailHref(token.chainSlug, token.address)}
-                  className="feed-row-link token-cell"
-                  aria-label={`${tokenLabel(token)} on ${token.chainSlug}`}
-                >
-                  <TokenName token={token} />
-                  <ChainBadge slug={token.chainSlug} />
-                </Link>
-              </td>
-              <td
-                className="whitespace-nowrap font-mono text-text-primary"
-                title={`$${formatUsdAmount(token.volumeUsd)}`}
-              >
-                ${formatUsdCompact(token.volumeUsd)}
-              </td>
-              <td className="font-mono text-xs text-text-secondary">
-                {token.txCount.toLocaleString("en-US")}
-              </td>
-              <td className="hidden font-mono text-xs text-text-secondary md:table-cell">
-                {token.agentCount.toLocaleString("en-US")}
-              </td>
-              <td className="hidden md:table-cell">
-                <ProtocolIcons protocols={token.protocols} />
-              </td>
-              <td className="hidden w-24 md:table-cell">
-                <Sparkline series={token.series} label={`Seven day observed volume for ${tokenLabel(token)}`} />
-              </td>
-              <td className="hidden font-mono text-xs text-text-muted md:table-cell">
-                {formatAge(token.lastSeenSeconds)}
-              </td>
-            </tr>
+            <TokenRow key={`${token.chainSlug}/${token.address}`} token={token} index={index} />
           ))}
         </tbody>
       </table>

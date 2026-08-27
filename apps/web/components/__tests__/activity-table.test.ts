@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ActivityTable } from "../ActivityTable";
 import type { ActivityRowDto } from "../../lib/api";
+import { hrefsIn, tbodyRows } from "./table-column-visibility";
 
 const row: ActivityRowDto = {
   publicId: "pub-1",
@@ -59,6 +60,35 @@ describe("ActivityTable", () => {
     const markup = markupFor([row]);
 
     expect(markup).toContain('href="/tx/pub-1"');
+  });
+
+  it("puts that row's detail href in every cell so a click does not depend on a stretched overlay", () => {
+    const other: ActivityRowDto = { ...row, publicId: "pub-other", protocol: "pools" };
+    const [firstRow, secondRow] = tbodyRows(markupFor([row, other]));
+
+    expect(hrefsIn(firstRow ?? "")).toEqual([
+      "/tx/pub-1",
+      "/tx/pub-1",
+      "/tx/pub-1",
+      "/tx/pub-1",
+      "/tx/pub-1",
+    ]);
+    expect(hrefsIn(secondRow ?? "")).toEqual([
+      "/tx/pub-other",
+      "/tx/pub-other",
+      "/tx/pub-other",
+      "/tx/pub-other",
+      "/tx/pub-other",
+    ]);
+  });
+
+  it("keeps a single tab stop per row named from the protocol and pair", () => {
+    const markup = markupFor([row]);
+    const [firstRow] = tbodyRows(markup);
+
+    expect(firstRow ?? "").toContain('aria-label="kyberswap USDC → WETH"');
+    expect((firstRow ?? "").match(/aria-label=/g)).toHaveLength(1);
+    expect((firstRow ?? "").match(/tabindex="-1"/g) ?? []).toHaveLength(4);
   });
 
   it("marks a swap with the swap glyph", () => {

@@ -6,6 +6,8 @@ import {
   bodyCellsHiddenBelowMd,
   headersHiddenBelowMd,
   headersShownBelowMd,
+  hrefsIn,
+  tbodyRows,
 } from "./table-column-visibility";
 import type { TokenStatDto } from "../../lib/api";
 
@@ -110,6 +112,17 @@ describe("TokensTable", () => {
 
     expect(markup).toContain('class="feed-row"');
     expect(markup).toContain('class="feed-row-link token-cell"');
+  });
+
+  it("puts that row's detail href in every cell so a click does not depend on a stretched overlay", () => {
+    const [firstRow, secondRow] = tbodyRows(markupFor([usdc, unnamed]));
+
+    expect(hrefsIn(firstRow ?? "")).toEqual(
+      Array(8).fill("/tokens/base/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"),
+    );
+    expect(hrefsIn(secondRow ?? "")).toEqual(
+      Array(8).fill("/tokens/arbitrum/0x1234567890abcdef1234567890abcdefabcd"),
+    );
   });
 
   it("shows at most three protocol icons", () => {
