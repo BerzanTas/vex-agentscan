@@ -319,6 +319,11 @@ export async function countActiveAgents7d(pool: pg.Pool): Promise<number> {
   return singleRow(result).active_agents;
 }
 
+export async function countRegisteredAgents(pool: pg.Pool): Promise<number> {
+  const result = await pool.query<{ n: number }>("SELECT COUNT(*)::int AS n FROM agents");
+  return singleRow(result).n;
+}
+
 export type ChartBucketRead = { bucketStart: number; volumeUsd: string; txCount: number };
 
 type ChartBucketQueryRow = { bucket_start: string; volume_usd: string; tx_count: number };
