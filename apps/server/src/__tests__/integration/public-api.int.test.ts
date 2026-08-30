@@ -177,7 +177,13 @@ describe("GET /api/stats", () => {
       dailyTx: 2,
       totalTx: 3,
       activeAgents7d: 1,
+      totalAgents: 3,
     });
+  });
+
+  it("counts every registered agent, including those without verified activity", async () => {
+    const response = await app.inject({ method: "GET", url: "/api/stats" });
+    expect(response.json<StatsDto>()).toMatchObject({ totalAgents: 3, activeAgents7d: 1 });
   });
 });
 

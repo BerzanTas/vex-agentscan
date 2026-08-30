@@ -247,6 +247,7 @@ describe("public aggregates over a window mixing priced, unpriced and pending ro
       dailyTx: SEEDED_ACTIVITY_COUNT,
       totalTx: SEEDED_ACTIVITY_COUNT,
       activeAgents7d: 1,
+      totalAgents: 1,
     });
   });
 
@@ -352,6 +353,7 @@ describe("public aggregates over a window where nothing has been priced yet", ()
       dailyTx: NOTHING_PRICED_WINDOW.length,
       totalTx: NOTHING_PRICED_WINDOW.length,
       activeAgents7d: 1,
+      totalAgents: 1,
     });
   });
 

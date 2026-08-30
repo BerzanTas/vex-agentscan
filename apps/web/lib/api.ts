@@ -4,6 +4,7 @@ export type StatsDto = {
   dailyTx: number;
   totalTx: number;
   activeAgents7d: number;
+  totalAgents: number;
 };
 
 export type ChartPointDto = { bucketStart: number; volumeUsd: string; txCount: number };

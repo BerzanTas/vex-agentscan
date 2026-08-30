@@ -6,7 +6,6 @@ import { CursorLight } from "./CursorLight";
 import { StatSparkline } from "./StatSparkline";
 
 const TREND_WINDOW = "30D";
-const AGENT_WINDOW = "7D";
 
 type StatFooter = { trend: number[] } | { window: string };
 
@@ -55,7 +54,7 @@ function cellsFrom(stats: StatsDto, series: ChartPointDto[]): StatCell[] {
     countCell("Total txns", stats.totalTx, {
       trend: cumulativeSeriesEndingAt(tx, stats.totalTx),
     }),
-    countCell("Active agents", stats.activeAgents7d, { window: AGENT_WINDOW }),
+    countCell("Total agents", stats.totalAgents, { window: "ALL" }),
   ];
 }
 
