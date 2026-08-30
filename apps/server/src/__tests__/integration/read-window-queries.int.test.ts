@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type pg from "pg";
-import { agentLeaderboard, countActiveAgents7d } from "../../repos/read-repo.js";
+import { agentLeaderboard, countActiveAgents7d, countRegisteredAgents } from "../../repos/read-repo.js";
 import { startTestDb } from "../../testing/pg-harness.js";
 import { seedActivity } from "../../testing/seed.js";
 
@@ -38,6 +38,19 @@ describe("zapytania okienkowe", () => {
     });
 
     expect(await countActiveAgents7d(pool)).toBe(1);
+  });
+
+  it("counts every registered agent, including revoked and those without activity", async () => {
+    await pool.query(
+      `INSERT INTO agents (agent_hash, ingest_token_sha256, consent_version, accepted_at, status)
+       VALUES
+         ($1, 'token-a', 1, now(), 'active'),
+         ($2, 'token-b', 1, now(), 'revoked'),
+         ($3, 'token-c', 1, now(), 'quarantined')`,
+      ["a".repeat(64), "b".repeat(64), "c".repeat(64)],
+    );
+
+    expect(await countRegisteredAgents(pool)).toBe(3);
   });
 
   it("sumuje wolumen agenta z ostatnich 30 dni", async () => {

@@ -10,6 +10,7 @@ const STATS: StatsDto = {
   dailyTx: 12,
   totalTx: 5271,
   activeAgents7d: 5,
+  totalAgents: 1284,
 };
 
 const SERIES: ChartPointDto[] = [
@@ -37,7 +38,7 @@ describe("StatCards", () => {
     expect(html).toContain("Total volume");
     expect(html).toContain("Daily txns");
     expect(html).toContain("Total txns");
-    expect(html).toContain("Active agents");
+    expect(html).toContain("Total agents");
   });
 
   it("renders usd values in compact form", () => {
@@ -64,8 +65,14 @@ describe("StatCards", () => {
     expect(markup()).toContain("<title>Daily volume over 30D</title>");
   });
 
-  it("shows the observation window instead of a trend for active agents", () => {
-    expect(markup()).toContain("7D window");
+  it("shows the all-time window instead of a trend for total agents", () => {
+    expect(markup()).toContain("ALL window");
+  });
+
+  it("renders the registered-agent total, not the trailing-week active count", () => {
+    const html = markup();
+    expect(html).toContain("1,284");
+    expect(html).not.toContain(">5<");
   });
 
   it("renders the console without a series", () => {

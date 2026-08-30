@@ -21,6 +21,7 @@ const stats: StatsDto = {
   dailyTx: 1,
   totalTx: 1,
   activeAgents7d: 1,
+  totalAgents: 1,
 };
 
 const chart: ChartPointDto[] = [
