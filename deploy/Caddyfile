@@ -1,4 +1,13 @@
 {$SITE_ADDRESS::80} {
+	# ORDER MATTERS. Caddy takes the first matching `handle`, so the two asset
+	# routes must precede the generic /v1/* handler or every upload and delete
+	# would reach the reporting API instead of the asset host.
+	handle /a/* {
+		reverse_proxy assets:3000
+	}
+	handle /v1/assets* {
+		reverse_proxy assets:3000
+	}
 	handle /v1/* {
 		reverse_proxy api:3000
 	}

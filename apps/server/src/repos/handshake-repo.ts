@@ -1,7 +1,7 @@
 import type { ChainFamily } from "@agentscan/contract";
 import type pg from "pg";
 import { agentNameCandidates } from "../handshake/agent-name.js";
-import type { AgentStatus } from "../plugins/auth.js";
+import type { AgentStatus } from "@agentscan/install-identity";
 
 const UNIQUE_VIOLATION = "23505";
 const CHALLENGE_RETENTION_INTERVAL = "1 hour";

@@ -24,6 +24,37 @@ importers:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@26.1.2)(jiti@2.7.0)(lightningcss@1.32.0)(supports-color@7.2.0)(yaml@2.9.0)
 
+  apps/launch-assets:
+    dependencies:
+      '@agentscan/contract':
+        specifier: workspace:*
+        version: link:../../packages/contract
+      '@agentscan/install-identity':
+        specifier: workspace:*
+        version: link:../../packages/install-identity
+      fastify:
+        specifier: ^5.0.0
+        version: 5.10.0
+      pg:
+        specifier: ^8.13.0
+        version: 8.22.0
+      zod:
+        specifier: ^4.0.0
+        version: 4.4.3
+    devDependencies:
+      '@agentscan/server':
+        specifier: workspace:*
+        version: link:../server
+      '@testcontainers/postgresql':
+        specifier: ^11.0.0
+        version: 11.14.0(supports-color@7.2.0)
+      '@types/pg':
+        specifier: ^8.11.0
+        version: 8.20.0
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
+
   apps/server:
     dependencies:
       '@agentscan/contract':
@@ -32,6 +63,9 @@ importers:
       '@agentscan/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@agentscan/install-identity':
+        specifier: workspace:*
+        version: link:../../packages/install-identity
       bs58:
         specifier: ^6.0.0
         version: 6.0.0
@@ -114,6 +148,19 @@ importers:
         version: 4.4.3
 
   packages/core: {}
+
+  packages/install-identity:
+    dependencies:
+      '@agentscan/contract':
+        specifier: workspace:*
+        version: link:../contract
+    devDependencies:
+      '@types/pg':
+        specifier: ^8.11.0
+        version: 8.20.0
+      pg:
+        specifier: ^8.13.0
+        version: 8.22.0
 
 packages:
 
@@ -1551,6 +1598,7 @@ packages:
   eslint@9.39.5:
     resolution: {integrity: sha512-DgZS62aPLXKlnxILS/AYCoRvHaZeXceIzlXPkkGGzJWSow1aEk0lbTlxUSlyjC8jcaKxAdOnTDz+o1JFSBsyjw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'
@@ -3251,13 +3299,13 @@ snapshots:
 
   '@types/docker-modem@3.0.6':
     dependencies:
-      '@types/node': 26.1.2
+      '@types/node': 22.20.1
       '@types/ssh2': 1.15.5
 
   '@types/dockerode@4.0.1':
     dependencies:
       '@types/docker-modem': 3.0.6
-      '@types/node': 26.1.2
+      '@types/node': 22.20.1
       '@types/ssh2': 1.15.5
 
   '@types/estree@1.0.9': {}
@@ -3275,10 +3323,11 @@ snapshots:
   '@types/node@26.1.2':
     dependencies:
       undici-types: 8.3.0
+    optional: true
 
   '@types/pg@8.20.0':
     dependencies:
-      '@types/node': 26.1.2
+      '@types/node': 22.20.1
       pg-protocol: 1.15.0
       pg-types: 2.2.0
 
@@ -3292,11 +3341,11 @@ snapshots:
 
   '@types/ssh2-streams@0.1.13':
     dependencies:
-      '@types/node': 26.1.2
+      '@types/node': 22.20.1
 
   '@types/ssh2@0.5.52':
     dependencies:
-      '@types/node': 26.1.2
+      '@types/node': 22.20.1
       '@types/ssh2-streams': 0.1.13
 
   '@types/ssh2@1.15.5':
@@ -4390,7 +4439,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.2
-      '@types/node': 26.1.2
+      '@types/node': 22.20.1
       long: 5.3.2
 
   pump@3.0.4:
@@ -4759,7 +4808,8 @@ snapshots:
 
   undici-types@6.21.0: {}
 
-  undici-types@8.3.0: {}
+  undici-types@8.3.0:
+    optional: true
 
   undici@7.29.0: {}
 
