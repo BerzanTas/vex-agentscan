@@ -41,6 +41,10 @@ export type ActivityDbRow = {
   amount_out_raw: string | null;
   executed_in_raw: string | null;
   executed_out_raw: string | null;
+  token_out2_symbol: string | null;
+  token_out2_decimals: number | null;
+  amount_out2_raw: string | null;
+  executed_out2_raw: string | null;
   usd_in_est: string | null;
   usd_out_est: string | null;
   usd_fee_est: string | null;
@@ -91,13 +95,24 @@ const ACTIVITY_EVENT_TIME = activityEventTimeCursorSql("a");
  * part of the ACTION and never a second entry here, so the fee leg is excluded from every list and
  * count by `LOGICAL_ROW_PREDICATE` and reappears only through this projection, on its parent.
  *
- * The lateral gates on `fee.status = 'confirmed'` ONLY, never on the parent's status: a fee that
- * confirmed against an action that then failed was still really charged, and hiding it would make
- * the page state less than the truth.
+ * ONE PARENT PER EXECUTION. The `NOT EXISTS` guard attaches the fee to the LOWEST-indexed non-fee
+ * leg of the execution and to no other, which is the same parent `LOGICAL_ROW_ID` resolves a fee
+ * leg's public id and hash to. Without it a bridge execution (deposit, fee, fill) and a Pendle
+ * split (two mint legs, one fee) would each render the SAME charge twice, once under every non-fee
+ * leg - the fold's whole purpose inverted into a double count.
  *
- * ONE SOURCE, AND THE ANOMALY FAILS CLOSED. Two confirmed fee legs on one execution is a producer
- * defect; reporting one of them as if it were the whole charge would understate the money, so
- * `leg_count = 1` blanks every field instead.
+ * PENDING AND FAILED ATTEMPTS STAY VISIBLE, AND FEED NO MONEY FIELD (owner decision V1,
+ * 2026-09-04). The lateral no longer filters on status, so a fee still in flight or one that
+ * reverted appears under its action with `status` saying so; `vexFeeColumn` then blanks the amount
+ * and the USD estimate for every status but `confirmed`, because an attempted charge is not a
+ * charge. A confirmed retry after a failed attempt wins the ORDER BY, so the money is read from the
+ * leg that actually settled. The parent's own status is never consulted: a fee that confirmed
+ * against an action that then failed was still really charged.
+ *
+ * ONE SOURCE OF MONEY, AND THE ANOMALY FAILS CLOSED. Two CONFIRMED fee legs on one execution is a
+ * producer defect; reporting one of them as if it were the whole charge would understate the money,
+ * so `confirmed_leg_count > 1` blanks every field instead - the row reports no fee at all rather
+ * than half of one.
  *
  * `activities.usd_vex_fee_est` - the column the producer uses for venues that take the fee INSIDE
  * the transaction, where it has no leg of its own - is deliberately NOT a second source here. This
@@ -114,28 +129,42 @@ const VEX_FEE_LEG_LATERAL = `
               fee.usd_in_est        AS usd_est,
               fee.chain_family      AS chain_family,
               fee.chain_id          AS chain_id,
-              count(*) OVER ()      AS leg_count
+              count(*) FILTER (WHERE fee.status = 'confirmed') OVER () AS confirmed_leg_count
          FROM activities fee
         WHERE fee.agent_hash = a.agent_hash
           AND fee.source_execution_id = a.source_execution_id
           AND fee.id <> a.id
           AND ${vexFeeLegRolesIn("fee.event_role")}
-          AND fee.status = 'confirmed'
-        ORDER BY fee.event_index, fee.id
+          AND NOT EXISTS (
+                SELECT 1
+                  FROM activities earlier
+                 WHERE earlier.agent_hash = a.agent_hash
+                   AND earlier.source_execution_id = a.source_execution_id
+                   AND ${logicalRowIn("earlier.event_role")}
+                   AND (earlier.event_index, earlier.id) < (a.event_index, a.id)
+              )
+        ORDER BY (fee.status = 'confirmed') DESC, fee.event_index DESC, fee.id DESC
         LIMIT 1
      ) vex_fee ON TRUE`;
 
+/** Visible for every status the picked leg can be in, once the double-charge anomaly is ruled out. */
 function vexFeeColumn(expression: string, alias: string): string {
-  return `CASE WHEN vex_fee.leg_count = 1 THEN ${expression} END AS ${alias}`;
+  return `CASE WHEN vex_fee.confirmed_leg_count <= 1 THEN ${expression} END AS ${alias}`;
+}
+
+/** A money field: it states what Vex actually took, so only a CONFIRMED leg may fill it. */
+function vexFeeMoneyColumn(expression: string, alias: string): string {
+  return `CASE WHEN vex_fee.confirmed_leg_count <= 1 AND vex_fee.status = 'confirmed'
+              THEN ${expression} END AS ${alias}`;
 }
 
 const VEX_FEE_COLUMNS = [
-  vexFeeColumn("vex_fee.amount_raw", "vex_fee_amount_raw"),
+  vexFeeMoneyColumn("vex_fee.amount_raw", "vex_fee_amount_raw"),
+  vexFeeMoneyColumn("vex_fee.usd_est", "vex_fee_usd_est"),
   vexFeeColumn("vex_fee.decimals", "vex_fee_decimals"),
   vexFeeColumn("vex_fee.symbol", "vex_fee_symbol"),
   vexFeeColumn("vex_fee.tx_hash", "vex_fee_tx_hash"),
   vexFeeColumn("vex_fee.status", "vex_fee_status"),
-  vexFeeColumn("vex_fee.usd_est", "vex_fee_usd_est"),
   vexFeeColumn("vex_fee.chain_family", "vex_fee_chain_family"),
   vexFeeColumn("vex_fee.chain_id::text", "vex_fee_chain_id"),
 ].join(",\n  ");
@@ -170,6 +199,7 @@ const ACTIVITY_COLUMNS = `
   a.token_in_address, a.token_in_symbol, a.token_in_decimals,
   a.token_out_address, a.token_out_symbol, a.token_out_decimals,
   a.amount_in_raw, a.amount_out_raw, a.executed_in_raw, a.executed_out_raw,
+  a.token_out2_symbol, a.token_out2_decimals, a.amount_out2_raw, a.executed_out2_raw,
   a.usd_in_est, a.usd_out_est, a.usd_fee_est, a.usd_source,
   a.tx_hash, a.failure_code,
   a.client_created_at, a.client_confirmed_at, a.client_observed_at,
@@ -207,6 +237,10 @@ function activityDbRowFrom(raw: ActivityQueryRow): ActivityDbRow {
     amount_out_raw: raw.amount_out_raw,
     executed_in_raw: raw.executed_in_raw,
     executed_out_raw: raw.executed_out_raw,
+    token_out2_symbol: raw.token_out2_symbol,
+    token_out2_decimals: raw.token_out2_decimals,
+    amount_out2_raw: raw.amount_out2_raw,
+    executed_out2_raw: raw.executed_out2_raw,
     usd_in_est: raw.usd_in_est,
     usd_out_est: raw.usd_out_est,
     usd_fee_est: raw.usd_fee_est,

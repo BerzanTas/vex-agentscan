@@ -78,9 +78,15 @@ export {
 } from "./chain-registry/catalog.js";
 export {
   ATTESTATION_CHAIN_IDS,
+  ATTESTATION_PROOF_MODES,
+  allowlistFor,
+  attestationLaunchpadSupported,
   buildAttestationChainRegistry,
   type AttestationChainEntry,
   type AttestationChainRegistry,
+  type AttestationLaunchpad,
+  type AttestationProofMode,
+  type LaunchpadAddressKey,
 } from "./chain-registry/attestation-chain-registry.js";
 export type {
   AgentActivity,

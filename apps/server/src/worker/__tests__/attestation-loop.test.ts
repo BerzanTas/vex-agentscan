@@ -47,6 +47,7 @@ function jobFixture(id: string, chainId: bigint): ClaimedAttestation {
   return {
     id,
     chainId,
+    launchpad: "trench",
     tokenAddress: claimedToken,
     recoveredSigner,
     txHashHint: validTxHash,
@@ -57,7 +58,9 @@ function jobFixture(id: string, chainId: bigint): ClaimedAttestation {
 
 function depsFixture(): AttestationResolverDeps {
   const config = loadConfig({ DATABASE_URL: "postgres://unused", ATTEST_BACKOFF_SCHEDULE: "1m,5m" });
-  const chainRegistry: AttestationChainRegistry = new Map([[4663n, { factoryAddresses: [factoryAddress] }]]);
+  const chainRegistry: AttestationChainRegistry = new Map([
+    [4663n, { launchpads: new Map([["trench" as const, [factoryAddress]]]) }],
+  ]);
   return {
     config,
     now: () => new Date("2026-08-04T11:00:00Z"),

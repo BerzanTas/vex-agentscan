@@ -10,6 +10,19 @@ export type VerificationInput = {
   executedOutRaw: string | null;
   tokenInAddress: string | null;
   tokenOutAddress: string | null;
+  /**
+   * The SECOND leg, for the roles the contract admits one on: a Pendle split mints PT and YT in one
+   * transaction, and a pools.fun creator-fee or holder-reward claim pays the launched token AND the
+   * asset it was paired against. Before this existed the full verifier read only the first leg, so
+   * the second amount reached the public page carrying a `verified_full` badge that had never been
+   * checked against the receipt. It is judged by exactly the same rule as the first leg, and a null
+   * leg is judged as "matches" the way a null first leg always has been - nothing declared, nothing
+   * to disprove.
+   */
+  executedIn2Raw: string | null;
+  executedOut2Raw: string | null;
+  tokenIn2Address: string | null;
+  tokenOut2Address: string | null;
   tier: "full" | "basic";
   timeToleranceMin: number;
   amountTolerancePct: number;
@@ -47,22 +60,37 @@ function readerCouldNotReadTransfers(receipt: ReceiptView): boolean {
 }
 
 function judgeDeclaredAmounts(receipt: ReceiptView, input: VerificationInput): AmountJudgement {
-  const legs = [declaredInputJudgement(receipt, input), declaredOutputJudgement(receipt, input)];
+  const legs = [
+    declaredInputJudgement(receipt, input, input.tokenInAddress, input.executedInRaw),
+    declaredOutputJudgement(receipt, input, input.tokenOutAddress, input.executedOutRaw),
+    declaredInputJudgement(receipt, input, input.tokenIn2Address, input.executedIn2Raw),
+    declaredOutputJudgement(receipt, input, input.tokenOut2Address, input.executedOut2Raw),
+  ];
   if (legs.includes("mismatch")) return "mismatch";
   if (legs.includes("unprovable")) return "unprovable";
   return "matches";
 }
 
-function declaredInputJudgement(receipt: ReceiptView, input: VerificationInput): AmountJudgement {
-  if (isNativeToken(input.tokenInAddress)) {
-    return nativeInputMismatch(receipt, input.executedInRaw, input.amountTolerancePct) ? "mismatch" : "matches";
+function declaredInputJudgement(
+  receipt: ReceiptView,
+  input: VerificationInput,
+  tokenAddress: string | null,
+  executedRaw: string | null,
+): AmountJudgement {
+  if (isNativeToken(tokenAddress)) {
+    return nativeInputMismatch(receipt, executedRaw, input.amountTolerancePct) ? "mismatch" : "matches";
   }
-  return declaredLegJudgement(receipt, input.tokenInAddress, input.executedInRaw, input.amountTolerancePct, "from");
+  return declaredLegJudgement(receipt, tokenAddress, executedRaw, input.amountTolerancePct, "from");
 }
 
-function declaredOutputJudgement(receipt: ReceiptView, input: VerificationInput): AmountJudgement {
-  if (isNativeToken(input.tokenOutAddress)) return "matches";
-  return declaredLegJudgement(receipt, input.tokenOutAddress, input.executedOutRaw, input.amountTolerancePct, "to");
+function declaredOutputJudgement(
+  receipt: ReceiptView,
+  input: VerificationInput,
+  tokenAddress: string | null,
+  executedRaw: string | null,
+): AmountJudgement {
+  if (isNativeToken(tokenAddress)) return "matches";
+  return declaredLegJudgement(receipt, tokenAddress, executedRaw, input.amountTolerancePct, "to");
 }
 
 function nativeInputMismatch(receipt: ReceiptView, declaredRaw: string | null, tolerancePct: number): boolean {

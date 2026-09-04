@@ -12,9 +12,26 @@ const goldenRequest = {
 };
 
 describe("attestRequestSchema", () => {
-  it("accepts the golden body without a txHash", () => {
+  // The default is what makes an old client and a new server compatible: every attestation written
+  // before the field existed is a Trench one, and every client shipped before it means Trench.
+  it("accepts the golden body without a txHash, defaulting the launchpad to trench", () => {
     const parsed = attestRequestSchema.parse(goldenRequest);
-    expect(parsed).toEqual({ chainId: 4663n, tokenAddress: validAddress, attestSignature: validSignature });
+    expect(parsed).toEqual({
+      chainId: 4663n,
+      launchpad: "trench",
+      tokenAddress: validAddress,
+      attestSignature: validSignature,
+    });
+  });
+
+  it.each(["pools_fun", "virtuals"] as const)("accepts an explicit %s launchpad", (launchpad) => {
+    expect(attestRequestSchema.parse({ ...goldenRequest, launchpad }).launchpad).toBe(launchpad);
+  });
+
+  // An unrecognised launchpad is REFUSED, never defaulted: silently verifying a claim under the
+  // wrong proof is exactly the confusion the field exists to remove.
+  it("rejects a launchpad outside the enum rather than falling back to the default", () => {
+    expect(attestRequestSchema.safeParse({ ...goldenRequest, launchpad: "uniswap" }).success).toBe(false);
   });
 
   it("accepts an optional txHash", () => {

@@ -1,11 +1,13 @@
 import type pg from "pg";
-import type { AttestationMismatchDetail } from "@agentscan/core";
+import type { AttestationLaunchpad, AttestationMismatchDetail } from "@agentscan/core";
 
 export type SqlExecutor = Pick<pg.PoolClient, "query">;
 
 export type ClaimedAttestation = {
   id: string;
   chainId: bigint;
+  /** The launchpad the submitter claimed. It selects the decoder AND the allowlist, never a guess. */
+  launchpad: AttestationLaunchpad;
   tokenAddress: string;
   recoveredSigner: string;
   txHashHint: string | null;
@@ -16,6 +18,7 @@ export type ClaimedAttestation = {
 type ClaimedAttestationRow = {
   id: string;
   chain_id: string;
+  launchpad: AttestationLaunchpad;
   token_address: string;
   recovered_signer: string;
   tx_hash_hint: string | null;
@@ -38,12 +41,13 @@ export async function claimDueAttestations(
        LIMIT $1
        FOR UPDATE SKIP LOCKED
      )
-     RETURNING id, chain_id, token_address, recovered_signer, tx_hash_hint, attempt_count, first_seen_at`,
+     RETURNING id, chain_id, launchpad, token_address, recovered_signer, tx_hash_hint, attempt_count, first_seen_at`,
     [limit, leaseSec],
   );
   return result.rows.map((row) => ({
     id: row.id,
     chainId: BigInt(row.chain_id),
+    launchpad: row.launchpad,
     tokenAddress: row.token_address,
     recoveredSigner: row.recovered_signer,
     txHashHint: row.tx_hash_hint,

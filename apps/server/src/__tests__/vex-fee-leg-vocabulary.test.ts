@@ -27,7 +27,12 @@ const LOGICAL_ROW_ROLES = [
   "yield_sy",
   "yield_claim",
   "token_launch",
+  "launch_cancel",
   "pools_claim",
+  "wallet_transfer",
+  "creator_fee_claim",
+  "holder_reward_claim",
+  "reward_distribution",
 ];
 
 function alphabetical(roles: readonly string[]): string[] {
@@ -41,12 +46,13 @@ describe("the Vex fee leg role set against the contract's role vocabulary", () =
     );
   });
 
-  it("names exactly the four roles that carry an integrator fee", () => {
+  it("names exactly the roles that carry an integrator fee", () => {
     expect(EVENT_ROLES.filter((role) => isVexFeeLegRole(role))).toEqual([
       "trench_fee",
       "swap_fee",
       "bridge_fee",
       "pools_fee",
+      "vex_fee",
     ]);
   });
 
@@ -60,10 +66,10 @@ describe("the Vex fee leg role set against the contract's role vocabulary", () =
 describe("the SQL fragments the read model composes", () => {
   it("selects the fee legs and their complement over the same column", () => {
     expect(vexFeeLegRolesIn("a.event_role")).toBe(
-      "a.event_role IN ('swap_fee','bridge_fee','trench_fee','pools_fee')",
+      "a.event_role IN ('swap_fee','bridge_fee','trench_fee','pools_fee','vex_fee')",
     );
     expect(logicalRowIn("a.event_role")).toBe(
-      "a.event_role NOT IN ('swap_fee','bridge_fee','trench_fee','pools_fee')",
+      "a.event_role NOT IN ('swap_fee','bridge_fee','trench_fee','pools_fee','vex_fee')",
     );
   });
 });

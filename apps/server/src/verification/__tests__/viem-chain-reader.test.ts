@@ -43,12 +43,49 @@ function arrangeMinedTransaction() {
 describe("makeChainReader", () => {
   it("threads the transaction value into the receipt view", async () => {
     arrangeMinedTransaction();
-    client.getTransaction.mockResolvedValue({ value: 1000000000000000000n });
+    client.getTransaction.mockResolvedValue({
+      value: 1000000000000000000n,
+      from: "0xAAbb",
+      to: "0xCCdd",
+    });
 
     const view = await makeChainReader(entry, config).getReceipt(txHash);
 
     expect(view?.transactionValueRaw).toBe("1000000000000000000");
     expect(client.getTransaction).toHaveBeenCalledWith({ hash: txHash });
+  });
+
+  // The envelope is the Virtuals creator proof, and it is read from the same call as the value, so
+  // one transaction read serves both. Addresses are lowercased here rather than at every comparison.
+  it("threads the transaction sender and target into the receipt view, lowercased", async () => {
+    arrangeMinedTransaction();
+    client.getTransaction.mockResolvedValue({ value: 0n, from: "0xAAbb", to: "0xCCdd" });
+
+    const view = await makeChainReader(entry, config).getReceipt(txHash);
+
+    expect(view?.transactionFrom).toBe("0xaabb");
+    expect(view?.transactionTo).toBe("0xccdd");
+  });
+
+  it("carries a null target for a contract-creation transaction rather than inventing one", async () => {
+    arrangeMinedTransaction();
+    client.getTransaction.mockResolvedValue({ value: 0n, from: "0xAAbb", to: null });
+
+    const view = await makeChainReader(entry, config).getReceipt(txHash);
+
+    expect(view?.transactionTo).toBeNull();
+  });
+
+  // Undefined, not null: "the reader could not read it" and "there was no target" are different
+  // facts, and only the first one may be retried.
+  it("leaves the envelope undefined when the transaction fetch fails", async () => {
+    arrangeMinedTransaction();
+    client.getTransaction.mockRejectedValue(new Error("rpc down"));
+
+    const view = await makeChainReader(entry, config).getReceipt(txHash);
+
+    expect(view?.transactionFrom).toBeUndefined();
+    expect(view?.transactionTo).toBeUndefined();
   });
 
   it("returns the receipt with a null transaction value when the transaction fetch fails", async () => {
@@ -63,6 +100,8 @@ describe("makeChainReader", () => {
       blockNumber: 100n,
       erc20Transfers: [],
       transactionValueRaw: null,
+      transactionFrom: undefined,
+      transactionTo: undefined,
       logs: [],
     });
   });

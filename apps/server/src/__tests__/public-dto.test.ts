@@ -23,6 +23,7 @@ const fixtureActivityRow = () => ({
   token_in_address: "0xabc", token_in_symbol: "ETH", token_in_decimals: 18,
   token_out_address: "0xdef", token_out_symbol: "VEX", token_out_decimals: 18,
   amount_in_raw: "1000", amount_out_raw: "2000", executed_in_raw: "1000", executed_out_raw: "1990",
+  token_out2_symbol: null, token_out2_decimals: null, amount_out2_raw: null, executed_out2_raw: null,
   usd_in_est: "3312.44", usd_out_est: "3305.12", usd_fee_est: "3.31", usd_source: "kyberswap_quote",
   tx_hash: "0x123", failure_code: null,
   client_created_at: new Date(), client_confirmed_at: new Date(), client_observed_at: null,
@@ -78,7 +79,14 @@ const secondLegAndCostColumns = {
   usd_destination_prepay_est: "1.20",
 };
 
-const widenedActivityRow = () => ({ ...fixtureActivityRow(), ...secondLegAndCostColumns });
+const widenedActivityRow = () => ({
+  ...fixtureActivityRow(),
+  ...secondLegAndCostColumns,
+  token_out2_symbol: secondLegAndCostColumns.token_out2_symbol,
+  token_out2_decimals: secondLegAndCostColumns.token_out2_decimals,
+  amount_out2_raw: secondLegAndCostColumns.amount_out2_raw,
+  executed_out2_raw: secondLegAndCostColumns.executed_out2_raw,
+});
 
 it("public DTOs never expose banned identifiers on a row carrying the widened columns", () => {
   for (const dto of [
@@ -89,30 +97,56 @@ it("public DTOs never expose banned identifiers on a row carrying the widened co
   }
 });
 
+// Still unpublished on EVERY public DTO. The INPUT second leg has no consumer, and the cost
+// breakdown is the client's own estimate, which this site does not publish at all.
 const UNPUBLISHED_ESTIMATE_FIELDS = [
   "tokenIn2Symbol",
-  "tokenOut2Symbol",
   "tokenIn2Decimals",
-  "tokenOut2Decimals",
   "amountIn2Raw",
-  "amountOut2Raw",
   "executedIn2Raw",
-  "executedOut2Raw",
   "usdNetworkGasEst",
   "usdVenueFeeEst",
   "usdVexFeeEst",
   "usdDestinationPrepayEst",
 ];
 
-it("public DTOs publish no second-leg or cost-breakdown client estimate", () => {
+it("public DTOs publish no input second leg and no cost-breakdown client estimate", () => {
   for (const dto of [
     toActivityRowDto(widenedActivityRow(), stubResolve),
     toTxDetailDto(widenedActivityRow(), stubResolve),
   ]) {
     for (const field of UNPUBLISHED_ESTIMATE_FIELDS) expect(field in (dto as object)).toBe(false);
-    const serialised = JSON.stringify(dto);
-    expect(serialised).not.toContain("PT-USDC");
-    expect(serialised).not.toContain("YT-USDC");
+    expect(JSON.stringify(dto)).not.toContain("PT-USDC");
+  }
+});
+
+// CONTRACT CHANGE, 2026-09-04: the OUTPUT second leg is published on the transaction page.
+// A Pendle split and a launchpad creator-fee or holder-reward claim pay two assets in one
+// transaction, and both legs are now checked against the receipt by the full verifier, so showing
+// one of them as if it were the whole settlement understated proven money. The feed row keeps its
+// single-leg shape: it summarises, and the detail page is where the settlement is stated in full.
+it("publishes the output second leg on the transaction detail, and not on the feed row", () => {
+  const detail = toTxDetailDto(widenedActivityRow(), stubResolve);
+  expect(detail.tokenOut2Symbol).toBe("YT-USDC");
+  expect(detail.tokenOut2Decimals).toBe(6);
+  expect(detail.amountOut2Raw).toBe("2000000");
+  expect(detail.executedOut2Raw).toBe("1999000");
+
+  const row = toActivityRowDto(widenedActivityRow(), stubResolve);
+  for (const field of ["tokenOut2Symbol", "tokenOut2Decimals", "amountOut2Raw", "executedOut2Raw"]) {
+    expect(field in (row as object)).toBe(false);
+  }
+  expect(JSON.stringify(row)).not.toContain("YT-USDC");
+});
+
+// The second leg's ADDRESS stays unpublished on both: the symbol and decimals render the amount,
+// and the address is an identifier the page has no use for.
+it("publishes no second-leg token address", () => {
+  for (const dto of [
+    toActivityRowDto(widenedActivityRow(), stubResolve),
+    toTxDetailDto(widenedActivityRow(), stubResolve),
+  ]) {
+    expect(JSON.stringify(dto)).not.toContain("0x222");
   }
 });
 

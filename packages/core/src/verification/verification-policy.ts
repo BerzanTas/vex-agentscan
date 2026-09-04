@@ -20,6 +20,21 @@ type KindVerificationPolicy = {
 
 const followsChainTier: KindVerificationPolicy = { tierCap: null, strikeExemptRoles: [] };
 
+/**
+ * Roles capped at basic INSIDE a kind whose other roles follow the chain's tier.
+ *
+ * The full verifier proves a declared amount by finding it among the receipt's ERC-20 Transfer
+ * logs, matched against the leg the activity declares. `reward_distribution` has no such leg to
+ * match: `distribute()` is permissionless, it pays the token's holders rather than the caller, and
+ * the transfers in its receipt name addresses the activity never declared. Judging it at full tier
+ * would produce an amount mismatch on an honest transaction, and three of those quarantine an
+ * installation. Basic still proves the transaction exists on the chain it claims and did not
+ * revert, which is the whole of what a distribute asserts.
+ *
+ * `launch_cancel` needs no entry: the launch kind is already capped at basic in full.
+ */
+const BASIC_TIER_ROLES: readonly string[] = ["reward_distribution"];
+
 const kindVerificationPolicies: Record<VerificationKind, KindVerificationPolicy> = {
   swap: followsChainTier,
   bridge: followsChainTier,
@@ -43,8 +58,10 @@ const kindVerificationPolicies: Record<VerificationKind, KindVerificationPolicy>
 
 export function resolveVerificationTier(
   kind: VerificationKind,
+  eventRole: string,
   chainTier: VerificationInput["tier"],
 ): VerificationInput["tier"] {
+  if (BASIC_TIER_ROLES.includes(eventRole)) return "basic";
   return kindVerificationPolicies[kind].tierCap ?? chainTier;
 }
 

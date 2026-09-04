@@ -35,6 +35,7 @@ function jobFixture(overrides: Partial<ClaimedAttestation> = {}): ClaimedAttesta
   return {
     id: "1",
     chainId: 4663n,
+    launchpad: "trench",
     tokenAddress: claimedToken,
     recoveredSigner,
     txHashHint: validTxHash,
@@ -53,7 +54,9 @@ const chainEntry = {
   verificationTier: "full" as const,
 };
 
-const registryWithFactory: AttestationChainRegistry = new Map([[4663n, { factoryAddresses: [factoryAddress] }]]);
+const registryWithFactory: AttestationChainRegistry = new Map([
+  [4663n, { launchpads: new Map([["trench" as const, [factoryAddress]]]) }],
+]);
 
 function depsFixture(overrides: Partial<AttestationVerifyDeps> = {}): AttestationVerifyDeps {
   return {

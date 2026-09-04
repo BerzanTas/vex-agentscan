@@ -8,6 +8,13 @@ export type ReceiptView = {
   blockNumber?: bigint;
   erc20Transfers: Erc20Transfer[];
   transactionValueRaw: string | null;
+  /**
+   * The transaction envelope, when the reader could read it. `undefined` means "not read", which
+   * the token-attestation verdict treats as a retry; it is never collapsed into `null`, which would
+   * mean "read, and there was no target" (a contract creation).
+   */
+  transactionFrom?: string | null;
+  transactionTo?: string | null;
   logs?: ReceiptLog[];
 };
 

@@ -1,5 +1,6 @@
 import type { ActivityRowDto, VexFeeDto } from "../lib/api";
 import { formatAge, formatRawAmount, formatRawAmountDisplay, formatUsdAmount } from "../lib/format";
+import { vexFeeAmountLabel } from "../lib/vex-fee-line";
 import { legLabel } from "../lib/leg-label";
 import { ChainBadge } from "./ChainBadge";
 import { EmptyPanel } from "./EmptyPanel";
@@ -34,20 +35,10 @@ function ChainCell({ row }: { row: ActivityRowDto }) {
 }
 
 // The Vex fee settles as a transaction of its own, but it is part of this action - so it reads as a
-// secondary line under the amount, never as a row of its own. A fee whose amount did not survive
-// ingest still says it was charged rather than disappearing.
+// secondary line under the amount, never as a row of its own. A pending or failed attempt says so
+// instead of showing an amount: only a confirmed fee is money that moved.
 function VexFeeLine({ fee }: { fee: VexFeeDto }) {
-  const amount =
-    fee.amountRaw === null || fee.decimals === null
-      ? null
-      : formatRawAmountDisplay(fee.amountRaw, fee.decimals);
-  const symbol = fee.symbol === null ? "" : ` ${fee.symbol}`;
-  return (
-    <span className="block text-xs text-text-muted">
-      Vex fee {amount === null ? "charged" : `${amount}${symbol}`}
-      {fee.usdEst !== null && ` · $${formatUsdAmount(fee.usdEst)} est.`}
-    </span>
-  );
+  return <span className="block text-xs text-text-muted">Vex fee {vexFeeAmountLabel(fee)}</span>;
 }
 
 function AmountCell({ row }: { row: ActivityRowDto }) {

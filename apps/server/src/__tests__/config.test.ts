@@ -57,16 +57,23 @@ describe("loadConfig", () => {
     expect(config.ATTEST_MAX_PENDING_GLOBAL).toBe(10000);
   });
 
-  it("builds attestFactoryAddressesByChainId from ATTEST_FACTORY_ADDRESSES_<chainId> env vars", () => {
+  it("builds attestAllowlistOverrides from ATTEST_FACTORY_ADDRESSES_<chainId>_<launchpad> env vars", () => {
     const config = loadConfig({
       ...baseEnv,
-      ATTEST_FACTORY_ADDRESSES_4663: "0xfactory1,0xfactory2",
+      ATTEST_FACTORY_ADDRESSES_4663_TRENCH: "0xfactory1,0xfactory2",
+      ATTEST_FACTORY_ADDRESSES_4663_POOLS_FUN: "0xgateway1",
+      // A typo in the launchpad name is IGNORED rather than accepted under a guessed name: an
+      // allowlist nobody reviewed is the one thing this key must never create.
+      ATTEST_FACTORY_ADDRESSES_4663_TRENCHH: "0xtypo",
+      ATTEST_FACTORY_ADDRESSES_NOTANUMBER_TRENCH: "0xbad",
     });
-    expect(config.attestFactoryAddressesByChainId.get(4663n)).toEqual(["0xfactory1", "0xfactory2"]);
+    expect(config.attestAllowlistOverrides.get("4663:trench")).toEqual(["0xfactory1", "0xfactory2"]);
+    expect(config.attestAllowlistOverrides.get("4663:pools_fun")).toEqual(["0xgateway1"]);
+    expect([...config.attestAllowlistOverrides.keys()].sort()).toEqual(["4663:pools_fun", "4663:trench"]);
   });
 
-  it("leaves attestFactoryAddressesByChainId empty when no such env var is set", () => {
-    expect(loadConfig(baseEnv).attestFactoryAddressesByChainId.size).toBe(0);
+  it("leaves attestAllowlistOverrides empty when no such env var is set", () => {
+    expect(loadConfig(baseEnv).attestAllowlistOverrides.size).toBe(0);
   });
 
   it("throws when VERIFY_FAKE_MODE=confirm_all runs in production", () => {

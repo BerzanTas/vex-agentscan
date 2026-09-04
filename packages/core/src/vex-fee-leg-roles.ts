@@ -18,6 +18,11 @@ export const VEX_FEE_LEG_ROLES: readonly string[] = [
   "bridge_fee",
   "trench_fee",
   "pools_fee",
+  // The venue-independent name a new venue's fee leg arrives under. The four above say WHERE the
+  // fee was taken; this one says only that Vex charged it, and the read model has never asked more
+  // than that. The producer's `tx_vex_fee` is not here: it belongs to a `transaction` kind this
+  // contract does not have, so no row can ever reach this server carrying it.
+  "vex_fee",
 ];
 
 export function isVexFeeLegRole(eventRole: string): boolean {

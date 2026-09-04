@@ -23,11 +23,16 @@ export type ClaimedJob = {
   chainFamily: "eip155" | "solana";
   chainId: bigint;
   kind: VerificationKind;
+  eventRole: string;
   clientConfirmedAt: Date | null;
   executedInRaw: string | null;
   executedOutRaw: string | null;
   tokenInAddress: string | null;
   tokenOutAddress: string | null;
+  executedIn2Raw: string | null;
+  executedOut2Raw: string | null;
+  tokenIn2Address: string | null;
+  tokenOut2Address: string | null;
 };
 
 type ClaimedJobRow = {
@@ -40,11 +45,16 @@ type ClaimedJobRow = {
   chain_family: "eip155" | "solana";
   chain_id: string;
   kind: VerificationKind;
+  event_role: string;
   client_confirmed_at: Date | null;
   executed_in_raw: string | null;
   executed_out_raw: string | null;
   token_in_address: string | null;
   token_out_address: string | null;
+  executed_in2_raw: string | null;
+  executed_out2_raw: string | null;
+  token_in2_address: string | null;
+  token_out2_address: string | null;
 };
 
 const ACTIVITY_CLAIMS_AN_INCLUSION = "a.status <> 'superseded_unproven'";
@@ -68,9 +78,11 @@ export async function claimDueJobs(
          FOR UPDATE SKIP LOCKED
        )
      RETURNING vj.activity_id, vj.attempts, vj.first_attempt_at, a.public_id,
-               a.tx_hash, a.protocol, a.chain_family, a.chain_id, a.kind,
+               a.tx_hash, a.protocol, a.chain_family, a.chain_id, a.kind, a.event_role,
                a.client_confirmed_at, a.executed_in_raw, a.executed_out_raw,
-               a.token_in_address, a.token_out_address`,
+               a.token_in_address, a.token_out_address,
+               a.executed_in2_raw, a.executed_out2_raw,
+               a.token_in2_address, a.token_out2_address`,
     [limit, leaseSec],
   );
   return result.rows.map((row) => ({
@@ -83,11 +95,16 @@ export async function claimDueJobs(
     chainFamily: row.chain_family,
     chainId: BigInt(row.chain_id),
     kind: row.kind,
+    eventRole: row.event_role,
     clientConfirmedAt: row.client_confirmed_at,
     executedInRaw: row.executed_in_raw,
     executedOutRaw: row.executed_out_raw,
     tokenInAddress: row.token_in_address,
     tokenOutAddress: row.token_out_address,
+    executedIn2Raw: row.executed_in2_raw,
+    executedOut2Raw: row.executed_out2_raw,
+    tokenIn2Address: row.token_in2_address,
+    tokenOut2Address: row.token_out2_address,
   }));
 }
 

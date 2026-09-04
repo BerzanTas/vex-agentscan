@@ -11,6 +11,7 @@ import { TxHashChip } from "../../../components/TxHashChip";
 import { VerificationBadge } from "../../../components/VerificationBadge";
 import { fetchTxDetail, type TxDetailDto, type VexFeeDto } from "../../../lib/api";
 import { formatAge, formatRawAmount, formatUsdAmount } from "../../../lib/format";
+import { vexFeeAmountLabel } from "../../../lib/vex-fee-line";
 import { legLabel } from "../../../lib/leg-label";
 
 export const revalidate = 30;
@@ -55,22 +56,15 @@ function networkLabel(detail: TxDetailDto): string {
 
 // The Vex integrator fee is a SEPARATE transaction - its own hash, its own status - but it belongs
 // to this action, so it gets a panel here instead of a record of its own. A fee that confirmed
-// against an action that then failed is still shown: it was really charged.
+// against an action that then failed is still shown: it was really charged. A pending or failed
+// attempt is shown too, carrying its own status pill and no amount.
 function VexFeePanel({ fee }: { fee: VexFeeDto }) {
-  const amount =
-    fee.amountRaw === null || fee.decimals === null
-      ? null
-      : formatRawAmount(fee.amountRaw, fee.decimals);
-  const symbol = fee.symbol === null ? "" : ` ${fee.symbol}`;
   return (
     <section className="section-enter glass p-4">
       <PanelHeading title="Vex fee" />
       <dl className="grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-[auto_1fr]">
         <dt className="text-text-muted">Amount</dt>
-        <dd className="font-mono text-text-secondary">
-          {amount === null ? "charged" : `${amount}${symbol}`}
-          {fee.usdEst !== null && ` · $${formatUsdAmount(fee.usdEst)} est.`}
-        </dd>
+        <dd className="font-mono text-text-secondary">{vexFeeAmountLabel(fee)}</dd>
         <dt className="text-text-muted">Status</dt>
         <dd>
           <StatusPill status={fee.status} />

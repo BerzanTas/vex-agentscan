@@ -28,6 +28,24 @@ function legsFrom(detail: TxDetailDto): Leg[] {
       executedRaw: detail.executedOutRaw,
       usdEst: detail.usdOutEst,
     },
+    // The SECOND output leg, for the settlements that pay two assets in one transaction: a Pendle
+    // split mints PT and YT, and a launchpad creator-fee or holder-reward claim pays the launched
+    // token AND the asset it was paired against. Showing one half of a two-asset settlement as if
+    // it were the whole of it understates what the agent received, so the row appears whenever the
+    // ledger holds it - and is omitted entirely when it does not, rather than printing an empty
+    // leg on every ordinary swap.
+    ...(detail.tokenOut2Symbol === null && detail.amountOut2Raw === null && detail.executedOut2Raw === null
+      ? []
+      : [
+          {
+            label: "Out 2",
+            symbol: detail.tokenOut2Symbol,
+            decimals: detail.tokenOut2Decimals,
+            requestedRaw: detail.amountOut2Raw,
+            executedRaw: detail.executedOut2Raw,
+            usdEst: null,
+          },
+        ]),
   ];
 }
 

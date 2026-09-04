@@ -27,6 +27,18 @@ export const EVENT_ROLES = [
   "pools_fee",
   "pools_claim",
   "wallet_transfer",
+  // The launchpad family (2026-09-04). A creator claiming the fees their launched token earned,
+  // a holder claiming the rewards a token streams to its holders, the permissionless call that
+  // pushes those rewards out to everyone, and the creator abandoning a launch before it goes live.
+  // Venue-named roles (trench_fee, pools_fee, pools_claim) stay for the history already written.
+  "creator_fee_claim",
+  "holder_reward_claim",
+  "reward_distribution",
+  "launch_cancel",
+  // The venue-independent name for Vex's own integrator fee leg. The venue-named fee roles
+  // (swap_fee, bridge_fee, trench_fee, pools_fee) each say WHERE the fee was taken; this one says
+  // only that Vex charged it, which is what a new venue needs and all the read model ever asks.
+  "vex_fee",
 ] as const;
 export const EVENT_STATUSES = ["pending", "confirmed", "definitively_failed", "superseded_unproven"] as const;
 export const CHAIN_FAMILIES = ["eip155", "solana"] as const;
