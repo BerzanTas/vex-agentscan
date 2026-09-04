@@ -1,5 +1,10 @@
 import type pg from "pg";
-import { capitalDeployingRolesIn, rangeWindowSeconds, type ChartRangePlan } from "@agentscan/core";
+import {
+  capitalDeployingRolesIn,
+  logicalRowIn,
+  rangeWindowSeconds,
+  type ChartRangePlan,
+} from "@agentscan/core";
 import type { ChainEntry, ResolveBridgeChain } from "../app.js";
 import type {
   BridgeRouteDto,
@@ -17,6 +22,9 @@ import { serverPricedUsdIn, serverPricedUsdInSumOf, serverPricedUsdOut } from ".
 const DAY_SECONDS = 86_400;
 const VERIFIED_STATES = "('verified_full','verified_basic')";
 const VOLUME_LEG = capitalDeployingRolesIn("a.event_role");
+/** The Vex fee leg is folded under its action everywhere, so it is no transaction of this chain. */
+const LOGICAL_ROW = logicalRowIn("a.event_role");
+const SCOPED_LOGICAL_ROW = logicalRowIn("event_role");
 const SCOPED_VOLUME_LEG = capitalDeployingRolesIn("event_role");
 const OBSERVED_AT = activityTimeAnchorSql("a");
 const NETWORK_CHAINS = "a.chain_family = $1 AND a.chain_id = ANY($2::bigint[])";
@@ -148,7 +156,7 @@ async function networkTotalsBySlug(
               "a",
               `${VOLUME_LEG} AND ${withinWindow("$1")}`,
             )}::text AS volume_usd,
-            COUNT(*) FILTER (WHERE ${withinWindow("$1")})::int AS tx_count,
+            COUNT(*) FILTER (WHERE ${withinWindow("$1")} AND ${LOGICAL_ROW})::int AS tx_count,
             floor(extract(epoch FROM now() - MAX(${OBSERVED_AT})))::bigint::text AS last_seen_seconds
      FROM activities a
      JOIN chain_map m ON m.chain_family = a.chain_family AND m.chain_id = a.chain_id
@@ -349,6 +357,7 @@ async function networkScalars(
      FROM activities a
      WHERE a.verification_state IN ${VERIFIED_STATES}
        AND ${NETWORK_CHAINS}
+       AND ${LOGICAL_ROW}
        AND ${withinWindow("$3")}`,
     [network.chainFamily, chainIdParamsOf(network), windowSeconds],
   );
@@ -370,6 +379,7 @@ async function networkProtocols(
      FROM activities a
      WHERE a.verification_state IN ${VERIFIED_STATES}
        AND ${NETWORK_CHAINS}
+       AND ${LOGICAL_ROW}
        AND ${withinWindow("$3")}
      GROUP BY a.protocol
      ORDER BY ${VOLUME_SUM} DESC, COUNT(*) DESC, a.protocol
@@ -464,7 +474,7 @@ async function networkSeries(
      bucketed AS (
        SELECT (floor(extract(epoch FROM observed_at) / $3::bigint) * $3::bigint)::bigint AS bucket_start,
               COALESCE(SUM(priced_usd_in) FILTER (WHERE ${SCOPED_VOLUME_LEG}), 0) AS volume_usd,
-              COUNT(*)::int AS tx_count
+              COUNT(*) FILTER (WHERE ${SCOPED_LOGICAL_ROW})::int AS tx_count
        FROM scoped
        WHERE observed_at >= to_timestamp((SELECT first_start FROM span))
        GROUP BY 1

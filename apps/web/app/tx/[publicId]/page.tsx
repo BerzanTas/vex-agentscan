@@ -9,7 +9,7 @@ import { StatusPill } from "../../../components/StatusPill";
 import { StatusTimeline } from "../../../components/StatusTimeline";
 import { TxHashChip } from "../../../components/TxHashChip";
 import { VerificationBadge } from "../../../components/VerificationBadge";
-import { fetchTxDetail, type TxDetailDto } from "../../../lib/api";
+import { fetchTxDetail, type TxDetailDto, type VexFeeDto } from "../../../lib/api";
 import { formatAge, formatRawAmount, formatUsdAmount } from "../../../lib/format";
 import { legLabel } from "../../../lib/leg-label";
 
@@ -51,6 +51,41 @@ function amountSummary(detail: TxDetailDto): string | null {
 
 function networkLabel(detail: TxDetailDto): string {
   return detail.chainSlug ?? "unknown network";
+}
+
+// The Vex integrator fee is a SEPARATE transaction - its own hash, its own status - but it belongs
+// to this action, so it gets a panel here instead of a record of its own. A fee that confirmed
+// against an action that then failed is still shown: it was really charged.
+function VexFeePanel({ fee }: { fee: VexFeeDto }) {
+  const amount =
+    fee.amountRaw === null || fee.decimals === null
+      ? null
+      : formatRawAmount(fee.amountRaw, fee.decimals);
+  const symbol = fee.symbol === null ? "" : ` ${fee.symbol}`;
+  return (
+    <section className="section-enter glass p-4">
+      <PanelHeading title="Vex fee" />
+      <dl className="grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-[auto_1fr]">
+        <dt className="text-text-muted">Amount</dt>
+        <dd className="font-mono text-text-secondary">
+          {amount === null ? "charged" : `${amount}${symbol}`}
+          {fee.usdEst !== null && ` · $${formatUsdAmount(fee.usdEst)} est.`}
+        </dd>
+        <dt className="text-text-muted">Status</dt>
+        <dd>
+          <StatusPill status={fee.status} />
+        </dd>
+        <dt className="text-text-muted">Transaction</dt>
+        <dd>
+          {fee.txHash !== null ? (
+            <TxHashChip txHash={fee.txHash} explorerUrl={fee.explorerUrl} />
+          ) : (
+            <span className="text-text-muted">—</span>
+          )}
+        </dd>
+      </dl>
+    </section>
+  );
 }
 
 export async function generateMetadata({ params }: TxPageProps): Promise<Metadata> {
@@ -104,6 +139,7 @@ export default async function TxDetailPage({ params }: TxPageProps) {
           <StatusTimeline source={detail} />
         </section>
       </div>
+      {detail.vexFee !== null && <VexFeePanel fee={detail.vexFee} />}
       <section className="section-enter glass p-4">
         <PanelHeading title="Details" />
         <dl className="grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-[auto_1fr]">

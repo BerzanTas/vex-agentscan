@@ -1,11 +1,14 @@
 import type pg from "pg";
-import type { AgentActivity, ChainFamily, PricingState } from "@agentscan/core";
+import { logicalRowIn, type AgentActivity, type ChainFamily, type PricingState } from "@agentscan/core";
 import { activityTimeAnchorSql } from "./activity-time-anchor.js";
 
 const VERIFIED_STATES = "('verified_full','verified_basic')";
 const OBSERVED_AT = activityTimeAnchorSql("a");
 
 const PRICING_STATES: readonly PricingState[] = ["pending", "server_priced", "unpriced"];
+
+/** The Vex fee leg belongs to the action it charges for, so it is no row of this agent's history. */
+const LOGICAL_ROW_PREDICATE = logicalRowIn("a.event_role");
 
 type AgentActivityQueryRow = {
   id: string;
@@ -115,6 +118,7 @@ export async function agentPageActivities(
      FROM activities a
      WHERE a.agent_hash = $1
        AND a.verification_state IN ${VERIFIED_STATES}
+       AND ${LOGICAL_ROW_PREDICATE}
      ORDER BY ${OBSERVED_AT} DESC, a.id DESC
      LIMIT $2`,
     [agentHash, rowsMax],

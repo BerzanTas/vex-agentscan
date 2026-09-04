@@ -1,6 +1,12 @@
 import type pg from "pg";
 import { EVENT_KINDS, EVENT_STATUSES, type EventKind, type EventStatus } from "@agentscan/contract";
-import { capitalDeployingRolesIn, type ChainFamily, type ChartRangePlan } from "@agentscan/core";
+import {
+  capitalDeployingRolesIn,
+  logicalRowIn,
+  vexFeeLegRolesIn,
+  type ChainFamily,
+  type ChartRangePlan,
+} from "@agentscan/core";
 import { activityEventTimeCursorSql, activityTimeAnchorSql } from "./activity-time-anchor.js";
 import {
   awaitingAPrice,
@@ -51,18 +57,111 @@ export type ActivityDbRow = {
   received_at: Date;
   received_schema_version: number;
   event_time: Date;
+  vex_fee_amount_raw: string | null;
+  vex_fee_decimals: number | null;
+  vex_fee_symbol: string | null;
+  vex_fee_tx_hash: string | null;
+  vex_fee_status: string | null;
+  vex_fee_usd_est: string | null;
+  vex_fee_chain_family: string | null;
+  vex_fee_chain_id: bigint | null;
 };
 
 export type FeedCursor = { eventTime: Date; id: bigint };
 
-type ActivityQueryRow = Omit<ActivityDbRow, "id" | "chain_id" | "from_chain_id" | "to_chain_id"> & {
+type ActivityQueryRow = Omit<
+  ActivityDbRow,
+  "id" | "chain_id" | "from_chain_id" | "to_chain_id" | "vex_fee_chain_id"
+> & {
   id: string;
   chain_id: string;
   from_chain_id: string | null;
   to_chain_id: string | null;
+  vex_fee_chain_id: string | null;
 };
 
 const ACTIVITY_EVENT_TIME = activityEventTimeCursorSql("a");
+
+/**
+ * THE VEX FEE, PROJECTED FROM ITS SEPARATE LEG ONTO THE ACTION IT CHARGES FOR.
+ *
+ * Vex takes its integrator fee as a native transfer of its own - a second on-chain transaction -
+ * because the venues it charges on expose no integrator-fee parameter. The producer records that
+ * transfer as a child leg of the same execution (`source_execution_id`, `event_index` 1). It is
+ * part of the ACTION and never a second entry here, so the fee leg is excluded from every list and
+ * count by `LOGICAL_ROW_PREDICATE` and reappears only through this projection, on its parent.
+ *
+ * The lateral gates on `fee.status = 'confirmed'` ONLY, never on the parent's status: a fee that
+ * confirmed against an action that then failed was still really charged, and hiding it would make
+ * the page state less than the truth.
+ *
+ * ONE SOURCE, AND THE ANOMALY FAILS CLOSED. Two confirmed fee legs on one execution is a producer
+ * defect; reporting one of them as if it were the whole charge would understate the money, so
+ * `leg_count = 1` blanks every field instead.
+ *
+ * `activities.usd_vex_fee_est` - the column the producer uses for venues that take the fee INSIDE
+ * the transaction, where it has no leg of its own - is deliberately NOT a second source here. This
+ * site publishes no client-side cost estimate (`public-dto.test.ts` pins that, alongside the gas and
+ * venue-fee columns), so there is no own-row value to double count against the leg.
+ */
+const VEX_FEE_LEG_LATERAL = `
+     LEFT JOIN LATERAL (
+       SELECT COALESCE(fee.executed_in_raw, fee.amount_in_raw) AS amount_raw,
+              fee.token_in_decimals AS decimals,
+              fee.token_in_symbol   AS symbol,
+              fee.tx_hash           AS tx_hash,
+              fee.status            AS status,
+              fee.usd_in_est        AS usd_est,
+              fee.chain_family      AS chain_family,
+              fee.chain_id          AS chain_id,
+              count(*) OVER ()      AS leg_count
+         FROM activities fee
+        WHERE fee.agent_hash = a.agent_hash
+          AND fee.source_execution_id = a.source_execution_id
+          AND fee.id <> a.id
+          AND ${vexFeeLegRolesIn("fee.event_role")}
+          AND fee.status = 'confirmed'
+        ORDER BY fee.event_index, fee.id
+        LIMIT 1
+     ) vex_fee ON TRUE`;
+
+function vexFeeColumn(expression: string, alias: string): string {
+  return `CASE WHEN vex_fee.leg_count = 1 THEN ${expression} END AS ${alias}`;
+}
+
+const VEX_FEE_COLUMNS = [
+  vexFeeColumn("vex_fee.amount_raw", "vex_fee_amount_raw"),
+  vexFeeColumn("vex_fee.decimals", "vex_fee_decimals"),
+  vexFeeColumn("vex_fee.symbol", "vex_fee_symbol"),
+  vexFeeColumn("vex_fee.tx_hash", "vex_fee_tx_hash"),
+  vexFeeColumn("vex_fee.status", "vex_fee_status"),
+  vexFeeColumn("vex_fee.usd_est", "vex_fee_usd_est"),
+  vexFeeColumn("vex_fee.chain_family", "vex_fee_chain_family"),
+  vexFeeColumn("vex_fee.chain_id::text", "vex_fee_chain_id"),
+].join(",\n  ");
+
+/** A fee leg is execution plumbing, never a row of its own on any public list or count. */
+const LOGICAL_ROW_PREDICATE = logicalRowIn("a.event_role");
+
+/**
+ * The id of the logical row a leg belongs to: itself for an action, and the action it charges for
+ * when it is a fee leg. The parent is the lowest-indexed NON-fee leg of the same execution, so a
+ * bridge fee resolves to the deposit rather than to the other fee of a multi-fee anomaly.
+ *
+ * `source_execution_id` is unique only within an agent, so the join carries `agent_hash` too.
+ * A fee leg with no parent yields NULL, and the caller finds nothing - fail closed, never a guess.
+ */
+const LOGICAL_ROW_ID = `
+       CASE WHEN ${vexFeeLegRolesIn("leg.event_role")}
+            THEN (SELECT parent.id
+                    FROM activities parent
+                   WHERE parent.agent_hash = leg.agent_hash
+                     AND parent.source_execution_id = leg.source_execution_id
+                     AND ${logicalRowIn("parent.event_role")}
+                   ORDER BY parent.event_index, parent.id
+                   LIMIT 1)
+            ELSE leg.id
+       END`;
 
 const ACTIVITY_COLUMNS = `
   ${ACTIVITY_EVENT_TIME} AS event_time,
@@ -74,7 +173,8 @@ const ACTIVITY_COLUMNS = `
   a.usd_in_est, a.usd_out_est, a.usd_fee_est, a.usd_source,
   a.tx_hash, a.failure_code,
   a.client_created_at, a.client_confirmed_at, a.client_observed_at,
-  a.statuses_seen, a.verification_state, a.verified_at, a.backfill, a.received_at, a.received_schema_version`;
+  a.statuses_seen, a.verification_state, a.verified_at, a.backfill, a.received_at, a.received_schema_version,
+  ${VEX_FEE_COLUMNS}`;
 
 const VISIBILITY_PREDICATE = `(
   a.verification_state IN ('verified_full','verified_basic')
@@ -123,6 +223,14 @@ function activityDbRowFrom(raw: ActivityQueryRow): ActivityDbRow {
     received_at: raw.received_at,
     received_schema_version: raw.received_schema_version,
     event_time: raw.event_time,
+    vex_fee_amount_raw: raw.vex_fee_amount_raw,
+    vex_fee_decimals: raw.vex_fee_decimals,
+    vex_fee_symbol: raw.vex_fee_symbol,
+    vex_fee_tx_hash: raw.vex_fee_tx_hash,
+    vex_fee_status: raw.vex_fee_status,
+    vex_fee_usd_est: raw.vex_fee_usd_est,
+    vex_fee_chain_family: raw.vex_fee_chain_family,
+    vex_fee_chain_id: raw.vex_fee_chain_id === null ? null : BigInt(raw.vex_fee_chain_id),
   };
 }
 
@@ -235,7 +343,9 @@ export async function visibleActivityPage(
     `SELECT ${ACTIVITY_COLUMNS}
      FROM activities a
      JOIN agents ag ON ag.agent_hash = a.agent_hash
+${VEX_FEE_LEG_LATERAL}
      WHERE ${VISIBILITY_PREDICATE}
+       AND ${LOGICAL_ROW_PREDICATE}
        AND ($1::timestamptz IS NULL OR (${ACTIVITY_EVENT_TIME}, a.id) < ($1::timestamptz, $2::bigint))
        ${filterSql}
      ORDER BY ${ACTIVITY_EVENT_TIME} DESC, a.id DESC
@@ -250,10 +360,16 @@ export async function visibleActivityByPublicId(
   publicId: string,
 ): Promise<ActivityDbRow | null> {
   const result = await pool.query<ActivityQueryRow>(
-    `SELECT ${ACTIVITY_COLUMNS}
+    `WITH requested AS (
+       SELECT ${LOGICAL_ROW_ID} AS id
+       FROM activities leg
+       WHERE leg.public_id = $1
+     )
+     SELECT ${ACTIVITY_COLUMNS}
      FROM activities a
      JOIN agents ag ON ag.agent_hash = a.agent_hash
-     WHERE a.public_id = $1 AND ${VISIBILITY_PREDICATE}
+${VEX_FEE_LEG_LATERAL}
+     WHERE a.id = (SELECT id FROM requested) AND ${VISIBILITY_PREDICATE}
      LIMIT 1`,
     [publicId],
   );
@@ -268,11 +384,17 @@ function txHashCandidatesOf(query: string): string[] {
 
 export async function lookupPublicId(pool: pg.Pool, query: string): Promise<string | null> {
   const result = await pool.query<{ public_id: string }>(
-    `SELECT a.public_id
+    `WITH matched AS (
+       SELECT ${LOGICAL_ROW_ID} AS id
+       FROM activities leg
+       WHERE leg.public_id = $1 OR lower(leg.tx_hash) = ANY($2::text[])
+       ORDER BY leg.id
+       LIMIT 1
+     )
+     SELECT a.public_id
      FROM activities a
      JOIN agents ag ON ag.agent_hash = a.agent_hash
-     WHERE ${VISIBILITY_PREDICATE}
-       AND (a.public_id = $1 OR lower(a.tx_hash) = ANY($2::text[]))
+     WHERE a.id = (SELECT id FROM matched) AND ${VISIBILITY_PREDICATE}
      LIMIT 1`,
     [query, txHashCandidatesOf(query)],
   );
@@ -286,6 +408,11 @@ export type AggregateTotals = {
   totalTx: number;
 };
 
+/**
+ * `tx_count` here is `daily_aggregates.tx_count`, which `activities-verify-repo` writes once per
+ * verified activity and never recomputes. The fee-leg fold for these totals therefore lives at that
+ * writer (`txCountContribution`), not in this query: there is no fee-role column to filter on.
+ */
 export async function aggregateTotals(pool: pg.Pool): Promise<AggregateTotals> {
   const result = await pool.query<{
     daily_volume_usd: string;
@@ -366,6 +493,7 @@ async function bucketsFromActivities(
               COUNT(*)::int AS tx_count
        FROM activities a
        WHERE a.verification_state IN ('verified_full','verified_basic')
+         AND ${LOGICAL_ROW_PREDICATE}
          AND ${ACTIVITY_TIME_ANCHOR} >= to_timestamp((SELECT first_start FROM span))
        GROUP BY 1
      )
@@ -554,6 +682,7 @@ export async function protocolRanking(
             (COUNT(*) FILTER (WHERE a.kind = 'bridge'))::int AS bridge_tx_count
      FROM activities a
      WHERE ${VERIFIED_STATES_PREDICATE}
+       AND ${LOGICAL_ROW_PREDICATE}
        AND ${windowPredicate(1)}
      GROUP BY a.protocol
      ORDER BY ${VOLUME_LEG_USD_SUM} DESC, a.protocol`,

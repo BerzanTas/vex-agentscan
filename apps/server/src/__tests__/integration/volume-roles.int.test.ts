@@ -39,10 +39,17 @@ const capitalDeployingCases: RoleCase[] = [
   { kind: "prediction", eventRole: "predict_buy" },
 ];
 
-const casesOutsideVolume: RoleCase[] = [
+// CONTRACT CHANGE (owner decision 2026-09-04): the Vex fee leg is a separate transaction but part
+// of the ACTION it charges for, so it books no transaction of its own. These roles used to count as
+// transactions carrying no volume; they now count as nothing at all.
+const feeLegCases: RoleCase[] = [
   { kind: "swap", eventRole: "swap_fee" },
   { kind: "swap", eventRole: "trench_fee" },
   { kind: "bridge", eventRole: "bridge_fee" },
+  { kind: "launch", eventRole: "pools_fee" },
+];
+
+const casesOutsideVolume: RoleCase[] = [
   { kind: "bridge", eventRole: "bridge_fill_expected" },
   { kind: "bridge", eventRole: "bridge_fill_observed" },
   { kind: "bridge", eventRole: "bridge_refund" },
@@ -236,6 +243,22 @@ describe("the daily aggregate a verified row books", () => {
         kind: roleCase.kind,
         volume_usd: "0",
         tx_count: 1,
+      });
+    },
+  );
+
+  it.each(feeLegCases)(
+    "counts a verified $eventRole as neither volume nor a transaction of its own",
+    async (roleCase) => {
+      await seedQueuedActivity(roleCase);
+
+      await runVerificationPass(verificationDeps());
+
+      expect(await aggregateOf(roleCase.kind)).toEqual({
+        day: AGGREGATE_DAY,
+        kind: roleCase.kind,
+        volume_usd: "0",
+        tx_count: 0,
       });
     },
   );

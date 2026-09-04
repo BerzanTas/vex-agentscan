@@ -23,6 +23,7 @@ const row: ActivityRowDto = {
   usdInEst: "5353.31",
   txHash: "0xabc",
   ageSeconds: 12,
+  vexFee: null,
 };
 
 function markupFor(rows: ActivityRowDto[]): string {
