@@ -41,6 +41,12 @@ export {
   capitalDeployingRolesIn,
   deploysCapitalRole,
 } from "./capital-deploying-roles.js";
+export {
+  VEX_FEE_LEG_ROLES,
+  isVexFeeLegRole,
+  logicalRowIn,
+  vexFeeLegRolesIn,
+} from "./vex-fee-leg-roles.js";
 export { backoffDelayMs, nextBackoff } from "./backoff.js";
 export { generatePublicId } from "./public-id.js";
 export type { PriceFeed, PricePoint, PriceQuery } from "./pricing/price-feed.js";

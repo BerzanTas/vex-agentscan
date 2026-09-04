@@ -30,6 +30,9 @@ const PER_ROW_DETAIL_LINES: Record<string, readonly string[]> = {
     "a.usd_in_est, a.usd_out_est, a.usd_fee_est, a.usd_source,",
     "usd_in_est: raw.usd_in_est,",
     "usd_out_est: raw.usd_out_est,",
+    // The Vex fee leg's own estimate, projected onto the action it charged for and published as
+    // `vexFee.usdEst` beside the row's `usdInEst`. Per-row detail: never summed into an aggregate.
+    "fee.usd_in_est        AS usd_est,",
   ],
   "public-dto.ts": ["usdInEst: row.usd_in_est,", "usdOutEst: row.usd_out_est,"],
   "repos/activity-pricing-repo.ts": [

@@ -546,6 +546,13 @@ CREATE INDEX idx_activities_event_time_feed ON public.activities USING btree (da
 
 
 --
+-- Name: idx_activities_execution_legs; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_activities_execution_legs ON public.activities USING btree (agent_hash, source_execution_id, event_index);
+
+
+--
 -- Name: idx_activities_feed; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -722,4 +729,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('0012'),
     ('0013'),
     ('0014'),
-    ('0015');
+    ('0015'),
+    ('0016');

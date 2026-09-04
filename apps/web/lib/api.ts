@@ -151,6 +151,21 @@ export type VerificationStatsDto = {
   chains: ChainTierDto[];
 };
 
+/**
+ * The Vex integrator fee charged for an action. It settles as a transaction of its own - hence the
+ * separate hash, status and explorer link - but the site shows it folded under the action it paid
+ * for, never as a second entry. Kept in lockstep with `apps/server/src/public-dto.ts`.
+ */
+export type VexFeeDto = {
+  amountRaw: string | null;
+  decimals: number | null;
+  symbol: string | null;
+  txHash: string | null;
+  status: string;
+  usdEst: string | null;
+  explorerUrl: string | null;
+};
+
 export type ActivityRowDto = {
   publicId: string;
   kind: string;
@@ -169,6 +184,7 @@ export type ActivityRowDto = {
   usdInEst: string | null;
   txHash: string | null;
   ageSeconds: number;
+  vexFee: VexFeeDto | null;
 };
 
 export type ActivityFeedDto = { items: ActivityRowDto[]; nextCursor: string | null };
