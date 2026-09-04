@@ -1,4 +1,4 @@
-import type { ActivityRowDto } from "../lib/api";
+import type { ActivityRowDto, VexFeeDto } from "../lib/api";
 import { formatAge, formatRawAmount, formatRawAmountDisplay, formatUsdAmount } from "../lib/format";
 import { legLabel } from "../lib/leg-label";
 import { ChainBadge } from "./ChainBadge";
@@ -33,9 +33,30 @@ function ChainCell({ row }: { row: ActivityRowDto }) {
   return <ChainBadge slug={row.chainSlug} />;
 }
 
+// The Vex fee settles as a transaction of its own, but it is part of this action - so it reads as a
+// secondary line under the amount, never as a row of its own. A fee whose amount did not survive
+// ingest still says it was charged rather than disappearing.
+function VexFeeLine({ fee }: { fee: VexFeeDto }) {
+  const amount =
+    fee.amountRaw === null || fee.decimals === null
+      ? null
+      : formatRawAmountDisplay(fee.amountRaw, fee.decimals);
+  const symbol = fee.symbol === null ? "" : ` ${fee.symbol}`;
+  return (
+    <span className="block text-xs text-text-muted">
+      Vex fee {amount === null ? "charged" : `${amount}${symbol}`}
+      {fee.usdEst !== null && ` · $${formatUsdAmount(fee.usdEst)} est.`}
+    </span>
+  );
+}
+
 function AmountCell({ row }: { row: ActivityRowDto }) {
   if (row.amountInRaw === null || row.tokenInDecimals === null) {
-    return <span className="text-text-muted">—</span>;
+    return (
+      <span className="text-text-muted">
+        —{row.vexFee !== null && <VexFeeLine fee={row.vexFee} />}
+      </span>
+    );
   }
   return (
     <span className="font-mono">
@@ -46,6 +67,7 @@ function AmountCell({ row }: { row: ActivityRowDto }) {
       {row.usdInEst !== null && (
         <span className="block text-xs text-text-muted">${formatUsdAmount(row.usdInEst)} est.</span>
       )}
+      {row.vexFee !== null && <VexFeeLine fee={row.vexFee} />}
     </span>
   );
 }

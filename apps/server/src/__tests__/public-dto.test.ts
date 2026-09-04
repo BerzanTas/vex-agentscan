@@ -29,6 +29,28 @@ const fixtureActivityRow = () => ({
   statuses_seen: ["pending", "confirmed"], verification_state: "verified_full",
   verified_at: new Date(), backfill: false, received_at: new Date(), received_schema_version: 1,
   event_time: new Date(),
+  vex_fee_amount_raw: null, vex_fee_decimals: null, vex_fee_symbol: null, vex_fee_tx_hash: null,
+  vex_fee_status: null, vex_fee_usd_est: null, vex_fee_chain_family: null, vex_fee_chain_id: null,
+});
+
+// The projection read-repo produces for a row whose execution carries a confirmed Vex fee leg.
+const confirmedVexFeeColumns = {
+  vex_fee_amount_raw: "1200000000000000",
+  vex_fee_decimals: 18,
+  vex_fee_symbol: "ETH",
+  vex_fee_tx_hash: "0xfee",
+  vex_fee_status: "confirmed",
+  vex_fee_usd_est: "3.98",
+  vex_fee_chain_family: "eip155",
+  vex_fee_chain_id: 8453n,
+};
+
+const feeChainResolve = () => ({
+  canonicalSlug: "base",
+  displayName: "Base",
+  explorerTxUrl: (hash: string) => `https://basescan.org/tx/${hash}`,
+  rpcUrls: [],
+  verificationTier: "full" as const,
 });
 
 const BANNED = ["agentHash", "agent_hash", "sourceRowId", "source_row_id", "sourceExecutionId", "source_execution_id", "eventIndex", "event_index"];
@@ -332,4 +354,55 @@ it("every monetary field of the dimension DTOs stays a string", () => {
     bridgeRoute.volumeUsd,
   ];
   for (const value of monetary) expect(typeof value).toBe("string");
+});
+
+it("a row whose execution carries no fee leg publishes vexFee as null", () => {
+  expect(toActivityRowDto(fixtureActivityRow(), stubResolve).vexFee).toBe(null);
+  expect(toTxDetailDto(fixtureActivityRow(), stubResolve).vexFee).toBe(null);
+});
+
+it("folds a confirmed fee leg onto the action it charged for, with its own hash and explorer link", () => {
+  const row = { ...fixtureActivityRow(), ...confirmedVexFeeColumns };
+
+  for (const dto of [toActivityRowDto(row, feeChainResolve), toTxDetailDto(row, feeChainResolve)]) {
+    expect(dto.vexFee).toEqual({
+      amountRaw: "1200000000000000",
+      decimals: 18,
+      symbol: "ETH",
+      txHash: "0xfee",
+      status: "confirmed",
+      usdEst: "3.98",
+      explorerUrl: "https://basescan.org/tx/0xfee",
+    });
+    expect(dto.txHash).toBe("0x123");
+  }
+});
+
+// A9: the fee was really charged, so a failed action still reports it.
+it("keeps a confirmed fee on an action that definitively failed", () => {
+  const row = {
+    ...fixtureActivityRow(),
+    ...confirmedVexFeeColumns,
+    status: "definitively_failed",
+    failure_code: "mined_revert",
+  };
+
+  const dto = toTxDetailDto(row, feeChainResolve);
+  expect(dto.status).toBe("definitively_failed");
+  expect(dto.vexFee?.status).toBe("confirmed");
+  expect(dto.vexFee?.amountRaw).toBe("1200000000000000");
+});
+
+it("publishes a fee whose chain cannot be resolved without an explorer link", () => {
+  const dto = toActivityRowDto({ ...fixtureActivityRow(), ...confirmedVexFeeColumns }, stubResolve);
+  expect(dto.vexFee?.explorerUrl).toBe(null);
+  expect(dto.vexFee?.amountRaw).toBe("1200000000000000");
+});
+
+it("never exposes banned identifiers through the folded fee", () => {
+  const row = { ...fixtureActivityRow(), ...confirmedVexFeeColumns };
+  for (const dto of [toActivityRowDto(row, feeChainResolve), toTxDetailDto(row, feeChainResolve)]) {
+    const serialised = JSON.parse(JSON.stringify(dto)) as unknown;
+    expect(keysOf(serialised).filter((key) => BANNED.includes(key))).toEqual([]);
+  }
 });
