@@ -1,0 +1,15 @@
+FROM node:22-slim AS build
+RUN corepack enable
+WORKDIR /repo
+COPY . .
+RUN pnpm install --frozen-lockfile \
+ && pnpm --filter @agentscan/launch-assets build \
+ && pnpm --filter @agentscan/launch-assets deploy --legacy --prod /out \
+ && cp -r apps/launch-assets/dist /out/dist
+
+FROM node:22-slim
+WORKDIR /app
+COPY --from=build /out /app
+# The asset volume is mounted here; the image itself ships no bytes.
+ENV ASSETS_DIR=/var/lib/launch-assets
+CMD ["node", "dist/entry-api.js"]

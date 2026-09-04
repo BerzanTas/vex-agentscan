@@ -1,4 +1,4 @@
-import { sha256Hex } from "./auth.js";
+import { sha256Hex } from "@agentscan/install-identity";
 
 export type RateLimitScope =
   | "ingest"

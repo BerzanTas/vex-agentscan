@@ -1,7 +1,7 @@
 import { registerRequestSchema } from "@agentscan/contract";
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import type { Deps } from "../app.js";
-import { authenticateAgent, bearerTokenFrom, sha256Hex } from "../plugins/auth.js";
+import { authenticateInstall, bearerTokenFrom, sha256Hex } from "@agentscan/install-identity";
 import { rateLimitKeyHash } from "../plugins/rate-limit-key.js";
 import { PostgresSlidingWindowLimiter } from "../repos/rate-limit-repo.js";
 import { revokeAgent, upsertAgentRegistration } from "../repos/agents-repo.js";
@@ -48,7 +48,7 @@ export const agentsRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
     if (!bearerToken) {
       return sendError(reply, 401, "unauthorized", "missing or malformed bearer token");
     }
-    const agent = await authenticateAgent(deps.pool, bearerToken);
+    const agent = await authenticateInstall(deps.pool, bearerToken);
     if (!agent) {
       return sendError(reply, 401, "unauthorized", "unknown token");
     }

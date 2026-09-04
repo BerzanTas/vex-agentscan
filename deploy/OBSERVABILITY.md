@@ -408,3 +408,65 @@ warn level: the upstream feed rejected a whole batch. Those activities stay
 `pending` and nothing is written to `token_prices`, so a transient outage can
 never be mistaken for a permanent feed miss. Sustained occurrences mean the
 feed, not the data.
+
+## 6. Launch assets — what was published, by whom, and what was refused
+
+**What it means.** The launch-assets host (`apps/launch-assets`, container app
+`assets`) logs exactly one line per write:
+
+- `"asset upload accepted"` at info, with
+  `{agentHash, cid, bytes, type, outcome}` where `outcome` is `stored` (this
+  call published new bytes) or `idempotent` (the cid already existed and the
+  caller was answered from the existing row);
+- `"asset upload refused"` at warn, with `{agentHash, cid, bytes, outcome}`
+  where `outcome` is the refusal code the caller received
+  (`quota_exceeded_count`, `quota_exceeded_bytes`, `asset_deleted`);
+- `"asset delete"` at info, with `{agentHash, cid, outcome}` where `outcome`
+  is `deleted` or `already_deleted`.
+
+`cid` is the sha256 of the bytes and therefore the whole public identity of
+the asset: it is the last path segment of the URL a launched token carries.
+
+**This host logs `agentHash`, and the ingest route deliberately does not.**
+The difference is intentional. An ingest line is an aggregate over a private
+activity stream, so naming the agent would add identity to a count that does
+not need it. An asset line records a PUBLIC publication whose publisher is
+already stored in `launch_assets.agent_hash` for exactly one reason: to decide
+who may delete it. An operator answering "who published this image" or "which
+install is filling the volume" has no other handle, and the field adds nothing
+to the log that the row does not already hold. No token, no filename and no
+image bytes are ever logged.
+
+**Log query (Azure Log Analytics / Container Apps logs).**
+
+```kusto
+ContainerAppConsoleLogs_CL
+| where ContainerAppName_s == "assets"
+| where Log_s has "asset upload refused"
+| extend parsed = parse_json(Log_s)
+| project TimeGenerated, outcome = tostring(parsed.outcome),
+          agentHash = tostring(parsed.agentHash), bytes = tolong(parsed.bytes)
+| summarize refusals = count() by outcome, agentHash
+| order by refusals desc
+```
+
+**What to do about it.** A single install producing a run of
+`quota_exceeded_*` is either a stuck client retrying or an install that has
+outgrown the default bound; the bounds are `ASSETS_MAX_PER_INSTALL` and
+`ASSETS_MAX_BYTES_PER_INSTALL` and can be raised per deployment. Repeated
+`asset_deleted` refusals from installs that never published the cid mean
+someone is trying to resurrect a withdrawn image, which is a refusal working
+as designed and worth watching only if it is sustained.
+
+**The failure worth alerting on** is `"asset row has no bytes on the volume"`
+at error level from the public read: the database says an asset is served and
+the volume disagrees. It is answered `503 asset_unavailable`, never 404, so a
+missing mount can never be mistaken by a client for a deleted image. Any
+occurrence means the `assets-data` volume was lost, remounted empty, or
+restored out of step with the database - restore the volume from the same
+backup generation as the database rather than letting the two diverge further.
+
+**`GET /healthz`** on this app checks the two dependencies it cannot serve
+without: one `SELECT 1` and one `stat` of `ASSETS_DIR`. It returns
+`{db: "ok", store: "ok"}` or 503. A volume that failed to mount is the failure
+this catches: the process starts perfectly and then fails every read.

@@ -10,7 +10,7 @@ import type { Deps } from "../app.js";
 import { proofVerifierFor } from "../handshake/proof-verifiers.js";
 import { randomBase64UrlToken } from "../handshake/tokens.js";
 import { addressHmacHex, normalizeHandshakeAddress } from "../handshake/wallet-hmac.js";
-import { bearerTokenFrom, sha256Hex, type AgentStatus } from "../plugins/auth.js";
+import { bearerTokenFrom, sha256Hex, type AgentStatus } from "@agentscan/install-identity";
 import { rateLimitKeyHash } from "../plugins/rate-limit-key.js";
 import {
   claimChallenge,

@@ -1,0 +1,12 @@
+{
+  "name": "@agentscan/install-identity",
+  "type": "module",
+  "main": "./src/index.ts",
+  "dependencies": {
+    "@agentscan/contract": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.0",
+    "pg": "^8.13.0"
+  }
+}

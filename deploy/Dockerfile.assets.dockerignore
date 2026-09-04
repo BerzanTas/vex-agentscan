@@ -1,0 +1,13 @@
+**/node_modules
+**/.next
+**/dist
+.git
+.github
+local
+deploy
+e2e
+coverage
+CLAUDE.md
+playwright.config.ts
+**/.env
+**/.env.*

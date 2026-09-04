@@ -8,7 +8,11 @@ import {
 import type { FastifyBaseLogger, FastifyPluginAsync, FastifyReply } from "fastify";
 import type pg from "pg";
 import type { Deps } from "../app.js";
-import { authenticateAgent, bearerTokenFrom, type AuthenticatedAgent } from "../plugins/auth.js";
+import {
+  authenticateInstall,
+  bearerTokenFrom,
+  type AuthenticatedInstall,
+} from "@agentscan/install-identity";
 import { rateLimitKeyHash } from "../plugins/rate-limit-key.js";
 import { applyEvent, type ApplyEventOutcome } from "../repos/activities-ingest-repo.js";
 import { PostgresSlidingWindowLimiter } from "../repos/rate-limit-repo.js";
@@ -42,7 +46,7 @@ async function applyEventInTransaction(
 async function ingestBatch(
   pool: pg.Pool,
   log: FastifyBaseLogger,
-  agent: AuthenticatedAgent,
+  agent: AuthenticatedInstall,
   rawEvents: unknown[],
   schemaVersion: number,
   backfill: boolean,
@@ -103,7 +107,7 @@ export const eventsRoutes: FastifyPluginAsync<Deps> = async (app, deps) => {
     if (!bearerToken) {
       return sendError(reply, 401, "unauthorized", "missing or malformed bearer token");
     }
-    const agent = await authenticateAgent(deps.pool, bearerToken);
+    const agent = await authenticateInstall(deps.pool, bearerToken);
     if (!agent) {
       return sendError(reply, 401, "unauthorized", "unknown token");
     }

@@ -1,0 +1,21 @@
+{
+  "name": "@agentscan/launch-assets",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/entry-api.ts --bundle --platform=node --format=esm --outdir=dist --packages=external --alias:@agentscan/contract=../../packages/contract/src/index.ts --alias:@agentscan/install-identity=../../packages/install-identity/src/index.ts"
+  },
+  "dependencies": {
+    "@agentscan/contract": "workspace:*",
+    "@agentscan/install-identity": "workspace:*",
+    "@fastify/multipart": "^10.0.0",
+    "fastify": "^5.0.0",
+    "pg": "^8.13.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@agentscan/server": "workspace:*",
+    "@testcontainers/postgresql": "^11.0.0",
+    "@types/pg": "^8.11.0",
+    "esbuild": "^0.25.0"
+  }
+}

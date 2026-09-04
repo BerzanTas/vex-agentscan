@@ -2,11 +2,12 @@
   "name": "@agentscan/server",
   "type": "module",
   "scripts": {
-    "build": "esbuild src/entry-api.ts src/entry-worker.ts src/entry-cli.ts src/entry-sim.ts --bundle --platform=node --format=esm --outdir=dist --packages=external --alias:@agentscan/contract=../../packages/contract/src/index.ts --alias:@agentscan/core=../../packages/core/src/index.ts"
+    "build": "esbuild src/entry-api.ts src/entry-worker.ts src/entry-cli.ts src/entry-sim.ts --bundle --platform=node --format=esm --outdir=dist --packages=external --alias:@agentscan/contract=../../packages/contract/src/index.ts --alias:@agentscan/core=../../packages/core/src/index.ts --alias:@agentscan/install-identity=../../packages/install-identity/src/index.ts"
   },
   "dependencies": {
     "@agentscan/contract": "workspace:*",
     "@agentscan/core": "workspace:*",
+    "@agentscan/install-identity": "workspace:*",
     "bs58": "^6.0.0",
     "commander": "^13.0.0",
     "fastify": "^5.0.0",
