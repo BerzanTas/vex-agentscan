@@ -65,6 +65,30 @@ export function toAgentStatDto(
   };
 }
 
+/**
+ * The Vex integrator fee charged for this action, or null when none was.
+ *
+ * It is a SEPARATE on-chain transaction - hence its own hash, status and explorer link - but it is
+ * part of the action, never a second row: `read-repo` folds the fee leg out of every list and count
+ * and projects it here instead. `usdEst` is the fee leg's own USD estimate and may be null while a
+ * price is still unknown; `amountRaw` with `decimals` is the exact charge.
+ *
+ * `status` is the FEE LEG's own status, never the action's, and the leg is shown whatever it is
+ * (owner decision V1, 2026-09-04): a charge still in flight or one that reverted is part of the
+ * truth about this action. `amountRaw` and `usdEst` are the MONEY fields and stay null unless that
+ * status is `confirmed` - an attempted charge is not a charge, and a UI that rendered the attempt
+ * as an amount would be publishing money Vex never took.
+ */
+export type VexFeeDto = {
+  amountRaw: string | null;
+  decimals: number | null;
+  symbol: string | null;
+  txHash: string | null;
+  status: string;
+  usdEst: string | null;
+  explorerUrl: string | null;
+};
+
 export type ActivityRowDto = {
   publicId: string;
   kind: string;
@@ -83,6 +107,7 @@ export type ActivityRowDto = {
   usdInEst: string | null;
   txHash: string | null;
   ageSeconds: number;
+  vexFee: VexFeeDto | null;
 };
 
 export type ActivityFeedDto = { items: ActivityRowDto[]; nextCursor: string | null };
@@ -90,6 +115,17 @@ export type ActivityFeedDto = { items: ActivityRowDto[]; nextCursor: string | nu
 export type TxDetailDto = ActivityRowDto & {
   executedInRaw: string | null;
   executedOutRaw: string | null;
+  /**
+   * The SECOND output leg, for the roles that pay two assets in one transaction: a Pendle split
+   * mints PT and YT, and a pools.fun creator-fee or holder-reward claim pays the launched token and
+   * the asset it was paired against. It was verified against the receipt alongside the first leg
+   * (`evaluate.ts`), so publishing it is publishing proven money; omitting it, as this page did
+   * before, showed one half of a two-asset settlement as if it were the whole of it.
+   */
+  tokenOut2Symbol: string | null;
+  tokenOut2Decimals: number | null;
+  amountOut2Raw: string | null;
+  executedOut2Raw: string | null;
   tokenOutDecimals: number | null;
   usdOutEst: string | null;
   usdFeeEst: string | null;
@@ -138,6 +174,35 @@ function ageSecondsOf(row: ActivityDbRow): number {
   return Math.max(0, Math.floor((Date.now() - row.event_time.getTime()) / 1000));
 }
 
+function vexFeeFor(row: ActivityDbRow, resolveChain: ResolveChain): VexFeeDto | null {
+  if (row.vex_fee_status === null) return null;
+  return {
+    amountRaw: row.vex_fee_amount_raw,
+    decimals: row.vex_fee_decimals,
+    symbol: row.vex_fee_symbol,
+    txHash: row.vex_fee_tx_hash,
+    status: row.vex_fee_status,
+    usdEst: row.vex_fee_usd_est,
+    explorerUrl: vexFeeExplorerUrl(row, resolveChain),
+  };
+}
+
+/**
+ * The fee leg carries its own chain, so the link is built from that rather than from the parent's.
+ * The protocol is the parent's: both legs belong to one execution at one venue, and the chain
+ * registry keys the explorer on the pair.
+ */
+function vexFeeExplorerUrl(row: ActivityDbRow, resolveChain: ResolveChain): string | null {
+  if (row.vex_fee_tx_hash === null || row.vex_fee_chain_id === null) return null;
+  const chainFamily = row.vex_fee_chain_family === "solana" ? "solana" : "eip155";
+  const entry = resolveChain({
+    protocol: row.protocol,
+    chainFamily,
+    chainId: row.vex_fee_chain_id,
+  });
+  return entry === null ? null : entry.explorerTxUrl(row.vex_fee_tx_hash);
+}
+
 export function toActivityRowDto(
   row: ActivityDbRow,
   resolveChain: ResolveChain,
@@ -163,6 +228,7 @@ export function toActivityRowDto(
     usdInEst: row.usd_in_est,
     txHash: row.tx_hash,
     ageSeconds: ageSecondsOf(row),
+    vexFee: vexFeeFor(row, resolveChain),
   };
 }
 
@@ -191,8 +257,13 @@ export function toTxDetailDto(
     usdInEst: row.usd_in_est,
     txHash: row.tx_hash,
     ageSeconds: ageSecondsOf(row),
+    vexFee: vexFeeFor(row, resolveChain),
     executedInRaw: row.executed_in_raw,
     executedOutRaw: row.executed_out_raw,
+    tokenOut2Symbol: row.token_out2_symbol,
+    tokenOut2Decimals: row.token_out2_decimals,
+    amountOut2Raw: row.amount_out2_raw,
+    executedOut2Raw: row.executed_out2_raw,
     tokenOutDecimals: row.token_out_decimals,
     usdOutEst: row.usd_out_est,
     usdFeeEst: row.usd_fee_est,

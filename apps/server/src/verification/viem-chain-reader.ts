@@ -51,12 +51,15 @@ export function makeChainReader(entry: ChainEntry, config: Config): ChainReader 
       const receipt = await receiptOrNull(client, txHash);
       if (receipt === null) return null;
       const block = await client.getBlock({ blockHash: receipt.blockHash });
+      const envelope = await transactionEnvelopeOrNull(client, txHash);
       return {
         status: receipt.status === "success" ? "success" : "reverted",
         blockTimestamp: new Date(Number(block.timestamp) * 1000),
         blockNumber: receipt.blockNumber,
         erc20Transfers: erc20TransfersFrom(receipt.logs),
-        transactionValueRaw: await transactionValueOrNull(client, txHash),
+        transactionValueRaw: envelope?.valueRaw ?? null,
+        transactionFrom: envelope?.from,
+        transactionTo: envelope?.to,
         logs: rawLogsFrom(receipt.logs),
       };
     },
@@ -75,10 +78,25 @@ async function receiptOrNull(client: PublicClient, txHash: string): Promise<Tran
   }
 }
 
-async function transactionValueOrNull(client: PublicClient, txHash: string): Promise<string | null> {
+type TransactionEnvelope = { valueRaw: string; from: string; to: string | null };
+
+/**
+ * The transaction beside the receipt: its value (the native-input check) and its sender and target
+ * (the Virtuals creator proof). One read serves both, and a failure leaves BOTH undefined rather
+ * than defaulting them - an envelope that could not be read is missing evidence, and the
+ * attestation verdict turns it into a retry rather than a mismatch.
+ */
+async function transactionEnvelopeOrNull(
+  client: PublicClient,
+  txHash: string,
+): Promise<TransactionEnvelope | null> {
   try {
     const transaction = await client.getTransaction({ hash: txHash as Hash });
-    return transaction.value.toString();
+    return {
+      valueRaw: transaction.value.toString(),
+      from: transaction.from.toLowerCase(),
+      to: transaction.to === null ? null : transaction.to.toLowerCase(),
+    };
   } catch {
     return null;
   }

@@ -85,13 +85,15 @@ CREATE TABLE public.activities (
     usd_vex_fee_est numeric,
     usd_destination_prepay_est numeric,
     CONSTRAINT activities_chain_family_check CHECK ((chain_family = ANY (ARRAY['eip155'::text, 'solana'::text]))),
-    CONSTRAINT activities_event_role_check CHECK ((event_role = ANY (ARRAY['swap'::text, 'trench_fee'::text, 'swap_fee'::text, 'bridge_deposit'::text, 'bridge_fee'::text, 'bridge_fill_expected'::text, 'bridge_fill_observed'::text, 'bridge_refund'::text, 'lend_deposit'::text, 'lend_withdraw'::text, 'lend_borrow_operate'::text, 'predict_buy'::text, 'predict_sell'::text, 'predict_claim'::text, 'predict_close'::text, 'wrap'::text, 'unwrap'::text, 'yield_pt'::text, 'yield_yt'::text, 'yield_py'::text, 'yield_lp'::text, 'yield_sy'::text, 'yield_claim'::text, 'token_launch'::text, 'pools_fee'::text, 'pools_claim'::text]))),
-    CONSTRAINT activities_kind_check CHECK ((kind = ANY (ARRAY['swap'::text, 'bridge'::text, 'lend'::text, 'prediction'::text, 'wrap'::text, 'yield'::text, 'launch'::text, 'claim'::text]))),
+    CONSTRAINT activities_claim_family_has_no_input_leg CHECK (((event_role <> ALL (ARRAY['creator_fee_claim'::text, 'holder_reward_claim'::text, 'reward_distribution'::text])) OR ((token_in_address IS NULL) AND (token_in_symbol IS NULL) AND (token_in_decimals IS NULL) AND (amount_in_raw IS NULL) AND (executed_in_raw IS NULL) AND (token_in2_address IS NULL) AND (token_in2_symbol IS NULL) AND (token_in2_decimals IS NULL) AND (amount_in2_raw IS NULL) AND (executed_in2_raw IS NULL)))),
+    CONSTRAINT activities_event_role_check CHECK ((event_role = ANY (ARRAY['swap'::text, 'trench_fee'::text, 'swap_fee'::text, 'bridge_deposit'::text, 'bridge_fee'::text, 'bridge_fill_expected'::text, 'bridge_fill_observed'::text, 'bridge_refund'::text, 'lend_deposit'::text, 'lend_withdraw'::text, 'lend_borrow_operate'::text, 'predict_buy'::text, 'predict_sell'::text, 'predict_claim'::text, 'predict_close'::text, 'wrap'::text, 'unwrap'::text, 'yield_pt'::text, 'yield_yt'::text, 'yield_py'::text, 'yield_lp'::text, 'yield_sy'::text, 'yield_claim'::text, 'token_launch'::text, 'launch_cancel'::text, 'pools_fee'::text, 'pools_claim'::text, 'wallet_transfer'::text, 'creator_fee_claim'::text, 'holder_reward_claim'::text, 'reward_distribution'::text, 'vex_fee'::text]))),
+    CONSTRAINT activities_kind_check CHECK ((kind = ANY (ARRAY['swap'::text, 'bridge'::text, 'lend'::text, 'prediction'::text, 'wrap'::text, 'yield'::text, 'launch'::text, 'claim'::text, 'transfer'::text]))),
     CONSTRAINT activities_pricing_state_check CHECK ((pricing_state = ANY (ARRAY['pending'::text, 'server_priced'::text, 'unpriced'::text]))),
     CONSTRAINT activities_second_leg_in_amount_has_token CHECK ((((amount_in2_raw IS NULL) AND (executed_in2_raw IS NULL)) OR ((token_in2_address IS NOT NULL) AND (token_in2_decimals IS NOT NULL)))),
     CONSTRAINT activities_second_leg_out_amount_has_token CHECK ((((amount_out2_raw IS NULL) AND (executed_out2_raw IS NULL)) OR ((token_out2_address IS NOT NULL) AND (token_out2_decimals IS NOT NULL)))),
     CONSTRAINT activities_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'definitively_failed'::text, 'superseded_unproven'::text]))),
-    CONSTRAINT activities_verification_state_check CHECK ((verification_state = ANY (ARRAY['none'::text, 'queued'::text, 'verified_full'::text, 'verified_basic'::text, 'mismatch'::text])))
+    CONSTRAINT activities_verification_state_check CHECK ((verification_state = ANY (ARRAY['none'::text, 'queued'::text, 'verified_full'::text, 'verified_basic'::text, 'mismatch'::text]))),
+    CONSTRAINT activities_wallet_transfer_has_no_output_leg CHECK (((event_role <> 'wallet_transfer'::text) OR ((token_out_address IS NULL) AND (token_out_symbol IS NULL) AND (token_out_decimals IS NULL) AND (amount_out_raw IS NULL) AND (executed_out_raw IS NULL) AND (token_out2_address IS NULL) AND (token_out2_symbol IS NULL) AND (token_out2_decimals IS NULL) AND (amount_out2_raw IS NULL) AND (executed_out2_raw IS NULL))))
 );
 
 
@@ -265,6 +267,7 @@ ALTER SEQUENCE public.strikes_id_seq OWNED BY public.strikes.id;
 CREATE TABLE public.token_attestations (
     id bigint NOT NULL,
     chain_id bigint NOT NULL,
+    launchpad text DEFAULT 'trench'::text NOT NULL,
     token_address text NOT NULL,
     recovered_signer text NOT NULL,
     attest_signature text NOT NULL,
@@ -279,6 +282,7 @@ CREATE TABLE public.token_attestations (
     first_seen_at timestamp with time zone DEFAULT now() NOT NULL,
     attempt_count integer DEFAULT 0 NOT NULL,
     next_attempt_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT token_attestations_launchpad_check CHECK ((launchpad = ANY (ARRAY['trench'::text, 'pools_fun'::text, 'virtuals'::text]))),
     CONSTRAINT token_attestations_recovered_signer_check CHECK ((recovered_signer ~ '^0x[0-9a-f]{40}$'::text)),
     CONSTRAINT token_attestations_token_address_check CHECK ((token_address ~ '^0x[0-9a-f]{40}$'::text)),
     CONSTRAINT token_attestations_verify_status_check CHECK ((verify_status = ANY (ARRAY['unverified'::text, 'verified'::text, 'mismatch'::text, 'unverifiable'::text])))
@@ -546,6 +550,13 @@ CREATE INDEX idx_activities_event_time_feed ON public.activities USING btree (da
 
 
 --
+-- Name: idx_activities_execution_legs; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_activities_execution_legs ON public.activities USING btree (agent_hash, source_execution_id, event_index);
+
+
+--
 -- Name: idx_activities_feed; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -722,4 +733,8 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('0012'),
     ('0013'),
     ('0014'),
-    ('0015');
+    ('0015'),
+    ('0016'),
+    ('0017'),
+    ('0018'),
+    ('0019');

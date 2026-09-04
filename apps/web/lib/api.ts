@@ -151,6 +151,26 @@ export type VerificationStatsDto = {
   chains: ChainTierDto[];
 };
 
+/**
+ * The Vex integrator fee charged for an action. It settles as a transaction of its own - hence the
+ * separate hash, status and explorer link - but the site shows it folded under the action it paid
+ * for, never as a second entry. Kept in lockstep with `apps/server/src/public-dto.ts`.
+ *
+ * `status` is the FEE's own status and the fee is shown whatever it is: a charge still in flight or
+ * one that reverted is part of the truth about the action. `amountRaw` and `usdEst` are null unless
+ * that status is `confirmed`, because an attempted charge is not a charge - so the UI must read the
+ * status before it says anything about money.
+ */
+export type VexFeeDto = {
+  amountRaw: string | null;
+  decimals: number | null;
+  symbol: string | null;
+  txHash: string | null;
+  status: string;
+  usdEst: string | null;
+  explorerUrl: string | null;
+};
+
 export type ActivityRowDto = {
   publicId: string;
   kind: string;
@@ -169,6 +189,7 @@ export type ActivityRowDto = {
   usdInEst: string | null;
   txHash: string | null;
   ageSeconds: number;
+  vexFee: VexFeeDto | null;
 };
 
 export type ActivityFeedDto = { items: ActivityRowDto[]; nextCursor: string | null };
@@ -176,6 +197,11 @@ export type ActivityFeedDto = { items: ActivityRowDto[]; nextCursor: string | nu
 export type TxDetailDto = ActivityRowDto & {
   executedInRaw: string | null;
   executedOutRaw: string | null;
+  /** The second output leg of a two-asset settlement (Pendle split, launchpad claim). */
+  tokenOut2Symbol: string | null;
+  tokenOut2Decimals: number | null;
+  amountOut2Raw: string | null;
+  executedOut2Raw: string | null;
   tokenOutDecimals: number | null;
   usdOutEst: string | null;
   usdFeeEst: string | null;
@@ -194,6 +220,7 @@ export const ACTIVITY_KIND_FILTERS = [
   "yield",
   "launch",
   "claim",
+  "transfer",
 ] as const;
 
 export const ACTIVITY_STATUS_FILTERS = [

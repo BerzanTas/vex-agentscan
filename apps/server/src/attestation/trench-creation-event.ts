@@ -1,6 +1,5 @@
 import { decodeEventLog, toEventSelector, type Hex } from "viem";
-import type { ReceiptLog } from "@agentscan/core";
-import type { AttestationCreationEvent } from "@agentscan/core";
+import type { AttestationCreationEvent, ReceiptLog } from "@agentscan/core";
 
 const TOKEN_CREATED_EVENT_ABI = [
   {

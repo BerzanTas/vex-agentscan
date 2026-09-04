@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import type pg from "pg";
+import { recomputeDailyAggregates } from "./cli/aggregate-recompute.js";
 import { revokeTokenAttestations } from "./cli/attestation-revoke.js";
 import { requeueUnpricedActivities } from "./cli/pricing-requeue.js";
 import { listAgentsAwaitingPurge } from "./cli/purge-status.js";
@@ -116,6 +117,19 @@ program
       requeueUnpricedActivities(pool, options.chainId === undefined ? undefined : BigInt(options.chainId)),
     );
     printJson(outcome);
+  });
+
+program
+  .command("aggregates")
+  .command("recompute")
+  .description(
+    "rebuild daily_aggregates from the verified activities, folding the Vex fee leg out of the counts",
+  )
+  .action(async () => {
+    process.stderr.write(
+      "pause the verification and pricing workers before running this; start them again after\n",
+    );
+    printJson(await withPool(recomputeDailyAggregates));
   });
 
 const attestation = program.command("attestation");

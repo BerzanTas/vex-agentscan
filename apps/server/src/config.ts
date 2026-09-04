@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LAUNCHPADS } from "@agentscan/contract";
 
 const RPC_URLS_PREFIX = "RPC_URLS_";
 const ATTEST_FACTORY_ADDRESSES_PREFIX = "ATTEST_FACTORY_ADDRESSES_";
@@ -87,7 +88,11 @@ const envSchema = z.object({
 
 export type Config = z.infer<typeof envSchema> & {
   rpcUrlOverrides: Map<string, string[]>;
-  attestFactoryAddressesByChainId: Map<bigint, string[]>;
+  /**
+   * Attestation allowlist overrides, keyed `<chainId>:<launchpad>`. An override REPLACES the
+   * built-in list for that pair, so an operator can narrow an allowlist as well as widen it.
+   */
+  attestAllowlistOverrides: Map<string, string[]>;
 };
 
 function rpcUrlOverridesFrom(env: NodeJS.ProcessEnv): Map<string, string[]> {
@@ -99,13 +104,28 @@ function rpcUrlOverridesFrom(env: NodeJS.ProcessEnv): Map<string, string[]> {
   return overrides;
 }
 
-function attestFactoryAddressesByChainIdFrom(env: NodeJS.ProcessEnv): Map<bigint, string[]> {
-  const byChainId = new Map<bigint, string[]>();
+/**
+ * `ATTEST_FACTORY_ADDRESSES_<chainId>_<LAUNCHPAD>` - one key per (chain, launchpad) pair, because
+ * that is the granularity the allowlist protects: chain 4663 hosts Trench, pools.fun AND Virtuals,
+ * and widening one of them must not widen the others.
+ *
+ * A key naming an unknown launchpad is IGNORED rather than accepted under a guessed name: a typo
+ * that silently became a third allowlist would be an allowlist nobody reviewed.
+ */
+function attestAllowlistOverridesFrom(env: NodeJS.ProcessEnv): Map<string, string[]> {
+  const overrides = new Map<string, string[]>();
   for (const [key, value] of Object.entries(env)) {
     if (!key.startsWith(ATTEST_FACTORY_ADDRESSES_PREFIX) || !value) continue;
-    byChainId.set(BigInt(key.slice(ATTEST_FACTORY_ADDRESSES_PREFIX.length)), commaSeparated(value));
+    const suffix = key.slice(ATTEST_FACTORY_ADDRESSES_PREFIX.length);
+    const separatorIndex = suffix.indexOf("_");
+    if (separatorIndex <= 0) continue;
+    const chainIdText = suffix.slice(0, separatorIndex);
+    const launchpad = suffix.slice(separatorIndex + 1).toLowerCase();
+    if (!/^[0-9]+$/.test(chainIdText)) continue;
+    if (!(LAUNCHPADS as readonly string[]).includes(launchpad)) continue;
+    overrides.set(`${BigInt(chainIdText).toString()}:${launchpad}`, commaSeparated(value));
   }
-  return byChainId;
+  return overrides;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
@@ -128,6 +148,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   return {
     ...parsed,
     rpcUrlOverrides: rpcUrlOverridesFrom(env),
-    attestFactoryAddressesByChainId: attestFactoryAddressesByChainIdFrom(env),
+    attestAllowlistOverrides: attestAllowlistOverridesFrom(env),
   };
 }

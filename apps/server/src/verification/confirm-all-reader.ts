@@ -7,6 +7,8 @@ function declaredTransfersFrom(context: ChainReaderContext): ReceiptView["erc20T
   const legs = [
     { token: context.tokenInAddress, amountRaw: context.executedInRaw },
     { token: context.tokenOutAddress, amountRaw: context.executedOutRaw },
+    { token: context.tokenIn2Address, amountRaw: context.executedIn2Raw },
+    { token: context.tokenOut2Address, amountRaw: context.executedOut2Raw },
   ];
   return legs
     .filter((leg): leg is { token: string; amountRaw: string } => leg.token !== null && leg.amountRaw !== null)

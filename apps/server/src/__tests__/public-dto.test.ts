@@ -23,12 +23,35 @@ const fixtureActivityRow = () => ({
   token_in_address: "0xabc", token_in_symbol: "ETH", token_in_decimals: 18,
   token_out_address: "0xdef", token_out_symbol: "VEX", token_out_decimals: 18,
   amount_in_raw: "1000", amount_out_raw: "2000", executed_in_raw: "1000", executed_out_raw: "1990",
+  token_out2_symbol: null, token_out2_decimals: null, amount_out2_raw: null, executed_out2_raw: null,
   usd_in_est: "3312.44", usd_out_est: "3305.12", usd_fee_est: "3.31", usd_source: "kyberswap_quote",
   tx_hash: "0x123", failure_code: null,
   client_created_at: new Date(), client_confirmed_at: new Date(), client_observed_at: null,
   statuses_seen: ["pending", "confirmed"], verification_state: "verified_full",
   verified_at: new Date(), backfill: false, received_at: new Date(), received_schema_version: 1,
   event_time: new Date(),
+  vex_fee_amount_raw: null, vex_fee_decimals: null, vex_fee_symbol: null, vex_fee_tx_hash: null,
+  vex_fee_status: null, vex_fee_usd_est: null, vex_fee_chain_family: null, vex_fee_chain_id: null,
+});
+
+// The projection read-repo produces for a row whose execution carries a confirmed Vex fee leg.
+const confirmedVexFeeColumns = {
+  vex_fee_amount_raw: "1200000000000000",
+  vex_fee_decimals: 18,
+  vex_fee_symbol: "ETH",
+  vex_fee_tx_hash: "0xfee",
+  vex_fee_status: "confirmed",
+  vex_fee_usd_est: "3.98",
+  vex_fee_chain_family: "eip155",
+  vex_fee_chain_id: 8453n,
+};
+
+const feeChainResolve = () => ({
+  canonicalSlug: "base",
+  displayName: "Base",
+  explorerTxUrl: (hash: string) => `https://basescan.org/tx/${hash}`,
+  rpcUrls: [],
+  verificationTier: "full" as const,
 });
 
 const BANNED = ["agentHash", "agent_hash", "sourceRowId", "source_row_id", "sourceExecutionId", "source_execution_id", "eventIndex", "event_index"];
@@ -56,7 +79,14 @@ const secondLegAndCostColumns = {
   usd_destination_prepay_est: "1.20",
 };
 
-const widenedActivityRow = () => ({ ...fixtureActivityRow(), ...secondLegAndCostColumns });
+const widenedActivityRow = () => ({
+  ...fixtureActivityRow(),
+  ...secondLegAndCostColumns,
+  token_out2_symbol: secondLegAndCostColumns.token_out2_symbol,
+  token_out2_decimals: secondLegAndCostColumns.token_out2_decimals,
+  amount_out2_raw: secondLegAndCostColumns.amount_out2_raw,
+  executed_out2_raw: secondLegAndCostColumns.executed_out2_raw,
+});
 
 it("public DTOs never expose banned identifiers on a row carrying the widened columns", () => {
   for (const dto of [
@@ -67,30 +97,56 @@ it("public DTOs never expose banned identifiers on a row carrying the widened co
   }
 });
 
+// Still unpublished on EVERY public DTO. The INPUT second leg has no consumer, and the cost
+// breakdown is the client's own estimate, which this site does not publish at all.
 const UNPUBLISHED_ESTIMATE_FIELDS = [
   "tokenIn2Symbol",
-  "tokenOut2Symbol",
   "tokenIn2Decimals",
-  "tokenOut2Decimals",
   "amountIn2Raw",
-  "amountOut2Raw",
   "executedIn2Raw",
-  "executedOut2Raw",
   "usdNetworkGasEst",
   "usdVenueFeeEst",
   "usdVexFeeEst",
   "usdDestinationPrepayEst",
 ];
 
-it("public DTOs publish no second-leg or cost-breakdown client estimate", () => {
+it("public DTOs publish no input second leg and no cost-breakdown client estimate", () => {
   for (const dto of [
     toActivityRowDto(widenedActivityRow(), stubResolve),
     toTxDetailDto(widenedActivityRow(), stubResolve),
   ]) {
     for (const field of UNPUBLISHED_ESTIMATE_FIELDS) expect(field in (dto as object)).toBe(false);
-    const serialised = JSON.stringify(dto);
-    expect(serialised).not.toContain("PT-USDC");
-    expect(serialised).not.toContain("YT-USDC");
+    expect(JSON.stringify(dto)).not.toContain("PT-USDC");
+  }
+});
+
+// CONTRACT CHANGE, 2026-09-04: the OUTPUT second leg is published on the transaction page.
+// A Pendle split and a launchpad creator-fee or holder-reward claim pay two assets in one
+// transaction, and both legs are now checked against the receipt by the full verifier, so showing
+// one of them as if it were the whole settlement understated proven money. The feed row keeps its
+// single-leg shape: it summarises, and the detail page is where the settlement is stated in full.
+it("publishes the output second leg on the transaction detail, and not on the feed row", () => {
+  const detail = toTxDetailDto(widenedActivityRow(), stubResolve);
+  expect(detail.tokenOut2Symbol).toBe("YT-USDC");
+  expect(detail.tokenOut2Decimals).toBe(6);
+  expect(detail.amountOut2Raw).toBe("2000000");
+  expect(detail.executedOut2Raw).toBe("1999000");
+
+  const row = toActivityRowDto(widenedActivityRow(), stubResolve);
+  for (const field of ["tokenOut2Symbol", "tokenOut2Decimals", "amountOut2Raw", "executedOut2Raw"]) {
+    expect(field in (row as object)).toBe(false);
+  }
+  expect(JSON.stringify(row)).not.toContain("YT-USDC");
+});
+
+// The second leg's ADDRESS stays unpublished on both: the symbol and decimals render the amount,
+// and the address is an identifier the page has no use for.
+it("publishes no second-leg token address", () => {
+  for (const dto of [
+    toActivityRowDto(widenedActivityRow(), stubResolve),
+    toTxDetailDto(widenedActivityRow(), stubResolve),
+  ]) {
+    expect(JSON.stringify(dto)).not.toContain("0x222");
   }
 });
 
@@ -332,4 +388,55 @@ it("every monetary field of the dimension DTOs stays a string", () => {
     bridgeRoute.volumeUsd,
   ];
   for (const value of monetary) expect(typeof value).toBe("string");
+});
+
+it("a row whose execution carries no fee leg publishes vexFee as null", () => {
+  expect(toActivityRowDto(fixtureActivityRow(), stubResolve).vexFee).toBe(null);
+  expect(toTxDetailDto(fixtureActivityRow(), stubResolve).vexFee).toBe(null);
+});
+
+it("folds a confirmed fee leg onto the action it charged for, with its own hash and explorer link", () => {
+  const row = { ...fixtureActivityRow(), ...confirmedVexFeeColumns };
+
+  for (const dto of [toActivityRowDto(row, feeChainResolve), toTxDetailDto(row, feeChainResolve)]) {
+    expect(dto.vexFee).toEqual({
+      amountRaw: "1200000000000000",
+      decimals: 18,
+      symbol: "ETH",
+      txHash: "0xfee",
+      status: "confirmed",
+      usdEst: "3.98",
+      explorerUrl: "https://basescan.org/tx/0xfee",
+    });
+    expect(dto.txHash).toBe("0x123");
+  }
+});
+
+// A9: the fee was really charged, so a failed action still reports it.
+it("keeps a confirmed fee on an action that definitively failed", () => {
+  const row = {
+    ...fixtureActivityRow(),
+    ...confirmedVexFeeColumns,
+    status: "definitively_failed",
+    failure_code: "mined_revert",
+  };
+
+  const dto = toTxDetailDto(row, feeChainResolve);
+  expect(dto.status).toBe("definitively_failed");
+  expect(dto.vexFee?.status).toBe("confirmed");
+  expect(dto.vexFee?.amountRaw).toBe("1200000000000000");
+});
+
+it("publishes a fee whose chain cannot be resolved without an explorer link", () => {
+  const dto = toActivityRowDto({ ...fixtureActivityRow(), ...confirmedVexFeeColumns }, stubResolve);
+  expect(dto.vexFee?.explorerUrl).toBe(null);
+  expect(dto.vexFee?.amountRaw).toBe("1200000000000000");
+});
+
+it("never exposes banned identifiers through the folded fee", () => {
+  const row = { ...fixtureActivityRow(), ...confirmedVexFeeColumns };
+  for (const dto of [toActivityRowDto(row, feeChainResolve), toTxDetailDto(row, feeChainResolve)]) {
+    const serialised = JSON.parse(JSON.stringify(dto)) as unknown;
+    expect(keysOf(serialised).filter((key) => BANNED.includes(key))).toEqual([]);
+  }
 });

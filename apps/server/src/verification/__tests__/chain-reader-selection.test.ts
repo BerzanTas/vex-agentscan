@@ -12,6 +12,10 @@ const context: ChainReaderContext = {
   executedOutRaw: null,
   tokenInAddress: null,
   tokenOutAddress: null,
+  executedIn2Raw: null,
+  executedOut2Raw: null,
+  tokenIn2Address: null,
+  tokenOut2Address: null,
 };
 
 const solanaEntry: ChainEntry = {

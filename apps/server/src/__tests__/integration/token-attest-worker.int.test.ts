@@ -13,7 +13,9 @@ import { runAttestationVerificationPass, type AttestationVerificationLoopDeps } 
 
 const trenchChainId = 4663n;
 const factoryAddress = "0x3857c6c4fe93abb40945dfc8b9d690384cbae014";
-const registryWithFactory: AttestationChainRegistry = new Map([[trenchChainId, { factoryAddresses: [factoryAddress] }]]);
+const registryWithFactory: AttestationChainRegistry = new Map([
+  [trenchChainId, { launchpads: new Map([["trench" as const, [factoryAddress]]]) }],
+]);
 
 const TOKEN_CREATED_TOPIC0 = toEventSelector("TokenCreated(address,address,uint8,uint8,bytes,uint256)");
 const TOKEN_CREATED_PARAMS = parseAbiParameters(

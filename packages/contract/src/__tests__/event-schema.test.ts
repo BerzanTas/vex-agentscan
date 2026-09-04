@@ -41,13 +41,14 @@ const legFreeEvent = {
 };
 
 const boundRolesByKind: Record<(typeof EVENT_KINDS)[number], readonly string[]> = {
-  swap: ["swap", "trench_fee", "swap_fee"],
+  swap: ["swap", "trench_fee", "swap_fee", "vex_fee"],
   bridge: [
     "bridge_deposit",
     "bridge_fee",
     "bridge_fill_expected",
     "bridge_fill_observed",
     "bridge_refund",
+    "vex_fee",
   ],
   lend: ["lend_deposit", "lend_withdraw", "lend_borrow_operate"],
   prediction: ["predict_buy", "predict_sell", "predict_claim", "predict_close"],
@@ -60,8 +61,9 @@ const boundRolesByKind: Record<(typeof EVENT_KINDS)[number], readonly string[]> 
     "yield_sy",
     "yield_claim",
   ],
-  launch: ["token_launch", "trench_fee", "pools_fee"],
-  claim: ["pools_claim"],
+  launch: ["token_launch", "launch_cancel", "trench_fee", "pools_fee", "vex_fee"],
+  claim: ["pools_claim", "creator_fee_claim", "holder_reward_claim", "reward_distribution"],
+  transfer: ["wallet_transfer"],
 };
 
 const boundPairs = Object.entries(boundRolesByKind).flatMap(([kind, roles]) =>
@@ -74,7 +76,15 @@ const approvalPairs = EVENT_KINDS.flatMap((kind) =>
   APPROVAL_ROLES.map((eventRole) => ({ kind, eventRole })),
 );
 
-const SECOND_LEG_ROLES: readonly string[] = ["yield_py", "yield_lp", "pools_claim"];
+// Hand-written on purpose, so that adding a role to the source's allowlist without deciding here
+// turns this file red rather than silently widening what a second leg is allowed on.
+const SECOND_LEG_ROLES: readonly string[] = [
+  "yield_py",
+  "yield_lp",
+  "pools_claim",
+  "creator_fee_claim",
+  "holder_reward_claim",
+];
 
 const secondLegOut = {
   tokenOut2: { address: "0xyt", symbol: "YT", decimals: 18 },
@@ -151,6 +161,101 @@ describe("eventSchema kind/role binding (§4.2)", () => {
   });
   it("rejects allowance on a wrap event", () => {
     expect(() => eventSchema.parse({ ...legFreeEvent, kind: "wrap", eventRole: "allowance" })).toThrow();
+  });
+
+  // vex_fee is admitted on exactly the three kinds the producer's own binding admits a venue fee
+  // leg on (087_wallet_transaction_intents.sql). Admitting it anywhere else would be the server
+  // inventing an arm the writer cannot produce.
+  it.each(["lend", "prediction", "wrap", "yield", "claim", "transfer"] as const)(
+    "rejects vex_fee on a %s event, which admits no fee leg",
+    (kind) => {
+      expect(() => eventSchema.parse({ ...legFreeEvent, kind, eventRole: "vex_fee" })).toThrow();
+    },
+  );
+
+  it("rejects the producer's tx_vex_fee outright: this contract has no transaction kind", () => {
+    const vocabulary: readonly string[] = EVENT_ROLES;
+    expect(vocabulary.includes("tx_vex_fee")).toBe(false);
+  });
+
+  it("rejects launch_cancel on a claim event, though cancelling refunds like one", () => {
+    expect(() => eventSchema.parse({ ...legFreeEvent, kind: "claim", eventRole: "launch_cancel" })).toThrow();
+  });
+});
+
+describe("eventSchema launchpad family leg rules (§4.2)", () => {
+  const claimEvent = (eventRole: string) => ({ ...legFreeEvent, kind: "claim", eventRole });
+
+  // Every claim-kind role spends nothing. An input leg on one is evidence the writer decoded the
+  // wrong transaction, so the contract refuses it rather than storing a row that contradicts itself.
+  it.each(["creator_fee_claim", "holder_reward_claim", "reward_distribution"] as const)(
+    "rejects an input leg on %s",
+    (eventRole) => {
+      expect(() =>
+        eventSchema.parse({
+          ...claimEvent(eventRole),
+          tokenIn: { address: "0xaa", symbol: "VIRTUAL", decimals: 18 },
+          amountInRaw: "1000",
+        }),
+      ).toThrow();
+    },
+  );
+
+  // A creator claim pays the launched token AND the asset it was paired against; a holder-reward
+  // claim has the same both-mode. That is the pools_claim shape, so they join its allowlist.
+  it.each(["creator_fee_claim", "holder_reward_claim"] as const)(
+    "accepts the two-asset payout %s settles as",
+    (eventRole) => {
+      const parsed = eventSchema.parse({
+        ...claimEvent(eventRole),
+        tokenOut: { address: "0xaa", symbol: "VEX", decimals: 18 },
+        amountOutRaw: "1000",
+        tokenOut2: { address: "0xbb", symbol: "WETH", decimals: 18 },
+        amountOut2Raw: "2000",
+      });
+      expect(parsed).toMatchObject({ eventRole, amountOut2Raw: "2000" });
+    },
+  );
+
+  // The caller of a permissionless distribute is paid nothing, so a SECOND payout leg on it would
+  // be a misread transaction - while its single output leg, the distributed total, is a real fact
+  // and stays optional rather than forbidden.
+  it("rejects a second payout leg on reward_distribution", () => {
+    expect(() =>
+      eventSchema.parse({
+        ...claimEvent("reward_distribution"),
+        tokenOut2: { address: "0xbb", symbol: "WETH", decimals: 18 },
+        amountOut2Raw: "2000",
+      }),
+    ).toThrow();
+  });
+
+  it("accepts reward_distribution with no amounts at all, and with the distributed total", () => {
+    expect(eventSchema.parse(claimEvent("reward_distribution"))).toMatchObject({
+      eventRole: "reward_distribution",
+      amountOutRaw: null,
+    });
+    expect(
+      eventSchema.parse({
+        ...claimEvent("reward_distribution"),
+        tokenOut: { address: "0xaa", symbol: "VEX", decimals: 18 },
+        amountOutRaw: "1000",
+      }),
+    ).toMatchObject({ amountOutRaw: "1000" });
+  });
+
+  // A cancel REFUNDS the launch's committed purchase, so it carries an output leg and no
+  // prohibition: it is a launch-kind role, not a claim, and the launch kind has no leg rule.
+  it("accepts launch_cancel carrying the refund it produces", () => {
+    expect(
+      eventSchema.parse({
+        ...legFreeEvent,
+        kind: "launch",
+        eventRole: "launch_cancel",
+        tokenOut: { address: "0xaa", symbol: "VIRTUAL", decimals: 18 },
+        amountOutRaw: "1000000000000000000",
+      }),
+    ).toMatchObject({ eventRole: "launch_cancel" });
   });
 });
 
@@ -316,6 +421,93 @@ describe("eventSchema pools.fun launches, fees and claims (§4.2)", () => {
 
   it("rejects trench_fee on the claim kind", () => {
     expect(() => eventSchema.parse({ ...legFreeEvent, kind: "claim", eventRole: "trench_fee" })).toThrow();
+  });
+});
+
+// An agent sending tokens out of its own wallet reports a transfer. It spends one leg and receives
+// nothing, which is why it is neither a swap with a missing side nor a claim. The recipient is not
+// part of the wire format at all: this server stores no counterparty address.
+describe("eventSchema wallet transfers (§4.2)", () => {
+  const usdc = { address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", symbol: "USDC", decimals: 6 };
+
+  const walletTransfer = {
+    ...legFreeEvent,
+    protocol: "wallet",
+    kind: "transfer",
+    eventRole: "wallet_transfer",
+    tokenIn: usdc,
+    amountInRaw: "25000000",
+    executedInRaw: "25000000",
+    usdInEst: "25.00",
+    usdOutEst: null,
+    txHash: "0xfeed",
+  };
+
+  it("accepts a send carrying the input leg it spent", () => {
+    expect(eventSchema.parse(walletTransfer)).toMatchObject({
+      kind: "transfer",
+      eventRole: "wallet_transfer",
+      status: "confirmed",
+      executedInRaw: "25000000",
+      txHash: "0xfeed",
+    });
+  });
+
+  it("keeps the sent amount at the token's own decimals, never rescaled", () => {
+    expect(eventSchema.parse(walletTransfer)).toMatchObject({ tokenIn: { decimals: 6 } });
+  });
+
+  it("leaves the output leg empty, because a send receives nothing", () => {
+    expect(eventSchema.parse(walletTransfer)).toMatchObject({
+      tokenOut: null,
+      amountOutRaw: null,
+      executedOutRaw: null,
+    });
+  });
+
+  it("accepts a native send, whose input leg is the chain's own asset", () => {
+    const nativeSend = {
+      ...walletTransfer,
+      tokenIn: { address: "native", symbol: "ETH", decimals: 18 },
+      amountInRaw: "1000000000000000",
+      executedInRaw: "1000000000000000",
+    };
+    expect(eventSchema.parse(nativeSend)).toMatchObject({ executedInRaw: "1000000000000000" });
+  });
+
+  it("rejects a send carrying an output token, which would prove a swap or a claim was filed as a send", () => {
+    expect(() =>
+      eventSchema.parse({ ...walletTransfer, tokenOut: usdc, amountOutRaw: "25000000" }),
+    ).toThrow();
+  });
+
+  it("rejects a send carrying a requested output amount", () => {
+    expect(() => eventSchema.parse({ ...walletTransfer, amountOutRaw: "1" })).toThrow();
+  });
+
+  it("rejects a send carrying an executed output amount", () => {
+    expect(() => eventSchema.parse({ ...walletTransfer, executedOutRaw: "1" })).toThrow();
+  });
+
+  it("rejects a second leg on a send, which settles as one leg", () => {
+    expect(() => eventSchema.parse({ ...walletTransfer, ...secondLegOut })).toThrow();
+  });
+
+  it("rejects wallet_transfer on the claim kind, whose roles must spend nothing", () => {
+    expect(() => eventSchema.parse({ ...legFreeEvent, kind: "claim", eventRole: "wallet_transfer" })).toThrow();
+  });
+
+  it("rejects wallet_transfer on a swap", () => {
+    expect(() => eventSchema.parse({ ...legFreeEvent, kind: "swap", eventRole: "wallet_transfer" })).toThrow();
+  });
+
+  it("rejects the swap role on the transfer kind", () => {
+    expect(() => eventSchema.parse({ ...legFreeEvent, kind: "transfer", eventRole: "swap" })).toThrow();
+  });
+
+  it("strips a smuggled recipient, because no counterparty crosses this wire", () => {
+    const parsed = eventSchema.parse({ ...walletTransfer, toAddress: "0xrecipient" });
+    expect("toAddress" in parsed).toBe(false);
   });
 });
 

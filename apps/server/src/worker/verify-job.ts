@@ -19,6 +19,10 @@ export type ChainReaderContext = {
   executedOutRaw: string | null;
   tokenInAddress: string | null;
   tokenOutAddress: string | null;
+  executedIn2Raw: string | null;
+  executedOut2Raw: string | null;
+  tokenIn2Address: string | null;
+  tokenOut2Address: string | null;
 };
 
 export type VerifyJobDeps = {
@@ -84,6 +88,10 @@ export async function resolveJobOutcome(job: ClaimedJob, deps: VerifyJobDeps): P
     executedOutRaw: job.executedOutRaw,
     tokenInAddress: job.tokenInAddress,
     tokenOutAddress: job.tokenOutAddress,
+    executedIn2Raw: job.executedIn2Raw,
+    executedOut2Raw: job.executedOut2Raw,
+    tokenIn2Address: job.tokenIn2Address,
+    tokenOut2Address: job.tokenOut2Address,
   });
   const read = await readReceipt(reader, job.txHash);
   const verdict = verdictFrom(read, job, entry, deps.config, job.txHash);
@@ -175,7 +183,11 @@ function verificationInputFrom(
     executedOutRaw: job.executedOutRaw,
     tokenInAddress: job.tokenInAddress,
     tokenOutAddress: job.tokenOutAddress,
-    tier: resolveVerificationTier(job.kind, entry.verificationTier),
+    executedIn2Raw: job.executedIn2Raw,
+    executedOut2Raw: job.executedOut2Raw,
+    tokenIn2Address: job.tokenIn2Address,
+    tokenOut2Address: job.tokenOut2Address,
+    tier: resolveVerificationTier(job.kind, job.eventRole, entry.verificationTier),
     timeToleranceMin: config.VERIFY_TIME_TOLERANCE_MIN,
     amountTolerancePct: config.VERIFY_AMOUNT_TOLERANCE_PCT,
   };

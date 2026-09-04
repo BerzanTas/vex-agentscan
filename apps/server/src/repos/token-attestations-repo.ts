@@ -1,8 +1,9 @@
 import type pg from "pg";
-import type { AttestationVerifyStatus } from "@agentscan/core";
+import type { AttestationLaunchpad, AttestationVerifyStatus } from "@agentscan/core";
 
 export type AttestSubmission = {
   chainId: bigint;
+  launchpad: AttestationLaunchpad;
   tokenAddress: string;
   recoveredSigner: string;
   attestSignature: string;
@@ -66,11 +67,12 @@ async function pendingCountFor(client: pg.PoolClient, submitterIpHash?: string):
 async function insertRow(client: pg.PoolClient, submission: AttestSubmission): Promise<AttestationVerifyStatus> {
   const result = await client.query<{ verify_status: AttestationVerifyStatus }>(
     `INSERT INTO token_attestations
-       (chain_id, token_address, recovered_signer, attest_signature, tx_hash_hint, submitter_ip_hash)
-     VALUES ($1, $2, $3, $4, $5, $6)
+       (chain_id, launchpad, token_address, recovered_signer, attest_signature, tx_hash_hint, submitter_ip_hash)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING verify_status`,
     [
       submission.chainId.toString(),
+      submission.launchpad,
       submission.tokenAddress,
       submission.recoveredSigner,
       submission.attestSignature,
@@ -101,6 +103,7 @@ export async function submitAttestation(
 }
 
 export type AttestationCandidateRow = {
+  launchpad: AttestationLaunchpad;
   recoveredSigner: string;
   verifyStatus: AttestationVerifyStatus;
   revokedAt: Date | null;
@@ -124,6 +127,7 @@ export async function attestationCandidatesFor(
   maxCandidates: number,
 ): Promise<AttestationCandidateRow[]> {
   const result = await pool.query<{
+    launchpad: AttestationLaunchpad;
     recovered_signer: string;
     verify_status: AttestationVerifyStatus;
     revoked_at: Date | null;
@@ -132,7 +136,7 @@ export async function attestationCandidatesFor(
     derived_tx_hash: string | null;
     attest_signature: string;
   }>(
-    `SELECT recovered_signer, verify_status, revoked_at, first_seen_at, verified_at, derived_tx_hash, attest_signature
+    `SELECT launchpad, recovered_signer, verify_status, revoked_at, first_seen_at, verified_at, derived_tx_hash, attest_signature
      FROM token_attestations
      WHERE chain_id = $1 AND token_address = $2
      ORDER BY ${DISPLAY_STATUS_RANK_SQL} ASC, first_seen_at ASC
@@ -140,6 +144,7 @@ export async function attestationCandidatesFor(
     [chainId.toString(), tokenAddress, maxCandidates],
   );
   return result.rows.map((row) => ({
+    launchpad: row.launchpad,
     recoveredSigner: row.recovered_signer,
     verifyStatus: row.verify_status,
     revokedAt: row.revoked_at,

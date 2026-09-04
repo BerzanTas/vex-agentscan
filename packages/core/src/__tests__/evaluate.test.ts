@@ -26,6 +26,10 @@ const inputFixture = (overrides: Partial<VerificationInput> = {}): VerificationI
   executedOutRaw: "2000000",
   tokenInAddress: "0xaa11",
   tokenOutAddress: "0xbb22",
+  executedIn2Raw: null,
+  executedOut2Raw: null,
+  tokenIn2Address: null,
+  tokenOut2Address: null,
   tier: "full",
   timeToleranceMin: 10,
   amountTolerancePct: 0.5,
@@ -192,6 +196,10 @@ const morphoDepositInput = (overrides: Partial<VerificationInput> = {}): Verific
   executedOutRaw: "192836490590443813",
   tokenInAddress: MORPHO_USDC,
   tokenOutAddress: MORPHO_VAULT_SHARE,
+  executedIn2Raw: null,
+  executedOut2Raw: null,
+  tokenIn2Address: null,
+  tokenOut2Address: null,
   tier: "full",
   timeToleranceMin: 10,
   amountTolerancePct: 0.5,
@@ -440,5 +448,94 @@ describe("telling a receipt that proves absence from one the reader could not re
       result: "unverifiable",
       reason: "no_transfers_decoded",
     });
+  });
+});
+
+/**
+ * THE SECOND LEG. A Pendle split mints PT and YT in one transaction, and a launchpad creator-fee or
+ * holder-reward claim pays the launched token AND the asset it was paired against. Before this the
+ * full verifier read only the first leg, so the second amount reached the public page carrying a
+ * `verified_full` badge that had never been compared against anything.
+ */
+describe("evaluateVerification over a two-asset settlement", () => {
+  const splitReceipt = (overrides: Partial<ReceiptView> = {}): ReceiptView =>
+    receiptFixture({
+      erc20Transfers: [
+        { token: "0xsy00", from: "0x1111", to: "0x2222", amountRaw: "1000000" },
+        { token: "0xpt11", from: "0x2222", to: "0x1111", amountRaw: "2000000" },
+        { token: "0xyt22", from: "0x2222", to: "0x1111", amountRaw: "3000000" },
+      ],
+      ...overrides,
+    });
+
+  const splitInput = (overrides: Partial<VerificationInput> = {}): VerificationInput =>
+    inputFixture({
+      tokenInAddress: "0xsy00",
+      executedInRaw: "1000000",
+      tokenOutAddress: "0xpt11",
+      executedOutRaw: "2000000",
+      tokenOut2Address: "0xyt22",
+      executedOut2Raw: "3000000",
+      ...overrides,
+    });
+
+  it("verifies full when both payout legs match the receipt", () => {
+    expect(evaluateVerification(splitReceipt(), splitInput())).toEqual({
+      result: "verified_full",
+      blockTimestamp,
+    });
+  });
+
+  // The regression this exists for: a wrong second amount used to pass unexamined.
+  it("strikes amount_mismatch when only the SECOND leg disagrees with the receipt", () => {
+    expect(evaluateVerification(splitReceipt(), splitInput({ executedOut2Raw: "9000000" }))).toEqual({
+      result: "strike",
+      reason: "amount_mismatch",
+    });
+  });
+
+  it("strikes amount_mismatch when the second leg names a token the receipt never moved", () => {
+    expect(evaluateVerification(splitReceipt(), splitInput({ tokenOut2Address: "0xzz99" }))).toEqual({
+      result: "strike",
+      reason: "amount_mismatch",
+    });
+  });
+
+  it("judges a second INPUT leg the same way, for the roles that spend two assets", () => {
+    const mergeReceipt = receiptFixture({
+      erc20Transfers: [
+        { token: "0xpt11", from: "0x1111", to: "0x2222", amountRaw: "2000000" },
+        { token: "0xyt22", from: "0x1111", to: "0x2222", amountRaw: "3000000" },
+        { token: "0xsy00", from: "0x2222", to: "0x1111", amountRaw: "1000000" },
+      ],
+    });
+    const mergeInput = inputFixture({
+      tokenInAddress: "0xpt11",
+      executedInRaw: "2000000",
+      tokenIn2Address: "0xyt22",
+      executedIn2Raw: "3000000",
+      tokenOutAddress: "0xsy00",
+      executedOutRaw: "1000000",
+    });
+
+    expect(evaluateVerification(mergeReceipt, mergeInput)).toMatchObject({ result: "verified_full" });
+    expect(
+      evaluateVerification(mergeReceipt, { ...mergeInput, executedIn2Raw: "9000000" }),
+    ).toEqual({ result: "strike", reason: "amount_mismatch" });
+  });
+
+  // A declared leg that is absent is judged as "nothing to disprove", exactly as a null first leg
+  // always has been: the ordinary single-leg swap must not become unprovable now.
+  it("leaves an ordinary one-leg swap verified full, with no second leg declared", () => {
+    expect(evaluateVerification(receiptFixture(), inputFixture())).toEqual({
+      result: "verified_full",
+      blockTimestamp,
+    });
+  });
+
+  it("skips the second leg entirely at basic tier, as it does the first", () => {
+    expect(
+      evaluateVerification(splitReceipt({ erc20Transfers: [] }), splitInput({ tier: "basic" })),
+    ).toEqual({ result: "verified_basic", blockTimestamp });
   });
 });

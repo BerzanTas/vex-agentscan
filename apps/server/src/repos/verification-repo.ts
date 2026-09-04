@@ -1,4 +1,14 @@
 import type pg from "pg";
+import { logicalRowIn } from "@agentscan/core";
+
+/**
+ * A Vex fee leg is verified like any other row, but it is not an entry of this site: it is folded
+ * under the action it charges for everywhere else, so counting it here would make the verification
+ * summary disagree with every count beside it. The complement is deliberately WIDE - both bridge
+ * legs and both Pendle legs are real rows and stay counted; only the fee leg goes.
+ */
+const LOGICAL_ROW = logicalRowIn("event_role");
+const LOGICAL_ROW_A = logicalRowIn("a.event_role");
 
 export type LatencySecondsRead = { median: number | null; p90: number | null };
 
@@ -23,12 +33,14 @@ const VERIFICATION_SUMMARY = `
            extract(epoch FROM verified_at - client_confirmed_at)::double precision AS latency_seconds
     FROM activities
     WHERE verification_state IN ('verified_full','verified_basic')
+      AND ${LOGICAL_ROW}
   ),
   awaiting AS (
     SELECT COUNT(*)::int AS queued
     FROM verification_jobs j
     JOIN activities a ON a.id = j.activity_id
     WHERE a.verification_state IN ('none','queued')
+      AND ${LOGICAL_ROW_A}
   )
   SELECT
     COUNT(*) FILTER (WHERE verification_state = 'verified_full')::int AS verified_full,

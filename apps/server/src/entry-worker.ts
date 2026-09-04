@@ -33,7 +33,7 @@ startAttestationVerificationLoop({
   now: () => new Date(),
   resolveChain,
   chainReaderFor: (entry, context) => selectChainReader(entry, config, context),
-  chainRegistry: buildAttestationChainRegistry(config.attestFactoryAddressesByChainId),
+  chainRegistry: buildAttestationChainRegistry(config.attestAllowlistOverrides),
   logger,
 });
 startPricingLoop({

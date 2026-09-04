@@ -41,6 +41,12 @@ export {
   capitalDeployingRolesIn,
   deploysCapitalRole,
 } from "./capital-deploying-roles.js";
+export {
+  VEX_FEE_LEG_ROLES,
+  isVexFeeLegRole,
+  logicalRowIn,
+  vexFeeLegRolesIn,
+} from "./vex-fee-leg-roles.js";
 export { backoffDelayMs, nextBackoff } from "./backoff.js";
 export { generatePublicId } from "./public-id.js";
 export type { PriceFeed, PricePoint, PriceQuery } from "./pricing/price-feed.js";
@@ -72,9 +78,15 @@ export {
 } from "./chain-registry/catalog.js";
 export {
   ATTESTATION_CHAIN_IDS,
+  ATTESTATION_PROOF_MODES,
+  allowlistFor,
+  attestationLaunchpadSupported,
   buildAttestationChainRegistry,
   type AttestationChainEntry,
   type AttestationChainRegistry,
+  type AttestationLaunchpad,
+  type AttestationProofMode,
+  type LaunchpadAddressKey,
 } from "./chain-registry/attestation-chain-registry.js";
 export type {
   AgentActivity,

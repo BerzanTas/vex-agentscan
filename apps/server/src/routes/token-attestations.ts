@@ -1,5 +1,6 @@
 import { attestRequestSchema, canonicalAttestMessage } from "@agentscan/contract";
 import {
+  attestationLaunchpadSupported,
   attestationSignalsFor,
   bestAttestationCandidate,
   buildAttestationChainRegistry,
@@ -40,6 +41,7 @@ function attestationDto(chainId: bigint, tokenAddress: string, best: Attestation
   return {
     chainId: Number(chainId),
     tokenAddress,
+    launchpad: best.launchpad,
     status,
     signals: attestationSignalsFor(status),
     recommended: status === "verified",
@@ -57,7 +59,7 @@ export const tokenAttestationsRoutes: FastifyPluginAsync<Deps> = async (app, dep
     deps.config.ATTEST_RATE_LIMIT_PER_IP,
     deps.config.ATTEST_RATE_WINDOW_SEC,
   );
-  const chainRegistry = buildAttestationChainRegistry(deps.config.attestFactoryAddressesByChainId);
+  const chainRegistry = buildAttestationChainRegistry(deps.config.attestAllowlistOverrides);
 
   app.post("/v1/tokens/attest", async (request, reply) => {
     const rateDecision = await attestLimiter.allow(
@@ -70,8 +72,20 @@ export const tokenAttestationsRoutes: FastifyPluginAsync<Deps> = async (app, dep
     if (!parsed.success) {
       return sendError(reply, 400, "validation_failed", "attest body failed validation");
     }
-    if (!chainRegistry.has(parsed.data.chainId)) {
-      return sendError(reply, 400, "chain_unsupported", "chain is not in the attestation registry");
+    // The pair, never the chain alone: chain 4663 hosts three launchpads and Base hosts one, so a
+    // chain that is in the registry can still be the wrong place to claim a given launchpad.
+    if (
+      !attestationLaunchpadSupported(chainRegistry, {
+        chainId: parsed.data.chainId,
+        launchpad: parsed.data.launchpad,
+      })
+    ) {
+      return sendError(
+        reply,
+        400,
+        "chain_unsupported",
+        "chain and launchpad are not in the attestation registry",
+      );
     }
     const tokenAddress = parsed.data.tokenAddress.toLowerCase();
     const message = canonicalAttestMessage(parsed.data.chainId, tokenAddress);
@@ -87,6 +101,7 @@ export const tokenAttestationsRoutes: FastifyPluginAsync<Deps> = async (app, dep
         client,
         {
           chainId: parsed.data.chainId,
+          launchpad: parsed.data.launchpad,
           tokenAddress,
           recoveredSigner,
           attestSignature: parsed.data.attestSignature,

@@ -1,5 +1,6 @@
-import type { ActivityRowDto } from "../lib/api";
+import type { ActivityRowDto, VexFeeDto } from "../lib/api";
 import { formatAge, formatRawAmount, formatRawAmountDisplay, formatUsdAmount } from "../lib/format";
+import { vexFeeAmountLabel } from "../lib/vex-fee-line";
 import { legLabel } from "../lib/leg-label";
 import { ChainBadge } from "./ChainBadge";
 import { EmptyPanel } from "./EmptyPanel";
@@ -33,9 +34,20 @@ function ChainCell({ row }: { row: ActivityRowDto }) {
   return <ChainBadge slug={row.chainSlug} />;
 }
 
+// The Vex fee settles as a transaction of its own, but it is part of this action - so it reads as a
+// secondary line under the amount, never as a row of its own. A pending or failed attempt says so
+// instead of showing an amount: only a confirmed fee is money that moved.
+function VexFeeLine({ fee }: { fee: VexFeeDto }) {
+  return <span className="block text-xs text-text-muted">Vex fee {vexFeeAmountLabel(fee)}</span>;
+}
+
 function AmountCell({ row }: { row: ActivityRowDto }) {
   if (row.amountInRaw === null || row.tokenInDecimals === null) {
-    return <span className="text-text-muted">—</span>;
+    return (
+      <span className="text-text-muted">
+        —{row.vexFee !== null && <VexFeeLine fee={row.vexFee} />}
+      </span>
+    );
   }
   return (
     <span className="font-mono">
@@ -46,6 +58,7 @@ function AmountCell({ row }: { row: ActivityRowDto }) {
       {row.usdInEst !== null && (
         <span className="block text-xs text-text-muted">${formatUsdAmount(row.usdInEst)} est.</span>
       )}
+      {row.vexFee !== null && <VexFeeLine fee={row.vexFee} />}
     </span>
   );
 }

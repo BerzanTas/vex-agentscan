@@ -1,5 +1,11 @@
 import type pg from "pg";
-import { deploysCapitalRole, isLaunchShaped, type Verdict, type VerificationKind } from "@agentscan/core";
+import {
+  deploysCapitalRole,
+  isLaunchShaped,
+  isVexFeeLegRole,
+  type Verdict,
+  type VerificationKind,
+} from "@agentscan/core";
 import type { Config } from "../config.js";
 import { activityAggregateDaySql } from "./activity-time-anchor.js";
 
@@ -17,11 +23,16 @@ export type ClaimedJob = {
   chainFamily: "eip155" | "solana";
   chainId: bigint;
   kind: VerificationKind;
+  eventRole: string;
   clientConfirmedAt: Date | null;
   executedInRaw: string | null;
   executedOutRaw: string | null;
   tokenInAddress: string | null;
   tokenOutAddress: string | null;
+  executedIn2Raw: string | null;
+  executedOut2Raw: string | null;
+  tokenIn2Address: string | null;
+  tokenOut2Address: string | null;
 };
 
 type ClaimedJobRow = {
@@ -34,11 +45,16 @@ type ClaimedJobRow = {
   chain_family: "eip155" | "solana";
   chain_id: string;
   kind: VerificationKind;
+  event_role: string;
   client_confirmed_at: Date | null;
   executed_in_raw: string | null;
   executed_out_raw: string | null;
   token_in_address: string | null;
   token_out_address: string | null;
+  executed_in2_raw: string | null;
+  executed_out2_raw: string | null;
+  token_in2_address: string | null;
+  token_out2_address: string | null;
 };
 
 const ACTIVITY_CLAIMS_AN_INCLUSION = "a.status <> 'superseded_unproven'";
@@ -62,9 +78,11 @@ export async function claimDueJobs(
          FOR UPDATE SKIP LOCKED
        )
      RETURNING vj.activity_id, vj.attempts, vj.first_attempt_at, a.public_id,
-               a.tx_hash, a.protocol, a.chain_family, a.chain_id, a.kind,
+               a.tx_hash, a.protocol, a.chain_family, a.chain_id, a.kind, a.event_role,
                a.client_confirmed_at, a.executed_in_raw, a.executed_out_raw,
-               a.token_in_address, a.token_out_address`,
+               a.token_in_address, a.token_out_address,
+               a.executed_in2_raw, a.executed_out2_raw,
+               a.token_in2_address, a.token_out2_address`,
     [limit, leaseSec],
   );
   return result.rows.map((row) => ({
@@ -77,11 +95,16 @@ export async function claimDueJobs(
     chainFamily: row.chain_family,
     chainId: BigInt(row.chain_id),
     kind: row.kind,
+    eventRole: row.event_role,
     clientConfirmedAt: row.client_confirmed_at,
     executedInRaw: row.executed_in_raw,
     executedOutRaw: row.executed_out_raw,
     tokenInAddress: row.token_in_address,
     tokenOutAddress: row.token_out_address,
+    executedIn2Raw: row.executed_in2_raw,
+    executedOut2Raw: row.executed_out2_raw,
+    tokenIn2Address: row.token_in2_address,
+    tokenOut2Address: row.token_out2_address,
   }));
 }
 
@@ -183,17 +206,35 @@ async function recordVerifiedSuccess(client: SqlExecutor, activity: FinalizedAct
   );
   await client.query(
     `INSERT INTO daily_aggregates (day, protocol, kind, volume_usd, tx_count)
-     VALUES ($1::date, $2, $3, $4::numeric, 1)
+     VALUES ($1::date, $2, $3, $4::numeric, $5::int)
      ON CONFLICT (day, protocol, kind)
      DO UPDATE SET volume_usd = daily_aggregates.volume_usd + EXCLUDED.volume_usd,
-                   tx_count = daily_aggregates.tx_count + 1`,
-    [activity.aggregate_day, activity.protocol, activity.kind, volumeContribution(activity)],
+                   tx_count = daily_aggregates.tx_count + EXCLUDED.tx_count`,
+    [
+      activity.aggregate_day,
+      activity.protocol,
+      activity.kind,
+      volumeContribution(activity),
+      txCountContribution(activity),
+    ],
   );
 }
 
 function volumeContribution(activity: Pick<FinalizedActivityRow, "event_role" | "usd_in_est">): string {
   if (!deploysCapitalRole(activity.event_role)) return "0";
   return activity.usd_in_est ?? "0";
+}
+
+/**
+ * The Vex fee is a separate transaction but part of the ACTION it charges for, so it adds nothing
+ * to the transaction count - the same fold the read model applies to the feed and the tx page.
+ *
+ * This counter is the ONLY owner of `total_tx`, `daily_tx` and the per-protocol count: those read
+ * `daily_aggregates`, which is written incrementally here and never recomputed from `activities`.
+ * A fee leg counted before this change therefore stays counted; only new verifications fold.
+ */
+function txCountContribution(activity: Pick<FinalizedActivityRow, "event_role">): number {
+  return isVexFeeLegRole(activity.event_role) ? 0 : 1;
 }
 
 async function recordStrike(
