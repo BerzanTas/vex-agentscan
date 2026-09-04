@@ -17,7 +17,6 @@
  */
 
 import { fastify, type FastifyBaseLogger, type FastifyInstance } from "fastify";
-import multipart from "@fastify/multipart";
 import type pg from "pg";
 import type { AssetByteStore } from "./byte-store.js";
 import type { AssetsConfig } from "./config.js";
@@ -34,22 +33,55 @@ export type AssetsDeps = {
   loggerInstance?: FastifyBaseLogger;
 };
 
+/**
+ * THE BODY IS THE IMAGE. Every parser this service has yields a Buffer and
+ * nothing else: there is no JSON route, no form and no multipart envelope, so
+ * the defaults are removed rather than left as an unused surface on a trust
+ * boundary. Anything outside this list is answered 415 by Fastify before a
+ * handler runs.
+ *
+ * THE DECLARED TYPE SELECTS THE PARSER AND NOTHING ELSE. `image/png` here
+ * means "these bytes arrive raw", never "these bytes are a PNG": the stored
+ * type is decided by `validateImageBytes` from the magic bytes. The image
+ * types are accepted alongside `application/octet-stream` only because an
+ * HTTP client that knows what it is holding will say so.
+ */
+const RAW_IMAGE_CONTENT_TYPES = [
+  "application/octet-stream",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+];
+
+function registerImageBodyParsers(app: FastifyInstance): void {
+  app.removeAllContentTypeParsers();
+  app.addContentTypeParser(
+    RAW_IMAGE_CONTENT_TYPES,
+    { parseAs: "buffer" },
+    (_request, body, done) => {
+      done(null, body);
+    },
+  );
+}
+
 export async function buildAssetsApp(deps: AssetsDeps): Promise<FastifyInstance> {
   const app = fastify({
     ...(deps.loggerInstance
       ? { loggerInstance: deps.loggerInstance }
       : { logger: { redact: { paths: ["req.headers.authorization"], censor: "[redacted]" } } }),
     trustProxy: deps.config.TRUST_PROXY ?? false,
+    // THE CAP IS THE SERVER'S, not a check after the fact. Fastify stops
+    // reading at `bodyLimit` and raises FST_ERR_CTP_BODY_TOO_LARGE, so an
+    // oversized upload costs the cap and never the payload. `PUT /v1/assets`
+    // is the only route with a body, so one global limit is the whole policy.
+    bodyLimit: deps.config.ASSETS_MAX_UPLOAD_BYTES,
   });
   await app.register(assetSecurityHeaders);
   await app.register(errorEnvelope, {
     poolTimeoutRetryAfterSec: deps.config.POOL_TIMEOUT_RETRY_AFTER_SEC,
   });
-  await app.register(multipart, {
-    // One file, capped. Busboy stops reading past the cap rather than buffering
-    // it first, so an oversized upload costs the cap and not the payload.
-    limits: { fileSize: deps.config.ASSETS_MAX_UPLOAD_BYTES, files: 1 },
-  });
+  registerImageBodyParsers(app);
   for (const plugin of [healthRoutes, serveRoutes, uploadRoutes]) {
     await app.register(plugin, deps);
   }

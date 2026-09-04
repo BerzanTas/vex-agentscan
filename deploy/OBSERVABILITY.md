@@ -416,13 +416,22 @@ feed, not the data.
 
 - `"asset upload accepted"` at info, with
   `{agentHash, cid, bytes, type, outcome}` where `outcome` is `stored` (this
-  call published new bytes) or `idempotent` (the cid already existed and the
-  caller was answered from the existing row);
+  call published new bytes), `claimed` (another install had already published
+  exactly these bytes and this caller became a publisher of them too) or
+  `idempotent` (this caller already published them and was answered from the
+  existing row);
 - `"asset upload refused"` at warn, with `{agentHash, cid, bytes, outcome}`
   where `outcome` is the refusal code the caller received
   (`quota_exceeded_count`, `quota_exceeded_bytes`, `asset_deleted`);
 - `"asset delete"` at info, with `{agentHash, cid, outcome}` where `outcome`
-  is `deleted` or `already_deleted`.
+  is `claim_withdrawn` (other installs still publish these bytes, so the URL
+  keeps serving), `deleted` (the last claim went, so the row is tombstoned and
+  the file unlinked) or `already_deleted`.
+
+A run of `claimed` for one cid is normal and means several installs launched
+tokens with the same picture; the bytes exist once and each install is charged
+quota for them, which is what keeps the sum of the quotas an honest bound on
+the volume.
 
 `cid` is the sha256 of the bytes and therefore the whole public identity of
 the asset: it is the last path segment of the URL a launched token carries.
@@ -431,8 +440,8 @@ the asset: it is the last path segment of the URL a launched token carries.
 The difference is intentional. An ingest line is an aggregate over a private
 activity stream, so naming the agent would add identity to a count that does
 not need it. An asset line records a PUBLIC publication whose publisher is
-already stored in `launch_assets.agent_hash` for exactly one reason: to decide
-who may delete it. An operator answering "who published this image" or "which
+already stored in `launch_asset_publishers` for exactly one reason: to decide
+who may withdraw it. An operator answering "who published this image" or "which
 install is filling the volume" has no other handle, and the field adds nothing
 to the log that the row does not already hold. No token, no filename and no
 image bytes are ever logged.
@@ -454,8 +463,8 @@ ContainerAppConsoleLogs_CL
 `quota_exceeded_*` is either a stuck client retrying or an install that has
 outgrown the default bound; the bounds are `ASSETS_MAX_PER_INSTALL` and
 `ASSETS_MAX_BYTES_PER_INSTALL` and can be raised per deployment. Repeated
-`asset_deleted` refusals from installs that never published the cid mean
-someone is trying to resurrect a withdrawn image, which is a refusal working
+`asset_deleted` refusals mean someone is trying to resurrect an image its
+publishers withdrew, which is a refusal working
 as designed and worth watching only if it is sustained.
 
 **The failure worth alerting on** is `"asset row has no bytes on the volume"`

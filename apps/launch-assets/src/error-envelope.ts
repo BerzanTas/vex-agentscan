@@ -41,11 +41,20 @@ export const errorEnvelope: FastifyPluginAsync<ErrorEnvelopeOptions> = async (ap
   });
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
-    if (error.code === "FST_ERR_CTP_BODY_TOO_LARGE" || error.code === "FST_REQ_FILE_TOO_LARGE") {
+    // Fastify refuses an oversized body while reading it, before any handler
+    // sees a byte past the cap. It is the enforcement; the size check inside
+    // `validateImageBytes` is the second reading of the same rule.
+    if (error.code === "FST_ERR_CTP_BODY_TOO_LARGE") {
       return sendError(request, reply, 413, "payload_too_large", "the upload is larger than the cap");
     }
-    if (error.code === "FST_INVALID_MULTIPART_CONTENT_TYPE") {
-      return sendError(request, reply, 415, "unsupported_media_type", "expected a multipart/form-data body");
+    if (error.code === "FST_ERR_CTP_INVALID_MEDIA_TYPE") {
+      return sendError(
+        request,
+        reply,
+        415,
+        "unsupported_media_type",
+        "send the image bytes as the request body, typed application/octet-stream",
+      );
     }
     if (error.message === POOL_ACQUIRE_TIMEOUT_MESSAGE) {
       request.log.error(error);

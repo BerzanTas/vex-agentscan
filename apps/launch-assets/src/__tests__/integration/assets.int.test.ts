@@ -4,16 +4,24 @@
  * What only this level can prove, and therefore what it is here for:
  *  - the bytes a reader receives HASH BACK to the cid in the URL. That is the
  *    on-chain promise, and no unit test of the digest can establish it: it has
- *    to survive multipart parsing, a file, a stream and the response;
+ *    to survive the request body, a file, a stream and the response;
  *  - the install credential is the ingest credential - the same `agents` row,
  *    with no second table and no second token;
  *  - reporting status does NOT gate this host (coordinator decision I1);
  *  - a deleted cid is 404 forever and cannot be republished BY ANYONE, which
  *    is a rule about two installs and one durable row;
+ *  - OWNERSHIP IS A SET: two installs publishing identical bytes hold one
+ *    asset and two claims, each withdraws only its own, and only the last
+ *    withdrawal tombstones the cid and unlinks the file. That is a rule about
+ *    two installs, two tables and a file, so nothing below this level can
+ *    prove it;
+ *  - two installs uploading identical bytes CONCURRENTLY still produce one
+ *    asset row and two claims, which is a claim about a lock and can only be
+ *    made against a real Postgres;
  *  - the quota refuses by the name of the axis it hit.
  */
 
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -23,7 +31,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildAssetsApp } from "../../app.js";
 import { AssetByteStore } from "../../byte-store.js";
 import { loadAssetsConfig } from "../../config.js";
-import { assetRowFor } from "../../assets-repo.js";
+import { assetRowFor, CONTENT_LOCK_CLASS } from "../../assets-repo.js";
 import { gifFixture, jpegFixture, padTo, pngFixture } from "../image-fixtures.js";
 
 const PUBLIC_BASE = "https://assets.test.example";
@@ -34,30 +42,27 @@ const STRANGER_HASH = "b".repeat(64);
 const REVOKED_HASH = "c".repeat(64);
 const QUARANTINED_HASH = "d".repeat(64);
 const CRAMPED_HASH = "e".repeat(64);
+const CLAIMER_HASH = "f".repeat(64);
 
 const OWNER_TOKEN = "A".repeat(43);
 const STRANGER_TOKEN = "B".repeat(43);
 const REVOKED_TOKEN = "C".repeat(43);
 const QUARANTINED_TOKEN = "D".repeat(43);
 const CRAMPED_TOKEN = "E".repeat(43);
+const CLAIMER_TOKEN = "F".repeat(43);
 
 const sha256hex = (value: Uint8Array | string) =>
   createHash("sha256").update(value).digest("hex");
 
 const auth = (token: string) => ({ authorization: `Bearer ${token}` });
 
-function multipart(bytes: Uint8Array, fileName: string, declaredType: string, fieldName = "file") {
-  const boundary = `----vexassets${randomBytes(8).toString("hex")}`;
-  const head = Buffer.from(
-    `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="${fieldName}"; filename="${fileName}"\r\n` +
-      `Content-Type: ${declaredType}\r\n\r\n`,
+/** Every publisher row for a cid, oldest first. The ownership set, read raw. */
+async function publishersOf(cid: string): Promise<string[]> {
+  const result = await db.pool.query<{ agent_hash: string }>(
+    "SELECT agent_hash FROM launch_asset_publishers WHERE cid = $1 ORDER BY created_at, agent_hash",
+    [cid],
   );
-  const tail = Buffer.from(`\r\n--${boundary}--\r\n`);
-  return {
-    payload: Buffer.concat([head, Buffer.from(bytes), tail]),
-    headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
-  };
+  return result.rows.map((row) => row.agent_hash);
 }
 
 let db: Awaited<ReturnType<typeof startTestDb>>;
@@ -65,22 +70,27 @@ let assetsDir: string;
 let app: FastifyInstance;
 let crampedApp: FastifyInstance;
 
+/**
+ * THE BODY IS THE IMAGE. `declaredType` defaults to the type the Vex engine
+ * sends - `application/octet-stream` - precisely because the host must not
+ * read it: the tests that care about the declared type pass one that is wrong
+ * on purpose.
+ */
 const upload = (
   instance: FastifyInstance,
   token: string | null,
   bytes: Uint8Array,
-  fileName = "art.png",
-  declaredType = "image/png",
-  fieldName = "file",
-) => {
-  const body = multipart(bytes, fileName, declaredType, fieldName);
-  return instance.inject({
+  declaredType = "application/octet-stream",
+) =>
+  instance.inject({
     method: "PUT",
     url: "/v1/assets",
-    payload: body.payload,
-    headers: { ...body.headers, ...(token ? auth(token) : {}) },
+    payload: Buffer.from(bytes),
+    headers: { "content-type": declaredType, ...(token ? auth(token) : {}) },
   });
-};
+
+const withdraw = (instance: FastifyInstance, token: string, cid: string) =>
+  instance.inject({ method: "DELETE", url: `/v1/assets/${cid}`, headers: auth(token) });
 
 beforeAll(async () => {
   db = await startTestDb();
@@ -91,6 +101,7 @@ beforeAll(async () => {
     [REVOKED_HASH, REVOKED_TOKEN, "revoked"],
     [QUARANTINED_HASH, QUARANTINED_TOKEN, "quarantined"],
     [CRAMPED_HASH, CRAMPED_TOKEN, "active"],
+    [CLAIMER_HASH, CLAIMER_TOKEN, "active"],
   ] as const) {
     await db.pool.query(
       `INSERT INTO agents (agent_hash, ingest_token_sha256, consent_version, accepted_at, status)
@@ -173,47 +184,56 @@ describe("PUT /v1/assets - what it stores", () => {
     });
   });
 
-  it("writes exactly one audit row, naming the install that published it", async () => {
+  it("writes one asset row and one claim, naming the install that published it", async () => {
     const bytes = pngFixture(31, 32);
     await upload(app, OWNER_TOKEN, bytes);
-    const row = await assetRowFor(db.pool, sha256hex(bytes));
+    const cid = sha256hex(bytes);
+    const row = await assetRowFor(db.pool, cid);
     expect(row).toMatchObject({
-      agentHash: OWNER_HASH,
+      // Audit only. Who may delete is decided by the claim below, never by this.
+      firstPublisherHash: OWNER_HASH,
       contentType: "image/png",
       byteLength: bytes.byteLength,
       width: 31,
       height: 32,
       deletedAt: null,
     });
+    expect(await publishersOf(cid)).toEqual([OWNER_HASH]);
   });
 
   it("decides the type from the bytes and ignores the declared content-type", async () => {
     const bytes = gifFixture(64, 48);
-    const response = await upload(app, OWNER_TOKEN, bytes, "art.png", "image/png");
+    const response = await upload(app, OWNER_TOKEN, bytes, "image/png");
     expect(response.json()).toMatchObject({
       type: "image/gif",
       url: `${PUBLIC_BASE}/a/${sha256hex(bytes)}.gif`,
     });
   });
 
-  it("is idempotent for the same install: identical bytes are one asset", async () => {
+  it("is idempotent for the same install: identical bytes are one asset and one claim", async () => {
     const bytes = jpegFixture(120, 80);
     const first = await upload(app, OWNER_TOKEN, bytes);
     const second = await upload(app, OWNER_TOKEN, bytes);
     expect(first.statusCode).toBe(201);
     expect(second.statusCode).toBe(200);
     expect(second.json().cid).toBe(first.json().cid);
+    expect(await publishersOf(first.json().cid)).toEqual([OWNER_HASH]);
   });
 
-  it("answers a second install the same address, because a cid names bytes and not an owner", async () => {
+  it("answers a second install the same address and records it as a publisher too", async () => {
     const bytes = jpegFixture(121, 81);
     const owner = await upload(app, OWNER_TOKEN, bytes);
     const stranger = await upload(app, STRANGER_TOKEN, bytes);
+    const { cid } = owner.json();
+    expect(owner.statusCode).toBe(201);
     expect(stranger.statusCode).toBe(200);
-    expect(stranger.json().cid).toBe(owner.json().cid);
-    // Publication does not transfer ownership: the first publisher stays the
-    // only install that may delete it.
-    expect((await assetRowFor(db.pool, owner.json().cid))?.agentHash).toBe(OWNER_HASH);
+    expect(stranger.json()).toEqual(owner.json());
+    // One asset, two claims: a content-addressed store cannot hold a second
+    // copy, so the second uploader gets a claim of its own rather than a
+    // dependency on a stranger's willingness not to delete.
+    expect(await publishersOf(cid)).toEqual([OWNER_HASH, STRANGER_HASH]);
+    // The row's own hash records who introduced the bytes and decides nothing.
+    expect((await assetRowFor(db.pool, cid))?.firstPublisherHash).toBe(OWNER_HASH);
   });
 });
 
@@ -237,21 +257,47 @@ describe("PUT /v1/assets - what it refuses", () => {
     expect(response.json().error.code).toBe("unsupported_image");
   });
 
-  it("refuses a multipart part that is not named `file`", async () => {
-    const response = await upload(app, OWNER_TOKEN, pngFixture(10, 10), "art.png", "image/png", "image");
+  it("refuses an empty body by name rather than storing the hash of nothing", async () => {
+    const response = await app.inject({
+      method: "PUT",
+      url: "/v1/assets",
+      headers: { ...auth(OWNER_TOKEN), "content-type": "application/octet-stream" },
+      payload: Buffer.alloc(0),
+    });
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe("validation_failed");
   });
 
-  it("refuses a body that is not multipart at all", async () => {
+  it.each([
+    ["json", "application/json", JSON.stringify({ file: "nope" })],
+    ["a form", "multipart/form-data; boundary=x", "--x--"],
+  ])("refuses %s: this host parses image bytes and nothing else", async (_name, type, payload) => {
     const response = await app.inject({
       method: "PUT",
       url: "/v1/assets",
-      headers: { ...auth(OWNER_TOKEN), "content-type": "application/json" },
-      payload: JSON.stringify({ file: "nope" }),
+      headers: { ...auth(OWNER_TOKEN), "content-type": type },
+      payload,
     });
     expect(response.statusCode).toBe(415);
+    expect(response.json().error.code).toBe("unsupported_media_type");
   });
+
+  it.each([
+    ["application/octet-stream", 101],
+    ["image/png", 102],
+    ["image/jpeg", 103],
+    ["image/webp", 104],
+    ["image/gif", 105],
+  ] as const)(
+    "accepts the raw body declared as %s, because the declared type only picks the parser",
+    async (declaredType, height) => {
+      // Distinct bytes per case: identical bytes would be answered idempotently
+      // and would prove nothing about the parser under test.
+      const response = await upload(app, OWNER_TOKEN, pngFixture(17, height), declaredType);
+      expect(response.statusCode).toBe(201);
+      expect(response.json().type).toBe("image/png");
+    },
+  );
 
   it("refuses past the count quota, naming the axis", async () => {
     const first = await upload(crampedApp, CRAMPED_TOKEN, pngFixture(11, 12));
@@ -265,16 +311,12 @@ describe("PUT /v1/assets - what it refuses", () => {
     // The count limit is 1 and the install above already holds one live asset,
     // so free it first: the byte axis is what must speak here.
     const held = await db.pool.query<{ cid: string }>(
-      "SELECT cid FROM launch_assets WHERE agent_hash = $1 AND deleted_at IS NULL",
+      `SELECT p.cid FROM launch_asset_publishers p
+         JOIN launch_assets a ON a.cid = p.cid
+        WHERE p.agent_hash = $1 AND a.deleted_at IS NULL`,
       [CRAMPED_HASH],
     );
-    for (const row of held.rows) {
-      await crampedApp.inject({
-        method: "DELETE",
-        url: `/v1/assets/${row.cid}`,
-        headers: auth(CRAMPED_TOKEN),
-      });
-    }
+    for (const row of held.rows) await withdraw(crampedApp, CRAMPED_TOKEN, row.cid);
     const response = await upload(crampedApp, CRAMPED_TOKEN, padTo(pngFixture(15, 16), 400));
     expect(response.statusCode).toBe(429);
     expect(response.json().error.code).toBe("quota_exceeded_bytes");
@@ -347,15 +389,13 @@ describe("GET /a/<cid>.<ext> - the public read", () => {
 });
 
 describe("DELETE /v1/assets/<cid> - withdrawal is permanent", () => {
-  it("refuses a delete from an install that did not publish the asset", async () => {
+  it("refuses a delete from an install that does not publish the asset", async () => {
     const { cid } = (await upload(app, OWNER_TOKEN, pngFixture(41, 42))).json();
-    const response = await app.inject({
-      method: "DELETE",
-      url: `/v1/assets/${cid}`,
-      headers: auth(STRANGER_TOKEN),
-    });
+    const response = await withdraw(app, STRANGER_TOKEN, cid);
     expect(response.statusCode).toBe(403);
+    expect(response.json().error.code).toBe("forbidden");
     expect((await assetRowFor(db.pool, cid))?.deletedAt).toBeNull();
+    expect(await publishersOf(cid)).toEqual([OWNER_HASH]);
   });
 
   it("refuses an unauthenticated delete", async () => {
@@ -365,11 +405,7 @@ describe("DELETE /v1/assets/<cid> - withdrawal is permanent", () => {
   });
 
   it("answers 404 for a cid nobody published", async () => {
-    const response = await app.inject({
-      method: "DELETE",
-      url: `/v1/assets/${"f".repeat(64)}`,
-      headers: auth(OWNER_TOKEN),
-    });
+    const response = await withdraw(app, OWNER_TOKEN, "f".repeat(64));
     expect(response.statusCode).toBe(404);
   });
 
@@ -378,11 +414,7 @@ describe("DELETE /v1/assets/<cid> - withdrawal is permanent", () => {
     const { cid, url } = (await upload(app, OWNER_TOKEN, bytes)).json();
     const store = new AssetByteStore(assetsDir);
 
-    const deleted = await app.inject({
-      method: "DELETE",
-      url: `/v1/assets/${cid}`,
-      headers: auth(OWNER_TOKEN),
-    });
+    const deleted = await withdraw(app, OWNER_TOKEN, cid);
 
     expect(deleted.statusCode).toBe(200);
     expect(await store.read(cid)).toBeNull();
@@ -400,22 +432,113 @@ describe("DELETE /v1/assets/<cid> - withdrawal is permanent", () => {
 
   it("is idempotent for the owner and keeps the original withdrawal time", async () => {
     const { cid } = (await upload(app, OWNER_TOKEN, pngFixture(53, 54))).json();
-    const first = await app.inject({
-      method: "DELETE",
-      url: `/v1/assets/${cid}`,
-      headers: auth(OWNER_TOKEN),
-    });
+    const first = await withdraw(app, OWNER_TOKEN, cid);
     const deletedAt = (await assetRowFor(db.pool, cid))?.deletedAt;
-    const second = await app.inject({
-      method: "DELETE",
-      url: `/v1/assets/${cid}`,
-      headers: auth(OWNER_TOKEN),
-    });
+    const second = await withdraw(app, OWNER_TOKEN, cid);
     expect(first.statusCode).toBe(200);
     expect(second.statusCode).toBe(200);
     expect((await assetRowFor(db.pool, cid))?.deletedAt).toEqual(deletedAt);
   });
 });
+
+describe("shared ownership - one asset, a set of publishers", () => {
+  it("keeps the bytes served when a co-publisher withdraws, and tombstones only on the last", async () => {
+    const bytes = pngFixture(61, 62);
+    const { cid, url } = (await upload(app, OWNER_TOKEN, bytes)).json();
+    expect((await upload(app, STRANGER_TOKEN, bytes)).statusCode).toBe(200);
+    const store = new AssetByteStore(assetsDir);
+    const assetPath = new URL(url).pathname;
+
+    const strangerWithdrew = await withdraw(app, STRANGER_TOKEN, cid);
+
+    // The stranger is gone; the owner is still publishing these bytes, so the
+    // URL the owner may already have put on chain keeps working. A tombstone
+    // here would let any install revoke a stranger's launched image.
+    expect(strangerWithdrew.statusCode).toBe(200);
+    expect(await publishersOf(cid)).toEqual([OWNER_HASH]);
+    expect((await assetRowFor(db.pool, cid))?.deletedAt).toBeNull();
+    expect((await app.inject({ method: "GET", url: assetPath })).statusCode).toBe(200);
+    expect(await store.read(cid)).not.toBeNull();
+
+    // A withdrawn claim is not authority any more: the stranger is now a
+    // stranger, exactly like an install that never published.
+    expect((await withdraw(app, STRANGER_TOKEN, cid)).statusCode).toBe(403);
+
+    const ownerWithdrew = await withdraw(app, OWNER_TOKEN, cid);
+
+    expect(ownerWithdrew.statusCode).toBe(200);
+    expect(await publishersOf(cid)).toEqual([]);
+    expect((await assetRowFor(db.pool, cid))?.deletedAt).toBeInstanceOf(Date);
+    expect(await store.read(cid)).toBeNull();
+    expect((await app.inject({ method: "GET", url: assetPath })).statusCode).toBe(404);
+    // The tombstone binds everyone, including the install that never withdrew.
+    expect((await upload(app, STRANGER_TOKEN, bytes)).statusCode).toBe(410);
+  });
+
+  it("charges the claiming install for bytes it did not upload", async () => {
+    // A claim is what keeps those bytes on the volume for that install too, so
+    // it is quota-bearing: otherwise one uploaded asset plus a thousand claims
+    // would be a free unbounded store.
+    const shared = pngFixture(63, 64);
+    expect((await upload(app, OWNER_TOKEN, shared)).statusCode).toBe(201);
+    expect((await upload(crampedApp, CLAIMER_TOKEN, pngFixture(65, 66))).statusCode).toBe(201);
+
+    const response = await upload(crampedApp, CLAIMER_TOKEN, shared);
+
+    expect(response.statusCode).toBe(429);
+    expect(response.json().error.code).toBe("quota_exceeded_count");
+    expect(await publishersOf(sha256hex(shared))).toEqual([OWNER_HASH]);
+  });
+
+  it("makes one asset and two claims out of two concurrent uploads of identical bytes", async () => {
+    // THE RACE, held open on purpose. Both requests are parked on this cid's
+    // advisory lock - taken here from a third session - so they are provably
+    // in flight at the same time before either may read the asset row. Without
+    // the cid lock in `publishAsset` both would read "no row" and the second
+    // insert would be a unique violation, i.e. a 500 on an ordinary upload.
+    const bytes = pngFixture(71, 72);
+    const cid = sha256hex(bytes);
+    const gate = await db.pool.connect();
+    let responses: [number, number];
+    try {
+      const key = (await gate.query<{ key: number }>("SELECT hashtext($1) AS key", [cid])).rows[0]!
+        .key;
+      await gate.query("SELECT pg_advisory_lock($1, $2)", [CONTENT_LOCK_CLASS, key]);
+      const inFlight = Promise.all([
+        upload(app, OWNER_TOKEN, bytes),
+        upload(app, STRANGER_TOKEN, bytes),
+      ]);
+      await waitForBlockedUploads(2);
+      await gate.query("SELECT pg_advisory_unlock($1, $2)", [CONTENT_LOCK_CLASS, key]);
+      responses = (await inFlight).map((response) => response.statusCode) as [number, number];
+    } finally {
+      gate.release();
+    }
+
+    // One of them stored the bytes and one claimed them; which won the lock is
+    // not this test's business, only that the two outcomes are these two.
+    expect(responses.sort()).toEqual([200, 201]);
+    expect((await publishersOf(cid)).sort()).toEqual([OWNER_HASH, STRANGER_HASH].sort());
+    expect((await assetRowFor(db.pool, cid))?.deletedAt).toBeNull();
+  });
+});
+
+/**
+ * Waits until exactly `expected` sessions are queued on an advisory lock. This
+ * database is this file's alone, so an ungranted advisory lock is one of our
+ * uploads and nothing else. Polling a real condition, never a sleep: the point
+ * is that both requests reached the lock, not that some interval elapsed.
+ */
+async function waitForBlockedUploads(expected: number): Promise<void> {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const blocked = await db.pool.query<{ waiting: number }>(
+      "SELECT count(*)::int AS waiting FROM pg_locks WHERE locktype = 'advisory' AND NOT granted",
+    );
+    if (blocked.rows[0]!.waiting >= expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`${expected} uploads never queued on the content lock`);
+}
 
 describe("GET /healthz", () => {
   it("reports the database and the volume it cannot serve without", async () => {

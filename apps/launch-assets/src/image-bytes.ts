@@ -6,7 +6,7 @@
  * Adapted from the Vex desktop locker's validator
  * (`vex-app/src/main/images/image-validation.ts`), whose rules we keep:
  *
- *  - the format is decided by MAGIC BYTES only. The multipart part's declared
+ *  - the format is decided by MAGIC BYTES only. The request's declared
  *    `content-type` is never read, because it is written by the uploader;
  *  - dimensions come out of the HEADER. Nothing is decoded or transcoded: no
  *    image codec is installed in this service, so "convert it for them" is not

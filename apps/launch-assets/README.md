@@ -26,7 +26,7 @@ this before an upload happens; nothing is uploaded from a user's image locker
 without it.
 
 What is NOT public: nothing else. This service stores the bytes, their size,
-type and dimensions, the `agent_hash` of the publishing install, and two
+type and dimensions, the `agent_hash` of every install publishing them, and two
 timestamps. It never receives a filename, a wallet, a token, an activity or
 anything from the reporting stream.
 
@@ -40,9 +40,40 @@ bound that protects this host is the per-install quota, not a consent flag.
 
 ## The contract
 
+This section is the whole contract a client needs; the prose under each entry
+explains why it is shaped that way and adds nothing to it.
+
 Every error response is `{"error": {"code", "message", "correlationId"}}`, and
 the same correlation id is on the `x-correlation-id` response header and in
 every log line for the request.
+
+| method | path | request headers | body | success |
+|---|---|---|---|---|
+| `PUT` | `/v1/assets` | `authorization: Bearer <ingestToken>`, `content-type: application/octet-stream` (or `image/png`, `image/jpeg`, `image/webp`, `image/gif`) | the image bytes, raw | `201` new asset / `200` already published, both `{cid, url, bytes, type, width, height}` |
+| `GET` | `/a/<cid>.<ext>` | none; optional `if-none-match: "<cid>"` | none | `200` the bytes / `304` unchanged |
+| `HEAD` | `/a/<cid>.<ext>` | none | none | `200`, headers only |
+| `DELETE` | `/v1/assets/<cid>` | `authorization: Bearer <ingestToken>` | none | `200 {cid, status: "deleted"}` |
+| `GET` | `/healthz` | none | none | `200 {db, store}` |
+
+Every error this host can answer, with the status it carries:
+
+| status | code | route | when |
+|---|---|---|---|
+| 400 | `validation_failed` | `PUT` | the body is empty |
+| 400 | `validation_failed` | `DELETE` | the path segment is not 64 lowercase hex |
+| 400 | `unsupported_image` | `PUT` | the bytes are not one of the four formats, or the header carries no readable or plausible dimensions, or they are too few bytes to be an image |
+| 401 | `unauthorized` | `PUT`, `DELETE` | missing, malformed or unknown bearer token |
+| 403 | `forbidden` | `DELETE` | the caller does not publish this asset |
+| 404 | `asset_not_found` | `GET`, `HEAD` | the name is not `<64 hex>.<ext>`, no row exists, the asset is tombstoned, or the extension is not the canonical one for the stored type |
+| 404 | `asset_not_found` | `DELETE` | no install ever published this cid |
+| 404 | `not_found` | any | no such route |
+| 410 | `asset_deleted` | `PUT` | this cid was published and later withdrawn by its last publisher; it can never be published again, by anyone |
+| 413 | `payload_too_large` | `PUT` | past `ASSETS_MAX_UPLOAD_BYTES`; refused while reading, so the payload past the cap is never buffered |
+| 415 | `unsupported_media_type` | `PUT` | the `content-type` is not one this host parses |
+| 429 | `quota_exceeded_count` / `quota_exceeded_bytes` | `PUT` | the caller's quota, named by the axis that is full |
+| 500 | `internal` | any | a fault on our side; the correlation id is the handle |
+| 503 | `asset_unavailable` | `GET`, `HEAD` | the row exists and the volume does not have the bytes (an operator incident) |
+| 503 | `database_unavailable` | any | the connection pool is exhausted; carries `retry-after` |
 
 ### `PUT /v1/assets`
 
@@ -50,19 +81,35 @@ Publish an image. Authenticated with the install's handshake-minted ingest
 token - the same credential `POST /v1/events` uses, in the `Authorization:
 Bearer <ingestToken>` header.
 
-Request: `multipart/form-data` with exactly one file part named `file`. The
-part's declared `Content-Type` and filename are read by nothing: the stored
-type is decided by magic bytes.
+Request: **the image bytes are the body**, with no envelope around them.
+`Content-Type` selects the parser and nothing else - send
+`application/octet-stream`, or the image type if the client knows it - and the
+STORED type is decided by magic bytes, never by what the request declared. A
+type this host does not parse is `415`; there is no multipart, no form and no
+JSON parser on this service, because the only client is the Vex engine sending
+one buffer and a parser on a trust boundary that nothing needs is ownership
+without benefit.
+
+```
+PUT /v1/assets HTTP/1.1
+authorization: Bearer <ingestToken>
+content-type: application/octet-stream
+content-length: 51234
+
+<the 51234 bytes of the image>
+```
 
 | rule | value |
 |---|---|
-| size cap | `ASSETS_MAX_UPLOAD_BYTES`, default 2 MiB (2097152). Exactly the cap is accepted; one byte more is refused |
+| size cap | `ASSETS_MAX_UPLOAD_BYTES`, default 2 MiB (2097152), enforced as Fastify's `bodyLimit` so an oversized request is refused while it is read. Exactly the cap is accepted; one byte more is refused |
 | accepted types | `image/png`, `image/jpeg`, `image/webp` (VP8/VP8L/VP8X), `image/gif` (87a and 89a), each decided by magic bytes |
 | dimensions | read from the header, no decode; both sides must be between 1 and 8192 |
-| quota | `ASSETS_MAX_PER_INSTALL` live assets and `ASSETS_MAX_BYTES_PER_INSTALL` live bytes per install; deleted assets free their quota |
+| quota | `ASSETS_MAX_PER_INSTALL` live assets and `ASSETS_MAX_BYTES_PER_INSTALL` live bytes per install, counted over the assets the install still publishes; a withdrawn claim frees its quota immediately |
 
-Response `201` on a new asset, `200` when the exact bytes were already
-published (a re-upload is idempotent), body identical in both cases:
+Response `201` when this call published new bytes, `200` when the exact bytes
+were already published - by this install (a re-upload is idempotent and costs
+no quota) or by another one (the caller becomes a publisher too). The body is
+identical in all three cases:
 
 ```json
 {
@@ -80,21 +127,19 @@ published (a re-upload is idempotent), body identical in both cases:
 `png`, `jpg`, `webp`, `gif`. It is the only URL this host will serve for that
 asset.
 
-| status | code | when |
-|---|---|---|
-| 400 | `validation_failed` | no multipart file part, or the part is not named `file` |
-| 400 | `unsupported_image` | the bytes are not one of the four formats, or the header carries no readable or plausible dimensions |
-| 401 | `unauthorized` | missing, malformed or unknown bearer token |
-| 410 | `asset_deleted` | this cid was published and then deleted by its owner; it can never be published again, by anyone |
-| 413 | `payload_too_large` | past the size cap |
-| 415 | `unsupported_media_type` | the request body is not `multipart/form-data` |
-| 429 | `quota_exceeded_count` / `quota_exceeded_bytes` | the install's quota, named by the axis that is full |
+Errors: the `PUT` rows of the table at the top of this section.
 
-Identical bytes from a SECOND install are answered `200` with the same cid and
-url: a content-addressed store cannot hold a second copy, and refusing would
-deny a caller a URL that already serves exactly the bytes it uploaded.
-Ownership does not transfer - the first publisher stays the only install that
-may delete it.
+**Ownership is a SET, not an owner.** Identical bytes from a SECOND install are
+answered `200` with the same cid and url - a content-addressed store cannot
+hold a second copy, and refusing would deny a caller a URL that already serves
+exactly the bytes it uploaded - and that install becomes a publisher of the
+asset in its own right: it is charged quota for it, and it may withdraw its own
+claim. Nothing about the first publisher changes. The asset is tombstoned only
+when the LAST claim goes, so no install can revoke a URL another install has
+already put on chain, and no install depends on a stranger's willingness not to
+delete. `launch_assets.first_publisher_hash` records who introduced the bytes
+and decides nothing: authorization and quota are both computed from
+`launch_asset_publishers`.
 
 ### `GET /a/<cid>.<ext>` and `HEAD /a/<cid>.<ext>`
 
@@ -127,23 +172,22 @@ deletion.
 
 ### `DELETE /v1/assets/<cid>`
 
-Withdraw an asset. Authenticated as above; only the install that published it
-may delete it.
+Withdraw THIS install's claim on an asset. Authenticated as above; a caller
+that does not publish the asset is `403`.
 
-Response `200 {"cid": "...", "status": "deleted"}`, idempotent: deleting an
-already-deleted asset succeeds and keeps the original withdrawal time.
+Response `200 {"cid": "...", "status": "deleted"}`, idempotent: withdrawing
+from an already-tombstoned cid succeeds and keeps the original withdrawal time,
+so a client that retries a delete it never saw the answer to is never told the
+asset is gone by a `403`.
 
-| status | code | when |
-|---|---|---|
-| 400 | `validation_failed` | the path segment is not a content id |
-| 401 | `unauthorized` | missing, malformed or unknown bearer token |
-| 403 | `forbidden` | a different install published this asset |
-| 404 | `asset_not_found` | no install ever published this cid |
+Errors: the `DELETE` rows of the table at the top of this section.
 
-Deletion removes the bytes and tombstones the row. The row survives on
-purpose: a deleted cid is 404 forever and cannot be republished by anyone,
-including its original owner. Without the tombstone, anyone holding a copy of
-the bytes could resurrect a URL its owner deliberately withdrew.
+While another install still publishes the same bytes, a withdrawal removes only
+the caller's claim: the row stays live and the URL keeps serving. The
+withdrawal of the LAST claim removes the bytes and tombstones the row. The row
+survives on purpose: a tombstoned cid is 404 forever and cannot be republished
+by anyone, including a former publisher. Without the tombstone, anyone holding
+a copy of the bytes could resurrect a URL its publishers deliberately withdrew.
 
 ### `GET /healthz`
 
@@ -164,10 +208,11 @@ rather than replacing a file that is already there. Two concurrent uploads of
 identical bytes therefore both succeed and neither can observe a half-written
 file.
 
-The metadata is not on the volume: `launch_assets` (migration
-`db/migrations/0020_launch_assets.sql`) is the single source of truth for what
-an asset is, who published it and whether it has been withdrawn. It carries no
-foreign key to `agents` or `activities`, because this store must survive a
+The metadata is not on the volume: `launch_assets` and
+`launch_asset_publishers` (migration `db/migrations/0020_launch_assets.sql`)
+are the single source of truth for what an asset is, which installs publish it
+and whether it has been withdrawn. Neither carries a foreign key to `agents` or
+`activities`, because this store must survive a
 reporting purge - a token already pointing at one of these URLs does not stop
 existing when its publisher withdraws from analytics.
 
@@ -192,6 +237,10 @@ users approve and tokens carry on chain.
 - integration (`pnpm exec vitest run --project integration apps/launch-assets`):
   a real Postgres through the shared testcontainers harness and a real
   directory - upload, read back and re-hash the served bytes against the cid in
-  the URL, HEAD, conditional GET, delete, the permanent tombstone across two
-  installs, unauthenticated and foreign writes, both quota axes, and the audit
-  rows.
+  the URL, HEAD, conditional GET, withdrawal, the permanent tombstone across two
+  installs, unauthenticated and foreign writes, both quota axes, the audit rows,
+  the shared-ownership rules (a co-publisher's withdrawal keeps the URL alive,
+  the last one tombstones and unlinks, a claim costs the claimer quota), and two
+  concurrent uploads of identical bytes parked on the same advisory lock from a
+  third session, which is the only way to prove they yield one asset row and two
+  claims rather than a unique violation.
