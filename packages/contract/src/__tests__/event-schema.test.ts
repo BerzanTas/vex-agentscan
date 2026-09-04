@@ -62,6 +62,7 @@ const boundRolesByKind: Record<(typeof EVENT_KINDS)[number], readonly string[]> 
   ],
   launch: ["token_launch", "trench_fee", "pools_fee"],
   claim: ["pools_claim"],
+  transfer: ["wallet_transfer"],
 };
 
 const boundPairs = Object.entries(boundRolesByKind).flatMap(([kind, roles]) =>
@@ -316,6 +317,93 @@ describe("eventSchema pools.fun launches, fees and claims (§4.2)", () => {
 
   it("rejects trench_fee on the claim kind", () => {
     expect(() => eventSchema.parse({ ...legFreeEvent, kind: "claim", eventRole: "trench_fee" })).toThrow();
+  });
+});
+
+// An agent sending tokens out of its own wallet reports a transfer. It spends one leg and receives
+// nothing, which is why it is neither a swap with a missing side nor a claim. The recipient is not
+// part of the wire format at all: this server stores no counterparty address.
+describe("eventSchema wallet transfers (§4.2)", () => {
+  const usdc = { address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", symbol: "USDC", decimals: 6 };
+
+  const walletTransfer = {
+    ...legFreeEvent,
+    protocol: "wallet",
+    kind: "transfer",
+    eventRole: "wallet_transfer",
+    tokenIn: usdc,
+    amountInRaw: "25000000",
+    executedInRaw: "25000000",
+    usdInEst: "25.00",
+    usdOutEst: null,
+    txHash: "0xfeed",
+  };
+
+  it("accepts a send carrying the input leg it spent", () => {
+    expect(eventSchema.parse(walletTransfer)).toMatchObject({
+      kind: "transfer",
+      eventRole: "wallet_transfer",
+      status: "confirmed",
+      executedInRaw: "25000000",
+      txHash: "0xfeed",
+    });
+  });
+
+  it("keeps the sent amount at the token's own decimals, never rescaled", () => {
+    expect(eventSchema.parse(walletTransfer)).toMatchObject({ tokenIn: { decimals: 6 } });
+  });
+
+  it("leaves the output leg empty, because a send receives nothing", () => {
+    expect(eventSchema.parse(walletTransfer)).toMatchObject({
+      tokenOut: null,
+      amountOutRaw: null,
+      executedOutRaw: null,
+    });
+  });
+
+  it("accepts a native send, whose input leg is the chain's own asset", () => {
+    const nativeSend = {
+      ...walletTransfer,
+      tokenIn: { address: "native", symbol: "ETH", decimals: 18 },
+      amountInRaw: "1000000000000000",
+      executedInRaw: "1000000000000000",
+    };
+    expect(eventSchema.parse(nativeSend)).toMatchObject({ executedInRaw: "1000000000000000" });
+  });
+
+  it("rejects a send carrying an output token, which would prove a swap or a claim was filed as a send", () => {
+    expect(() =>
+      eventSchema.parse({ ...walletTransfer, tokenOut: usdc, amountOutRaw: "25000000" }),
+    ).toThrow();
+  });
+
+  it("rejects a send carrying a requested output amount", () => {
+    expect(() => eventSchema.parse({ ...walletTransfer, amountOutRaw: "1" })).toThrow();
+  });
+
+  it("rejects a send carrying an executed output amount", () => {
+    expect(() => eventSchema.parse({ ...walletTransfer, executedOutRaw: "1" })).toThrow();
+  });
+
+  it("rejects a second leg on a send, which settles as one leg", () => {
+    expect(() => eventSchema.parse({ ...walletTransfer, ...secondLegOut })).toThrow();
+  });
+
+  it("rejects wallet_transfer on the claim kind, whose roles must spend nothing", () => {
+    expect(() => eventSchema.parse({ ...legFreeEvent, kind: "claim", eventRole: "wallet_transfer" })).toThrow();
+  });
+
+  it("rejects wallet_transfer on a swap", () => {
+    expect(() => eventSchema.parse({ ...legFreeEvent, kind: "swap", eventRole: "wallet_transfer" })).toThrow();
+  });
+
+  it("rejects the swap role on the transfer kind", () => {
+    expect(() => eventSchema.parse({ ...legFreeEvent, kind: "transfer", eventRole: "swap" })).toThrow();
+  });
+
+  it("strips a smuggled recipient, because no counterparty crosses this wire", () => {
+    const parsed = eventSchema.parse({ ...walletTransfer, toAddress: "0xrecipient" });
+    expect("toAddress" in parsed).toBe(false);
   });
 });
 
